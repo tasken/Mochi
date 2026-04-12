@@ -41,21 +41,11 @@ jobs:
             ./ "$RUNNER_TEMP/site/"
           touch "$RUNNER_TEMP/site/.nojekyll"
 
-      - name: Package Pages artifact
-        run: |
-          tar \
-            --dereference --hard-dereference \
-            --directory "$RUNNER_TEMP/site" \
-            -cvf "$RUNNER_TEMP/artifact.tar" \
-            .
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
         with:
-          name: github-pages
-          path: ${{ runner.temp }}/artifact.tar
+          path: ${{ runner.temp }}/site
           retention-days: 1
-          if-no-files-found: error
 
   deploy:
     needs: build
@@ -63,6 +53,7 @@ jobs:
     permissions:
       pages: write
       id-token: write
+    environment: github-pages
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
