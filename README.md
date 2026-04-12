@@ -1,20 +1,31 @@
-# MochiNest 🍡
+# Pixl.js
 
-A cozy, zero-friction Web Bluetooth file manager and recursive tree uploader for Pixl.js.
+MochiNest is a Web Bluetooth workspace for Pixl.js. It combines a recursive tree uploader with a remote file manager, so you can move folder trees, create folders, browse storage, and clean up names directly from the browser.
 
-Built to keep you in the flow state, MochiNest bypasses the stock client's flat-upload limits by letting you push entire nested folder trees directly to your hardware. With a calm marshmallow-inspired UI, robust operation tracking, and safe bulk file management, it takes the headache out of device storage. No command-line hassle, no firmware flashes—just a smooth, static web app that respects your time.
+The app stays on top of the existing Pixl.js BLE file protocol. Its goal is simple: make larger storage tasks practical without changing the firmware, and make slow device operations easier to follow while they run.
 
-✨ **Built via pure vibe coding by:** Human intuition, GPT-5.4 and Gemini.
+## Quick Start
+
+1. Put the device in BLE File Transfer mode.
+2. Open MochiNest in Chrome or Edge over `localhost` or HTTPS.
+3. Connect the device and refresh the drive list.
+4. Choose a drive and a destination folder.
+5. Pick a workspace:
+	Tree uploader for sending local files and folders.
+	File manager for browsing storage, creating folders, lowercasing names, or deleting items.
 
 ## What Is In This Folder
 
-- `index.html`: standalone static UI
-- `app.js`: BLE protocol client and recursive upload logic
-- `upstream/pixl.js`: git submodule pointing at the original upstream project
+- `index.html`: static application shell
+- `styles.css`: UI styling and state-driven presentation
+- `app.js`: BLE client, uploader, file manager, and activity state logic
+- `upstream/pixl.js`: git submodule pointing at the upstream project
 
 ## Upstream Source
 
-The original Pixl.js repository is added as a git submodule at `upstream/pixl.js`.
+The upstream Pixl.js project is included as a git submodule at `upstream/pixl.js`.
+
+Source repository: https://github.com/solosky/pixl.js
 
 ```bash
 git submodule update --init --recursive
@@ -26,11 +37,19 @@ To refresh it later:
 git submodule update --remote upstream/pixl.js
 ```
 
+## Upstream Contributors
+
+This workspace builds on Pixl.js, and the original project should remain clearly credited.
+
+- Special thanks to `@Caleeeeeeeeeeeee` for the bootloader work.
+- Special thanks to `@白橙` for the enclosure design.
+- Special thanks to `@impeeza` for the documentation translation.
+
 ## Run Locally
 
-This app is standalone and does not need a build step.
+MochiNest is a static app and does not need a build step.
 
-You can use a local Python virtual environment with `invoke` to keep the server commands short and stable. These tasks do not auto-reload, so file changes will not restart the server.
+For short local commands, create a virtual environment and install the dev dependency:
 
 ```bash
 python3 -m venv .venv
@@ -38,7 +57,7 @@ source .venv/bin/activate
 pip install -r requirements-dev.txt
 ```
 
-Then run one of these commands:
+Then run one of the included tasks:
 
 ```bash
 inv serve
@@ -46,30 +65,24 @@ inv serve-lan
 inv serve-https
 ```
 
-```bash
-cd mochinest
-python3 -m http.server 8443 --bind 127.0.0.1
-```
-
-Then open:
+For a local-only session, open:
 
 ```text
-http://127.0.0.1:8443
+http://localhost:8443
 ```
 
-`localhost` is treated as a secure context by browsers, which is enough for Web Bluetooth.
+Browsers treat `localhost` as a secure context, which is enough for Web Bluetooth.
 
-## LAN Access
+## HTTPS And LAN Use
 
-If you want to serve it on your LAN, you can bind to `0.0.0.0`, but remote Web Bluetooth access generally needs HTTPS instead of plain HTTP.
+Web Bluetooth from another device on your LAN generally needs HTTPS. The `serve-https` task reads `.cert/cert.pem` and `.cert/key.pem`.
+
+You can override the advertised host, bind address, port, certificate path, and key path to match your setup:
 
 ```bash
-cd mochinest
-python3 -m http.server 8443 --bind 0.0.0.0
+inv serve-https --host <your-host> --bind 0.0.0.0 --port 8443 --cert .cert/cert.pem --key .cert/key.pem
 ```
-
-The HTTPS invoke task defaults to `https://YOUR_LAN_IP:8443/` and reads `.cert/cert.pem` plus `.cert/key.pem`.
 
 ## License
 
-This folder is derived from the GPL-2.0 project in the parent repository, so it keeps the same `GPL-2.0-only` licensing.
+This folder derives from the GPL-2.0 project in the upstream repository, so it remains `GPL-2.0-only`.

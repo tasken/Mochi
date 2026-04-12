@@ -99,29 +99,29 @@ const elements = {
 function createDefaultActivityState() {
   return {
     status: "idle",
-    phaseLabel: "Idle",
-    title: "Waiting for the next device action",
-    detail: "MochiNest is ready. Connect to a device, choose a drive, then start working.",
-    progressLabel: "No active transfer",
+    phaseLabel: "Ready",
+    title: "Waiting for the next device task",
+    detail: "Connect to a device, choose a drive, then start an upload or open the file manager.",
+    progressLabel: "No active task",
     current: 0,
     total: 0,
     percent: 0,
     outcome: {
       visible: false,
-      title: "No recent summary",
-      text: "Completed work, partial results, skipped collisions, and path-limit warnings will be summarized here."
+      title: "No recent activity",
+      text: "Completed work, partial results, skipped items, and path-limit warnings will appear here."
     }
   };
 }
 
 function createDefaultManagerBusyState() {
   return {
-    eyebrow: "Processing remote files",
+    eyebrow: "Updating device storage",
     badgeTone: "active",
-    badgeLabel: "Running",
-    title: "Working on the current folder",
-    phase: "Waiting for the next remote step",
-    label: "Preparing remote action",
+    badgeLabel: "Working",
+    title: "Working in the current folder",
+    phase: "Waiting for the next device step",
+    label: "Preparing device change",
     current: 0,
     total: 0,
     percent: 0
@@ -131,8 +131,8 @@ function createDefaultManagerBusyState() {
 function createDefaultManagerOutcome() {
   return {
     visible: false,
-    title: "Remote action summary",
-    text: "Bulk results, skipped collisions, and path-limit warnings will be summarized here."
+    title: "No recent device action",
+    text: "Bulk results, skipped items, and path-limit warnings will appear here."
   };
 }
 
@@ -293,14 +293,14 @@ class PixlBleClient {
     setConnected(false);
     setActivityStatus({
       status: "error",
-      phaseLabel: "Disconnected",
-      title: "The BLE device disconnected",
-      detail: "Reconnect to continue browsing or uploading.",
+      phaseLabel: "Connection lost",
+      title: "The device disconnected",
+      detail: "Reconnect, refresh the drive list, then continue browsing or uploading.",
       current: 0,
       total: 1,
       progressLabel: "Connection closed"
     });
-    showActivityOutcome("Device disconnected", "The Bluetooth connection closed. Reconnect to continue.", "error");
+    showActivityOutcome("Device disconnected", "The Bluetooth connection closed. Reconnect and refresh the drive list to continue.", "error");
   }
 
   async getVersion() {
@@ -763,9 +763,9 @@ function getActivityBadgeLabel(status) {
     case "running":
       return "Working";
     case "success":
-      return "Done";
+      return "Complete";
     case "warning":
-      return "Partial";
+      return "Needs review";
     case "error":
       return "Error";
     default:
@@ -1092,7 +1092,7 @@ function summarizeSanitizeSkips(skipped) {
 }
 
 function buildSanitizeOutcomeText(renamedCount, skipped) {
-  const parts = [`Renamed ${formatItemCount(renamedCount, "item")}.`];
+  const parts = [`Updated ${formatItemCount(renamedCount, "name")}.`];
   if (skipped.length === 0) {
     return parts.join(" ");
   }
@@ -1103,7 +1103,7 @@ function buildSanitizeOutcomeText(renamedCount, skipped) {
     reasonParts.push(`${formatItemCount(summary.collisionCount, "collision")}`);
   }
   if (summary.pathLimitCount > 0) {
-    reasonParts.push(`${formatItemCount(summary.pathLimitCount, "path-limit case")}`);
+    reasonParts.push(`${formatItemCount(summary.pathLimitCount, "path-limit issue")}`);
   }
   if (summary.otherCount > 0) {
     reasonParts.push(`${formatItemCount(summary.otherCount, "other issue")}`);
@@ -1124,7 +1124,7 @@ function logSanitizeSkips(skipped) {
   }
 
   if (skipped.length > previewCount) {
-    log(`Skipped ${skipped.length - previewCount} more item${skipped.length - previewCount === 1 ? "" : "s"} during sanitize.`);
+    log(`Skipped ${skipped.length - previewCount} more item${skipped.length - previewCount === 1 ? "" : "s"} during name cleanup.`);
   }
 }
 
@@ -1182,8 +1182,8 @@ function syncManagerPathWithDrive(forceRoot = false) {
 
 function setConnected(connected) {
   state.connected = connected;
-  elements.connectionState.textContent = connected ? "Connected" : "Disconnected";
-  elements.connectButton.textContent = connected ? "Disconnect" : "Connect";
+  elements.connectionState.textContent = connected ? "Connected" : "Not connected";
+  elements.connectButton.textContent = connected ? "Disconnect device" : "Connect device";
   updateControls();
 
   if (!connected) {
@@ -1237,7 +1237,7 @@ function renderDriveOptions() {
   if (!state.drives.length) {
     const option = document.createElement("option");
     option.value = "";
-    option.textContent = state.connected ? "No available drives" : "Connect first";
+    option.textContent = state.connected ? "No writable drives found" : "Connect first";
     elements.driveSelect.appendChild(option);
     syncManagerPathWithDrive();
     return;
@@ -1272,7 +1272,7 @@ function resetPlan() {
 }
 
 function buildUploadPlanSummaryText() {
-  return `Prepared ${formatItemCount(state.queuedFolders.length, "folder")} and ${formatItemCount(state.queuedFiles.length, "file")} for ${getSelectedDrive() || "?"}:${normalizeRemoteBasePath(elements.remoteBaseInput.value)}.`;
+  return `Plan ready: ${formatItemCount(state.queuedFolders.length, "folder")} and ${formatItemCount(state.queuedFiles.length, "file")} for ${getSelectedDrive() || "?"}:${normalizeRemoteBasePath(elements.remoteBaseInput.value)}.`;
 }
 
 function renderSummary() {
@@ -1283,7 +1283,7 @@ function renderSummary() {
   elements.queueStats.textContent = `${state.plan.length} queued item${state.plan.length === 1 ? "" : "s"}`;
 
   if (state.plan.length === 0) {
-    elements.selectionSummary.textContent = "No upload plan yet.";
+    elements.selectionSummary.textContent = "Choose a folder or files to build an upload plan.";
   } else {
     elements.selectionSummary.textContent = buildUploadPlanSummaryText();
   }
@@ -1301,7 +1301,7 @@ function setMode(mode) {
   elements.modeManagerButton.classList.toggle("secondary", uploaderActive);
   elements.modeUploaderButton.setAttribute("aria-selected", uploaderActive ? "true" : "false");
   elements.modeManagerButton.setAttribute("aria-selected", uploaderActive ? "false" : "true");
-  elements.modeDescription.textContent = uploaderActive ? "Tree uploader active" : "File manager active";
+  elements.modeDescription.textContent = uploaderActive ? "Tree uploader selected" : "File manager selected";
 
   elements.uploaderBaseField.hidden = !uploaderActive;
   elements.uploaderBaseActions.hidden = !uploaderActive;
@@ -1332,7 +1332,7 @@ function updateOverallProgress() {
 
 function renderPlan() {
   if (state.plan.length === 0) {
-    elements.planTableBody.innerHTML = '<tr><td colspan="6" class="empty-state">Choose a folder or file set after connecting to the device.</td></tr>';
+    elements.planTableBody.innerHTML = '<tr><td colspan="6" class="empty-state">Choose a folder or files after connecting to build an upload plan.</td></tr>';
     return;
   }
 
@@ -1365,16 +1365,16 @@ function renderManager() {
   renderManagerOutcome();
 
   if (!state.connected) {
-    elements.managerStatusLabel.textContent = "Connect to a device, then choose a drive to browse.";
+    elements.managerStatusLabel.textContent = "Connect to a device and choose a drive to browse.";
     elements.managerBrowserShell.hidden = false;
-    elements.managerTableBody.innerHTML = '<tr><td colspan="5" class="empty-state">Connect first.</td></tr>';
+    elements.managerTableBody.innerHTML = '<tr><td colspan="5" class="empty-state">Connect to get started.</td></tr>';
     return;
   }
 
   if (!drive) {
     elements.managerStatusLabel.textContent = "Choose a writable drive to browse.";
     elements.managerBrowserShell.hidden = false;
-    elements.managerTableBody.innerHTML = '<tr><td colspan="5" class="empty-state">No writable drive is available.</td></tr>';
+    elements.managerTableBody.innerHTML = '<tr><td colspan="5" class="empty-state">No writable drive found.</td></tr>';
     return;
   }
 
@@ -1387,7 +1387,7 @@ function renderManager() {
   elements.managerBrowserShell.hidden = false;
 
   if (!state.manager.loaded) {
-    elements.managerTableBody.innerHTML = '<tr><td colspan="5" class="empty-state">Open a folder to browse its contents.</td></tr>';
+    elements.managerTableBody.innerHTML = '<tr><td colspan="5" class="empty-state">Open a folder to load its contents.</td></tr>';
     return;
   }
 
@@ -1584,12 +1584,12 @@ async function finalizeCollectedSelection(collected, sourceLabel) {
   try {
     queuePlan(collected.folders, collected.files);
     const totalItems = state.plan.length;
-    const detail = buildUploadPlanSummaryText();
+    const detail = `${buildUploadPlanSummaryText()} Review the plan, then start the upload.`;
     log(sourceLabel);
     setActivityStatus({
       status: "success",
-      phaseLabel: "Upload plan ready",
-      title: "Local selection prepared",
+      phaseLabel: "Plan ready",
+      title: "Upload plan ready",
       detail,
       progressLabel: "Ready to upload",
       current: totalItems,
@@ -1712,18 +1712,18 @@ async function refreshManagerFolder(targetPath = state.manager.currentPath || ge
 
   const drive = getSelectedDrive();
   if (!drive) {
-    const message = "Select a drive before browsing remote files.";
+    const message = "Choose a drive before browsing device storage.";
     log(message);
     setActivityStatus({
       status: "error",
-      phaseLabel: "Browse blocked",
+      phaseLabel: "Browse unavailable",
       title: "No drive selected",
       detail: message,
       progressLabel: "Cannot browse",
       current: 0,
       total: 1
     });
-    showActivityOutcome("Browse blocked", message, "error");
+    showActivityOutcome("Browse unavailable", message, "error");
     return;
   }
 
@@ -1739,8 +1739,8 @@ async function refreshManagerFolder(targetPath = state.manager.currentPath || ge
     setActivityStatus({
       status: "error",
       phaseLabel: "Browse failed",
-      title: "Cannot open that remote path",
-      detail: error.message,
+      title: "That device folder cannot be opened",
+      detail: `${error.message} Check the selected drive and folder path, then try again.`,
       progressLabel: "Path validation failed",
       current: 0,
       total: 1
@@ -1750,9 +1750,9 @@ async function refreshManagerFolder(targetPath = state.manager.currentPath || ge
   }
 
   beginManagerBusy({
-    eyebrow: "Browsing remote folder",
+    eyebrow: "Loading device folder",
     title: `Loading ${normalizedPath}`,
-    phase: "Reading current folder",
+    phase: "Reading folder contents",
     label: normalizedPath,
     current: 0,
     total: 1
@@ -1762,7 +1762,7 @@ async function refreshManagerFolder(targetPath = state.manager.currentPath || ge
     const entries = await loadManagerFolderData(normalizedPath);
     updateManagerBusy({
       title: `Loaded ${normalizedPath}`,
-      phase: "Remote folder ready",
+      phase: "Folder loaded",
       label: `${formatItemCount(entries.length, "entry")} available`,
       current: 1,
       total: 1
@@ -1771,10 +1771,10 @@ async function refreshManagerFolder(targetPath = state.manager.currentPath || ge
     endManagerBusy();
     setActivityStatus({
       status: "success",
-      phaseLabel: "Browse complete",
+      phaseLabel: "Folder loaded",
       title: `Loaded ${normalizedPath}`,
-      detail: `${formatItemCount(entries.length, "entry")} available in the current folder.`,
-      progressLabel: "Remote folder ready",
+      detail: `${formatItemCount(entries.length, "entry")} loaded for the current folder.`,
+      progressLabel: "Device folder ready",
       current: 1,
       total: 1
     });
@@ -1814,7 +1814,7 @@ async function createManagerFolder() {
 
   const folderName = elements.managerFolderNameInput.value.trim().replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
   if (!folderName) {
-    const message = "Enter a folder name first.";
+    const message = "Enter a folder name.";
     log(message);
     showManagerOutcome("Cannot create folder", message);
     setActivityStatus({
@@ -1831,7 +1831,7 @@ async function createManagerFolder() {
   }
 
   if (folderName.includes("/")) {
-    const message = "New folder name must be a single path segment.";
+    const message = "Folder name must be a single path segment.";
     log(message);
     showManagerOutcome("Cannot create folder", message);
     setActivityStatus({
@@ -1858,8 +1858,8 @@ async function createManagerFolder() {
     setActivityStatus({
       status: "error",
       phaseLabel: "Folder creation blocked",
-      title: "Path limit reached",
-      detail: error.message,
+      title: "This folder path is too long",
+      detail: `${error.message} Shorten the folder name or create it higher in the drive.`,
       progressLabel: "Validation failed",
       current: 0,
       total: 1
@@ -1894,14 +1894,14 @@ async function createManagerFolder() {
     const entries = await loadManagerFolderData(currentPath);
     updateManagerBusy({
       title: `Created ${remotePath}`,
-      phase: "Remote folder ready",
+      phase: "Folder ready",
       label: `${formatItemCount(entries.length, "entry")} available`,
       current: 2,
       total: 2
     });
 
     endManagerBusy();
-    const summaryText = `Created ${remotePath} and refreshed ${currentPath}.`;
+    const summaryText = `Created ${remotePath}. Refreshed ${currentPath}.`;
     showManagerOutcome("Folder created", summaryText);
     setActivityStatus({
       status: "success",
@@ -1936,12 +1936,12 @@ async function sanitizeManagerNames() {
   }
 
   const currentPath = state.manager.currentPath || getDriveRoot(getSelectedDrive());
-  const recursive = window.confirm("Sanitize subfolders too?\n\nPress OK to include subfolders.\nPress Cancel to sanitize only the current folder.");
+  const recursive = window.confirm("Also scan subfolders?\n\nPress OK to include the current folder and all subfolders.\nPress Cancel to scan only the current folder.");
 
   beginManagerBusy({
-    eyebrow: recursive ? "Planning sanitize" : "Scanning current folder",
+    eyebrow: recursive ? "Planning name cleanup" : "Scanning current folder",
     title: `Scanning ${currentPath}`,
-    phase: recursive ? "Scanning remote folders" : "Checking current folder names",
+    phase: recursive ? "Scanning folders" : "Checking names",
     label: currentPath,
     current: 0,
     total: 1
@@ -1951,9 +1951,9 @@ async function sanitizeManagerNames() {
   try {
     const snapshots = await collectRemoteFolderSnapshots(currentPath, recursive, (current, total, folderPath) => {
       updateManagerBusy({
-        eyebrow: recursive ? "Planning sanitize" : "Scanning current folder",
+        eyebrow: recursive ? "Planning name cleanup" : "Scanning current folder",
         title: `Scanning ${currentPath}`,
-        phase: recursive ? "Scanning remote folders" : "Checking current folder names",
+        phase: recursive ? "Scanning folders" : "Checking names",
         label: folderPath,
         current,
         total
@@ -1963,17 +1963,17 @@ async function sanitizeManagerNames() {
   } catch (error) {
     endManagerBusy();
     log(error.message);
-    showManagerOutcome("Sanitize planning failed", error.message);
+    showManagerOutcome("Name cleanup planning failed", error.message);
     setActivityStatus({
       status: "error",
-      phaseLabel: "Sanitize failed",
+      phaseLabel: "Name cleanup failed",
       title: `Could not scan ${currentPath}`,
       detail: error.message,
       progressLabel: "Planning failed",
       current: 0,
       total: 1
     });
-    showActivityOutcome("Sanitize failed", error.message, "error");
+    showActivityOutcome("Name cleanup failed", error.message, "error");
     return;
   }
 
@@ -1983,47 +1983,47 @@ async function sanitizeManagerNames() {
       logSanitizeSkips(plan.skipped);
     }
     const summaryText = plan.skipped.length > 0
-      ? `No safe renames were found in ${currentPath}. ${buildSanitizeOutcomeText(0, plan.skipped)}`
+      ? `No safe name changes were found in ${currentPath}. ${buildSanitizeOutcomeText(0, plan.skipped)}`
       : `No uppercase names were found in ${currentPath}.`;
     log(summaryText);
-    showManagerOutcome("Sanitize complete", summaryText);
+    showManagerOutcome("Name cleanup complete", summaryText);
     setActivityStatus({
       status: plan.skipped.length > 0 ? "warning" : "success",
-      phaseLabel: "Sanitize complete",
+      phaseLabel: "Name cleanup complete",
       title: `Finished checking ${currentPath}`,
       detail: summaryText,
-      progressLabel: "Nothing to rename",
+      progressLabel: "Nothing to change",
       current: 0,
       total: 0
     });
-    showActivityOutcome("Sanitize complete", summaryText, plan.skipped.length > 0 ? "warning" : "success");
+    showActivityOutcome("Name cleanup complete", summaryText, plan.skipped.length > 0 ? "warning" : "success");
     return;
   }
 
-  const confirmed = window.confirm(`Rename ${formatItemCount(plan.operations.length, "item")} by lowercasing names ${recursive ? "recursively under" : "in"} ${currentPath}?`);
+  const confirmed = window.confirm(`Lowercase names for ${formatItemCount(plan.operations.length, "item")} ${recursive ? `across ${currentPath} and its subfolders` : `in ${currentPath}`}?`);
   if (!confirmed) {
     endManagerBusy();
-    const summaryText = `Sanitize was cancelled before any names were changed in ${currentPath}.`;
-    log("Sanitize cancelled.");
-    showManagerOutcome("Sanitize cancelled", summaryText);
+    const summaryText = `Name cleanup was cancelled before any changes were made in ${currentPath}.`;
+    log("Name cleanup cancelled.");
+    showManagerOutcome("Name cleanup cancelled", summaryText);
     setActivityStatus({
       status: "warning",
-      phaseLabel: "Sanitize cancelled",
-      title: "Rename batch cancelled",
+      phaseLabel: "Name cleanup cancelled",
+      title: "Rename pass cancelled",
       detail: summaryText,
       progressLabel: "Cancelled before execution",
       current: 0,
       total: plan.operations.length
     });
-    showActivityOutcome("Sanitize cancelled", summaryText, "warning");
+    showActivityOutcome("Name cleanup cancelled", summaryText, "warning");
     return;
   }
 
   const totalSteps = plan.operations.length + 1;
   updateManagerBusy({
-    eyebrow: "Processing sanitize",
-    title: `Renaming entries under ${currentPath}`,
-    phase: "Renaming device entries",
+    eyebrow: "Applying name cleanup",
+    title: `Updating names under ${currentPath}`,
+    phase: "Renaming remote entries",
     label: `${formatItemCount(plan.operations.length, "rename")} queued`,
     current: 0,
     total: totalSteps
@@ -2036,9 +2036,9 @@ async function sanitizeManagerNames() {
     const operation = plan.operations[index];
 
     updateManagerBusy({
-      eyebrow: "Processing sanitize",
-      title: `Renaming entries under ${currentPath}`,
-      phase: "Renaming device entries",
+      eyebrow: "Applying name cleanup",
+      title: `Updating names under ${currentPath}`,
+      phase: "Renaming remote entries",
       label: `${getBaseName(operation.from)} -> ${getBaseName(operation.to)}`,
       current: index + 1,
       total: totalSteps
@@ -2079,39 +2079,39 @@ async function sanitizeManagerNames() {
 
   const summaryText = buildSanitizeOutcomeText(renamedCount, plan.skipped);
   const finalText = renameError
-    ? `${summaryText} The device stopped while renaming: ${renameError.message}`
+    ? `${summaryText} The device stopped during the rename pass: ${renameError.message}`
     : refreshError
-      ? `${summaryText} The rename batch finished, but the final folder refresh failed: ${refreshError.message}`
+      ? `${summaryText} The rename pass finished, but the final folder refresh failed: ${refreshError.message}`
       : summaryText;
 
   if (renameError || refreshError) {
     log(finalText);
-    showManagerOutcome("Sanitize finished with issues", finalText);
+    showManagerOutcome("Name cleanup finished with issues", finalText);
     setActivityStatus({
       status: renamedCount > 0 || plan.skipped.length > 0 ? "warning" : "error",
-      phaseLabel: "Sanitize finished with issues",
-      title: `Sanitize incomplete for ${currentPath}`,
+      phaseLabel: "Name cleanup finished with issues",
+      title: `Name cleanup incomplete for ${currentPath}`,
       detail: finalText,
       progressLabel: "Review the summary",
       current: renamedCount,
       total: plan.operations.length
     });
-    showActivityOutcome("Sanitize finished with issues", finalText, renamedCount > 0 || plan.skipped.length > 0 ? "warning" : "error");
+    showActivityOutcome("Name cleanup finished with issues", finalText, renamedCount > 0 || plan.skipped.length > 0 ? "warning" : "error");
     return;
   }
 
-  log(`Sanitized ${renamedCount} item${renamedCount === 1 ? "" : "s"} ${recursive ? "recursively " : ""}from ${currentPath}.`);
-  showManagerOutcome("Sanitize complete", finalText);
+  log(`Updated ${formatItemCount(renamedCount, "name")} ${recursive ? `across ${currentPath} and its subfolders` : `in ${currentPath}`}.`);
+  showManagerOutcome("Name cleanup complete", finalText);
   setActivityStatus({
     status: plan.skipped.length > 0 ? "warning" : "success",
-    phaseLabel: "Sanitize complete",
-    title: `Finished sanitizing ${currentPath}`,
+    phaseLabel: "Name cleanup complete",
+    title: `Finished updating names in ${currentPath}`,
     detail: finalText,
-    progressLabel: "Rename batch finished",
+    progressLabel: "Rename pass finished",
     current: totalSteps,
     total: totalSteps
   });
-  showActivityOutcome("Sanitize complete", finalText, plan.skipped.length > 0 ? "warning" : "success");
+  showActivityOutcome("Name cleanup complete", finalText, plan.skipped.length > 0 ? "warning" : "success");
 }
 
 async function deleteManagerSelection() {
@@ -2122,8 +2122,8 @@ async function deleteManagerSelection() {
 
   const confirmed = window.confirm(
     selectedEntries.length === 1
-      ? `Delete ${selectedEntries[0].type === "DIR" ? "folder" : "file"} ${selectedEntries[0].fullPath}?`
-      : `Delete ${formatItemCount(selectedEntries.length, "selected item")} from ${state.manager.currentPath}?`
+      ? `Delete ${selectedEntries[0].type === "DIR" ? "folder" : "file"} ${selectedEntries[0].fullPath}?\n\nThis changes the device immediately and cannot be undone in MochiNest.`
+      : `Delete ${formatItemCount(selectedEntries.length, "selected item")} from ${state.manager.currentPath}?\n\nThis changes the device immediately and cannot be undone in MochiNest.`
   );
   if (!confirmed) {
     return;
@@ -2230,17 +2230,17 @@ function useManagerPathForUploader() {
   const basePath = state.manager.currentPath.slice(2) || "/";
   elements.remoteBaseInput.value = basePath;
   renderSummary();
-  log(`Uploader base path set to ${state.manager.currentPath}`);
+  log(`Uploader target set to ${state.manager.currentPath}`);
   setActivityStatus({
     status: "success",
-    phaseLabel: "Uploader path updated",
-    title: "Uploader base path updated",
-    detail: `The uploader will now target ${state.manager.currentPath}.`,
+    phaseLabel: "Uploader target updated",
+    title: "Uploader target updated",
+    detail: `New uploads will go to ${state.manager.currentPath}.`,
     progressLabel: "Ready to switch workspaces",
     current: 1,
     total: 1
   });
-  showActivityOutcome("Uploader path updated", `The uploader will now target ${state.manager.currentPath}.`, "success");
+  showActivityOutcome("Uploader target updated", `New uploads will go to ${state.manager.currentPath}.`, "success");
   setMode("uploader");
 }
 
@@ -2283,9 +2283,9 @@ async function connectOrDisconnect() {
   setActivityStatus({
     status: "running",
     phaseLabel: "Connecting",
-    title: "Waiting for Bluetooth approval",
-    detail: "Choose your Pixl.js device from the browser prompt.",
-    progressLabel: "Opening Web Bluetooth dialog",
+    title: "Waiting for Bluetooth permission",
+    detail: "Choose your Pixl.js device in the browser prompt. If it does not appear, check BLE File Transfer mode.",
+    progressLabel: "Opening Web Bluetooth",
     current: 0,
     total: 1
   });
@@ -2303,9 +2303,9 @@ async function connectOrDisconnect() {
     setActivityStatus({
       status: "success",
       phaseLabel: "Connected",
-      title: "Device connection ready",
+      title: "Device connected",
       detail: version.bleAddress ? `Connected to ${version.version}, ${version.bleAddress}.` : `Connected to firmware ${version.version || "unknown"}.`,
-      progressLabel: "Refreshing drive inventory",
+      progressLabel: "Refreshing drive list",
       current: 1,
       total: 1
     });
@@ -2318,12 +2318,12 @@ async function connectOrDisconnect() {
       status: "error",
       phaseLabel: "Connection failed",
       title: "Could not connect to the device",
-      detail: error.message,
+      detail: `${error.message} Make sure the device is in BLE File Transfer mode, then try again.`,
       progressLabel: "Connection failed",
       current: 0,
       total: 1
     });
-    showActivityOutcome("Connection failed", error.message, "error");
+    showActivityOutcome("Connection failed", `${error.message} Make sure the device is in BLE File Transfer mode, then try again.`, "error");
   } finally {
     elements.connectButton.disabled = false;
   }
@@ -2338,9 +2338,9 @@ async function refreshDrives() {
   setActivityStatus({
     status: "running",
     phaseLabel: "Refreshing drives",
-    title: "Reading remote drive inventory",
+    title: "Reading drive list",
     detail: "Checking which writable drives are available on the device.",
-    progressLabel: "Drive inventory",
+    progressLabel: "Drive list",
     current: 0,
     total: 1
   });
@@ -2357,9 +2357,9 @@ async function refreshDrives() {
     setActivityStatus({
       status: "success",
       phaseLabel: "Drives ready",
-      title: "Drive inventory refreshed",
+      title: "Drive list ready",
       detail: `${formatItemCount(state.drives.length, "writable drive")} available.`,
-      progressLabel: "Drive inventory ready",
+      progressLabel: "Drive list ready",
       current: 1,
       total: 1
     });
@@ -2369,19 +2369,19 @@ async function refreshDrives() {
       return;
     }
 
-    showActivityOutcome("Drive inventory refreshed", `${formatItemCount(state.drives.length, "writable drive")} available.`, "success");
+    showActivityOutcome("Drive list ready", `${formatItemCount(state.drives.length, "writable drive")} available.`, "success");
   } catch (error) {
     log(error.message);
     setActivityStatus({
       status: "error",
       phaseLabel: "Drive refresh failed",
-      title: "Could not read the drive inventory",
-      detail: error.message,
-      progressLabel: "Drive inventory failed",
+      title: "Could not read the drive list",
+      detail: `${error.message} Reconnect the device or try refreshing again.`,
+      progressLabel: "Drive list failed",
       current: 0,
       total: 1
     });
-    showActivityOutcome("Drive inventory failed", error.message, "error");
+    showActivityOutcome("Drive list failed", `${error.message} Reconnect the device or try refreshing again.`, "error");
   }
 }
 
@@ -2392,46 +2392,46 @@ async function createRemotePath() {
 
   const drive = getSelectedDrive();
   if (!drive) {
-    const message = "Select a drive before creating a remote path.";
+    const message = "Choose a drive before creating the base path.";
     log(message);
     setActivityStatus({
       status: "warning",
-      phaseLabel: "Remote path blocked",
+      phaseLabel: "Base path blocked",
       title: "No drive selected",
       detail: message,
       progressLabel: "Select a drive first",
       current: 0,
       total: 1
     });
-    showActivityOutcome("Remote path blocked", message, "warning");
+    showActivityOutcome("Destination folder blocked", message, "warning");
     return;
   }
 
   const remoteBase = normalizeRemoteBasePath(elements.remoteBaseInput.value);
   const fullPath = joinRemotePath(drive, remoteBase, "");
   if (fullPath === `${drive}:/`) {
-    const message = "Root drive is already available, nothing to create.";
+    const message = "The drive root already exists.";
     log(message);
     setActivityStatus({
       status: "success",
-      phaseLabel: "Remote path ready",
+      phaseLabel: "Base path ready",
       title: "Nothing to create",
       detail: message,
       progressLabel: "Root path already exists",
       current: 1,
       total: 1
     });
-    showActivityOutcome("Remote path ready", message, "success");
+    showActivityOutcome("Destination folder ready", message, "success");
     return;
   }
 
   clearActivityOutcome();
   setActivityStatus({
     status: "running",
-    phaseLabel: "Preparing remote path",
-    title: `Creating ${fullPath}`,
-    detail: fullPath,
-    progressLabel: "Ensuring remote folders exist",
+    phaseLabel: "Preparing destination folder",
+    title: `Preparing ${fullPath}`,
+    detail: "Creating any missing folders under the chosen destination folder.",
+    progressLabel: "Creating missing folders",
     current: 0,
     total: 1
   });
@@ -2439,29 +2439,29 @@ async function createRemotePath() {
   try {
     await state.client.ensureFolder(fullPath);
     invalidateClientFolderCache();
-    log(`Remote path ready: ${fullPath}`);
+    log(`Destination folder ready: ${fullPath}`);
     setActivityStatus({
       status: "success",
-      phaseLabel: "Remote path ready",
-      title: `Prepared ${fullPath}`,
-      detail: "All required remote folders are ready.",
-      progressLabel: "Remote path prepared",
+      phaseLabel: "Destination folder ready",
+      title: "Destination folder ready",
+      detail: `All required folders now exist under ${fullPath}.`,
+      progressLabel: "Destination folder prepared",
       current: 1,
       total: 1
     });
-    showActivityOutcome("Remote path ready", `All required folders now exist under ${fullPath}.`, "success");
+    showActivityOutcome("Destination folder ready", `All required folders now exist under ${fullPath}.`, "success");
   } catch (error) {
     log(error.message);
     setActivityStatus({
       status: "error",
-      phaseLabel: "Remote path failed",
+      phaseLabel: "Destination folder failed",
       title: `Could not prepare ${fullPath}`,
-      detail: error.message,
+      detail: `${error.message} Check the drive, shorten the path if needed, then try again.`,
       progressLabel: "Path preparation failed",
       current: 0,
       total: 1
     });
-    showActivityOutcome("Remote path failed", error.message, "error");
+    showActivityOutcome("Destination folder failed", `${error.message} Check the drive, shorten the path if needed, then try again.`, "error");
   }
 }
 
@@ -2483,8 +2483,8 @@ async function prepareFolderSelection() {
       status: "running",
       phaseLabel: "Scanning local folder",
       title: `Scanning ${handle.name}`,
-      detail: "Preparing the local upload plan.",
-      progressLabel: "Preparing local scan",
+      detail: "Building the upload plan from your local folder.",
+      progressLabel: "Scanning local files",
       current: 0,
       total: 1
     });
@@ -2501,7 +2501,7 @@ async function prepareFolderSelection() {
       });
     });
 
-    await finalizeCollectedSelection(collected, `Selected folder ${handle.name}.`);
+    await finalizeCollectedSelection(collected, `Built an upload plan from folder ${handle.name}.`);
   } catch (error) {
     if (error && error.name !== "AbortError") {
       log(error.message);
@@ -2529,8 +2529,8 @@ async function handleDirectoryFallbackSelection(event) {
   setActivityStatus({
     status: "running",
     phaseLabel: "Scanning selected files",
-    title: "Scanning browser folder selection",
-    detail: "Preparing the local upload plan.",
+    title: "Scanning selected folder",
+    detail: "Building the upload plan from the chosen folder.",
     progressLabel: "Scanning selected entries",
     current: 0,
     total: event.target.files.length
@@ -2540,7 +2540,7 @@ async function handleDirectoryFallbackSelection(event) {
     setActivityStatus({
       status: "running",
       phaseLabel: "Scanning selected files",
-      title: "Scanning browser folder selection",
+      title: "Scanning selected folder",
       detail: relativePath,
       progressLabel: "Scanning selected entries",
       current,
@@ -2548,7 +2548,7 @@ async function handleDirectoryFallbackSelection(event) {
     });
   });
 
-  await finalizeCollectedSelection(collected, `Selected ${formatItemCount(collected.files.length, "file")} from the browser folder picker.`);
+  await finalizeCollectedSelection(collected, `Built an upload plan from ${formatItemCount(collected.files.length, "file")} in the chosen folder.`);
   event.target.value = "";
 }
 
@@ -2562,7 +2562,7 @@ async function handleFileSelection(event) {
     status: "running",
     phaseLabel: "Scanning selected files",
     title: "Scanning file selection",
-    detail: "Preparing the upload plan from the selected files.",
+    detail: "Building the upload plan from the selected files.",
     progressLabel: "Scanning selected files",
     current: 0,
     total: event.target.files.length
@@ -2580,14 +2580,14 @@ async function handleFileSelection(event) {
     });
   });
 
-  await finalizeCollectedSelection(collected, `Selected ${formatItemCount(collected.files.length, "file")}.`);
+  await finalizeCollectedSelection(collected, `Built an upload plan from ${formatItemCount(collected.files.length, "file")}.`);
   event.target.value = "";
 }
 
 function updateUploadActivity(item, currentIndex, totalItems, detail, progressLabel) {
   setActivityStatus({
     status: "running",
-    phaseLabel: "Uploading queue",
+    phaseLabel: "Uploading",
     title: `Uploading to ${getSelectedDrive() || "?"}:${normalizeRemoteBasePath(elements.remoteBaseInput.value)}`,
     detail,
     progressLabel,
@@ -2614,9 +2614,9 @@ async function runUpload() {
   clearActivityOutcome();
   setActivityStatus({
     status: "running",
-    phaseLabel: "Uploading queue",
+    phaseLabel: "Uploading",
     title: `Uploading to ${remoteBase}`,
-    detail: `Preparing ${formatItemCount(totalItems, "queued item")} for transfer.`,
+    detail: `Preparing ${formatItemCount(totalItems, "queued item")} for transfer to the destination folder.`,
     progressLabel: "Preparing upload queue",
     current: 0,
     total: totalItems
@@ -2644,7 +2644,7 @@ async function runUpload() {
       item.status = "active";
       item.message = "Preparing folder";
       updatePlanItem(item);
-      updateUploadActivity(item, Math.min(completedItems + 1, totalItems), totalItems, item.remotePath, "Preparing remote folders");
+      updateUploadActivity(item, Math.min(completedItems + 1, totalItems), totalItems, item.remotePath, "Preparing folders");
 
       await state.client.ensureFolder(item.remotePath);
 
@@ -2672,7 +2672,7 @@ async function runUpload() {
         updatePlanItem(item);
         setActivityStatus({
           status: "running",
-          phaseLabel: "Uploading queue",
+          phaseLabel: "Uploading",
           title: `Uploading to ${remoteBase}`,
           detail: `${item.remotePath} • ${formatBytes(writtenBytes)} of ${formatBytes(totalBytes)}`,
           progressLabel: "Uploading file",
@@ -2689,14 +2689,14 @@ async function runUpload() {
       log(`Uploaded ${item.remotePath}`);
     }
 
-    const summaryText = `Uploaded ${formatItemCount(state.queuedFiles.length, "file")} and prepared ${formatItemCount(state.queuedFolders.length, "folder")} at ${remoteBase}.`;
-    log("Upload complete.");
+    const summaryText = `Uploaded ${formatItemCount(state.queuedFiles.length, "file")} and prepared ${formatItemCount(state.queuedFolders.length, "folder")} under ${remoteBase}.`;
+    log("Upload finished.");
     setActivityStatus({
       status: "success",
       phaseLabel: "Upload complete",
-      title: `Finished uploading to ${remoteBase}`,
+      title: "Upload complete",
       detail: summaryText,
-      progressLabel: "Transfer finished",
+      progressLabel: "Transfer complete",
       current: totalItems,
       total: totalItems
     });
@@ -2714,7 +2714,7 @@ async function runUpload() {
     const title = state.abortRequested ? "Upload stopped" : "Upload failed";
     const summaryText = state.abortRequested
       ? `Upload stopped after completing ${completedItems} of ${totalItems} queued items.`
-      : `Upload failed after completing ${completedItems} of ${totalItems} queued items. ${error.message}`;
+      : `Upload failed after completing ${completedItems} of ${totalItems} queued items. ${error.message} Check the destination folder and connection, then try again.`;
     setActivityStatus({
       status,
       phaseLabel: title,
@@ -2747,17 +2747,17 @@ function abortUpload() {
   }
 
   state.abortRequested = true;
-  log("Abort requested. The current BLE operation will finish before the queue stops.");
+  log("Stop requested. The current BLE write will finish before the queue stops.");
   setActivityStatus({
     status: "warning",
-    phaseLabel: "Abort requested",
+    phaseLabel: "Stop requested",
     title: "Upload stop requested",
-    detail: "The current BLE operation will finish before the queue stops.",
+    detail: "The current BLE write will finish before the queue stops.",
     progressLabel: "Waiting for the current step to finish",
     current: state.plan.filter((item) => item.status === "done").length,
     total: state.plan.length
   });
-  showActivityOutcome("Abort requested", "The current BLE operation will finish before the queue stops.", "warning");
+  showActivityOutcome("Stop requested", "The current BLE write will finish before the queue stops.", "warning");
 }
 
 elements.connectButton.addEventListener("click", connectOrDisconnect);
@@ -2806,8 +2806,9 @@ elements.managerPathInput.addEventListener("blur", () => {
     elements.managerPathInput.value = normalizeAbsoluteRemoteFolderPath(elements.managerPathInput.value, getSelectedDrive());
   } catch (error) {
     log(error.message);
-    showManagerOutcome("Invalid folder path", error.message);
-    showActivityOutcome("Invalid folder path", error.message, "error");
+    const detail = `${error.message} Use the selected drive and a valid device folder path.`;
+    showManagerOutcome("Invalid device folder", detail);
+    showActivityOutcome("Invalid device folder", detail, "error");
   }
 });
 elements.managerFolderNameInput.addEventListener("input", updateControls);
