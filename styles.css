@@ -216,6 +216,55 @@ h3 {
   gap: 12px;
 }
 
+.app-footer {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+  gap: 12px;
+  margin-top: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-lg);
+  background:
+    linear-gradient(135deg, oklch(1 0 0 / 0.84), oklch(0.974 0.014 281 / 0.92)),
+    linear-gradient(120deg, var(--primary-soft), var(--accent-soft));
+  box-shadow: var(--shadow-card);
+  backdrop-filter: blur(18px);
+}
+
+.footer-copy,
+.footer-meta {
+  display: grid;
+  gap: 6px;
+  align-content: start;
+}
+
+.footer-label {
+  margin: 0;
+  color: var(--primary-strong);
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.footer-text {
+  margin: 0;
+  color: var(--foreground-soft);
+  font-size: 0.84rem;
+  line-height: 1.42;
+}
+
+.footer-link {
+  color: var(--primary-strong);
+  font-weight: 700;
+  text-decoration-color: oklch(0.72 0.06 243 / 0.5);
+  text-underline-offset: 0.14em;
+}
+
+.footer-link:hover {
+  color: var(--foreground);
+}
+
 .panel {
   grid-column: span 6;
   padding: 14px;
@@ -862,6 +911,10 @@ td.selection-cell {
   .connection-panel,
   #treeUploaderPanel {
     grid-column: 1 / -1;
+  }
+
+  .app-footer {
+    grid-template-columns: 1fr;
   }
 
   .mode-switch-grid {
