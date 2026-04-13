@@ -480,13 +480,13 @@ class DevMockClient {
         { name: "README.txt", type: "FILE", size: 312, meta: { amiiboHead: null, amiiboTail: null } },
       ],
       "E:/nfc": [
-        { name: "zelda",     type: "DIR" },
-        { name: "Mario.bin", type: "FILE", size: 540, meta: { amiiboHead: 0x00000000, amiiboTail: 0x00000002 } },
-        { name: "Samus.bin", type: "FILE", size: 540, meta: { amiiboHead: 0x05C00000, amiiboTail: 0x04121302 } },
+        { name: "figures",    type: "DIR" },
+        { name: "alpha.bin", type: "FILE", size: 540, meta: { amiiboHead: 0x00000000, amiiboTail: 0x00000002 } },
+        { name: "bravo.bin", type: "FILE", size: 540, meta: { amiiboHead: 0x05C00000, amiiboTail: 0x04121302 } },
       ],
-      "E:/nfc/zelda": [
-        { name: "Link - Archer.bin", type: "FILE", size: 540, meta: { amiiboHead: 0x01000000, amiiboTail: 0x03530902 } },
-        { name: "Link - Rider.bin",  type: "FILE", size: 540, meta: { amiiboHead: 0x01000000, amiiboTail: 0x03540902 } },
+      "E:/nfc/figures": [
+        { name: "charlie.bin", type: "FILE", size: 540, meta: { amiiboHead: 0x01000000, amiiboTail: 0x03530902 } },
+        { name: "delta.bin",   type: "FILE", size: 540, meta: { amiiboHead: 0x01000000, amiiboTail: 0x03540902 } },
       ],
       "E:/save": [
         { name: "backup.bin", type: "FILE", size: 1229, meta: { amiiboHead: null, amiiboTail: null } },
@@ -505,12 +505,12 @@ class DevMockClient {
   async closeFile()       { return { ok: true, data: null }; }
   async readFileData(path) {
     const mockFiles = {
-      "E:/README.txt":                  { size: 312,  amiiboHead: null,       amiiboTail: null },
-      "E:/nfc/Mario.bin":               { size: 540,  amiiboHead: 0x00000000, amiiboTail: 0x00000002 },
-      "E:/nfc/Samus.bin":               { size: 540,  amiiboHead: 0x05C00000, amiiboTail: 0x04121302 },
-      "E:/nfc/zelda/Link - Archer.bin": { size: 540,  amiiboHead: 0x01000000, amiiboTail: 0x03530902 },
-      "E:/nfc/zelda/Link - Rider.bin":  { size: 540,  amiiboHead: 0x01000000, amiiboTail: 0x03540902 },
-      "E:/save/backup.bin":             { size: 1229, amiiboHead: null,       amiiboTail: null },
+      "E:/README.txt":                    { size: 312,  amiiboHead: null,       amiiboTail: null },
+      "E:/nfc/alpha.bin":                  { size: 540,  amiiboHead: 0x00000000, amiiboTail: 0x00000002 },
+      "E:/nfc/bravo.bin":                  { size: 540,  amiiboHead: 0x05C00000, amiiboTail: 0x04121302 },
+      "E:/nfc/figures/charlie.bin":         { size: 540,  amiiboHead: 0x01000000, amiiboTail: 0x03530902 },
+      "E:/nfc/figures/delta.bin":           { size: 540,  amiiboHead: 0x01000000, amiiboTail: 0x03540902 },
+      "E:/save/backup.bin":                { size: 1229, amiiboHead: null,       amiiboTail: null },
     };
     const meta = mockFiles[path];
     const size = meta?.size ?? 32;

@@ -16,7 +16,7 @@ Web Bluetooth workspace for Pixl.js. Browse and manage device storage, upload fo
 - **Download** — single-file download per row, or bulk-download selected files (folders are skipped with a toast)
 - **Tree uploader** — pick a local folder or files, queue them, and upload in one shot with real-time speed readout
 - **Normalize** — rename files to lowercase on the device, with recursive and scoped options
-- **Amiibo recognition** — `.bin` files show their amiibo character name when known
+- **Amiibo recognition** -- `.bin` files show their amiibo name when known
 - **Protocol log** — toggle a live BLE command log for debugging
 - **Dev mode** — mock BLE client with a static file tree for UI development without a device
 
