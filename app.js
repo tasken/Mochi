@@ -1224,6 +1224,7 @@ function setPanelState(mode, entry) {
     el.panelFileNotes.textContent = (entry.meta && entry.meta.notes) ? entry.meta.notes : "\u2014";
 
     // Amiibo section — only for .bin files
+    el.panelFileLabel.textContent = entry.name.toLowerCase().endsWith(".bin") ? "Amiibo" : "File";
     const isBin = entry.type === "FILE" && entry.name.toLowerCase().endsWith(".bin");
     el.panelAmiibo.hidden = !isBin;
     if (isBin) {
