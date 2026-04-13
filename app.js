@@ -1304,6 +1304,21 @@ el.panelBtnDelete.addEventListener("click", () => {
   openModal(el.deleteModal);
 });
 
+// === Upload panel toggle ===
+
+el.btnUploadToggle.addEventListener("click", () => {
+  setPanelState("upload");
+});
+
+el.btnUploadClose.addEventListener("click", () => {
+  // Return to previous panel state
+  if (state.panelPrevMode === "file" && state.drawerEntry) {
+    setPanelState("file", state.drawerEntry);
+  } else {
+    setPanelState("folder");
+  }
+});
+
 // === Connect button ===
 
 el.btnConnect.addEventListener("click", connectOrDisconnect);
