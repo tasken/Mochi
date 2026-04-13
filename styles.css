@@ -141,6 +141,7 @@
   border-color: rgba(255,255,255,0.2);
   color: #fff;
 }
+.topbar button.danger:hover:not(:disabled) { background: #b33; }
 
 .topbar button.ghost {
   background: transparent;
@@ -263,7 +264,6 @@
   display: flex;
   gap: 6px;
   padding-top: 8px;
-  margin-top: auto;
 }
 
 .panel-actions button { flex: 1; }
