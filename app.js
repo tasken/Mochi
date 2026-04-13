@@ -1304,6 +1304,22 @@ el.panelBtnDelete.addEventListener("click", () => {
   openModal(el.deleteModal);
 });
 
+// === Log overlay ===
+
+el.btnLogToggle.addEventListener("click", () => {
+  el.logOverlay.classList.toggle("open");
+});
+
+el.btnLogClose.addEventListener("click", () => {
+  el.logOverlay.classList.remove("open");
+});
+
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") {
+    el.logOverlay.classList.remove("open");
+  }
+});
+
 // === Upload panel toggle ===
 
 el.btnUploadToggle.addEventListener("click", () => {
