@@ -1818,5 +1818,4 @@ el.btnUploadClear.addEventListener("click", () => {
 // === Initial state ===
 
 setConnState("disconnected");
-el.logSection.classList.add("section-disabled"); // no session yet — nothing to browse
 updateControls();
