@@ -46,11 +46,11 @@
     <span class="topbar-div" id="topbarDiv" hidden></span>
     <span class="topbar-breadcrumb" id="topbarBreadcrumb" hidden></span>
     <span class="topbar-spacer"></span>
-    <button class="ghost" id="btnUp" title="Up" hidden><span class="ms">arrow_upward</span></button>
-    <button class="ghost" id="btnRefresh" title="Refresh" hidden><span class="ms">refresh</span></button>
+    <button class="ghost" id="btnUp" title="Up" aria-label="Go up one folder" hidden><span class="ms">arrow_upward</span></button>
+    <button class="ghost" id="btnRefresh" title="Refresh" aria-label="Refresh folder" hidden><span class="ms">refresh</span></button>
     <button id="btnNewFolder" hidden><span class="ms">create_new_folder</span> New folder</button>
     <button class="primary" id="btnUploadToggle" hidden><span class="ms">upload</span> Upload</button>
-    <button class="ghost" id="btnLogToggle" title="Protocol log" hidden><span class="ms">terminal</span></button>
+    <button class="ghost" id="btnLogToggle" title="Protocol log" aria-label="Toggle protocol log" hidden><span class="ms">terminal</span></button>
     <span class="topbar-error" id="connError" hidden></span>
   </header>
 
@@ -96,7 +96,7 @@
           <span id="panelFileNotes"></span>
         </div>
         <!-- Amiibo subsection — shown for .bin files -->
-        <div id="panelAmiibo" hidden>
+        <div class="panel-field" id="panelAmiibo" hidden>
           <span class="panel-field-label"><span class="ms-sm">nfc</span> Amiibo ID</span>
           <div class="panel-amiibo-content" id="panelAmiiboContent"></div>
         </div>
@@ -148,7 +148,7 @@
         <button class="danger" id="btnDelete"><span class="ms">delete</span> Delete</button>
         <div class="selection-spacer"></div>
         <button class="ghost" id="btnSelectAll"><span class="ms">select_all</span> Select all</button>
-        <button class="ghost" title="Clear selection" id="btnClearSelection"><span class="ms">deselect</span></button>
+        <button class="ghost" title="Clear selection" aria-label="Clear selection" id="btnClearSelection"><span class="ms">deselect</span></button>
       </div>
 
       <!-- File table -->
@@ -156,7 +156,7 @@
         <table>
           <thead>
             <tr>
-              <th class="cell-check"><input type="checkbox" id="checkAll" title="Select all"></th>
+              <th class="cell-check"><input type="checkbox" id="checkAll" title="Select all" aria-label="Select all"></th>
               <th>Name</th>
               <th>Size</th>
               <th class="cell-actions"></th>
