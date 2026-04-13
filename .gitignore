@@ -4,3 +4,5 @@
 .venv/
 tasks.py
 .superpowers/
+CLAUDE.md
+.github/copilot-instructions.md
