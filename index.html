@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>MochiNest Tools</title>
+<title>MochiNest</title>
 <link rel="icon" type="image/svg+xml" href="./favicon.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -32,23 +32,19 @@
   <!-- Top bar -->
   <header class="topbar" id="topbar">
     <span class="topbar-brand">MochiNest</span>
-    <button class="primary btn-connecting" id="btnConnect" style="display:none">
-      <span class="ms">bluetooth</span> Connect
+    <button class="danger" id="btnConnect" hidden>
+      <span class="ms">bluetooth_disabled</span> Disconnect
     </button>
     <!-- shown only when connected -->
     <span class="topbar-badge" id="topbarBadge" hidden></span>
     <span class="topbar-drive" id="topbarDrive" hidden>
       <span id="topbarDriveInfo">—</span>
-      <button class="ghost" id="btnFormat" title="Format drive E:" style="padding:2px 6px;font-size:0.68rem">
+      <button class="ghost" id="btnFormat" title="Format drive E:" style="padding:2px 6px;font-size:var(--fs-xs)">
         <span class="ms-sm">delete_forever</span>
       </button>
     </span>
-    <span class="topbar-div" id="topbarDiv" hidden></span>
-    <span class="topbar-breadcrumb" id="topbarBreadcrumb" hidden></span>
     <span class="topbar-spacer"></span>
-    <button class="ghost" id="btnUp" title="Up" aria-label="Go up one folder" hidden><span class="ms">arrow_upward</span></button>
-    <button class="ghost" id="btnRefresh" title="Refresh" aria-label="Refresh folder" hidden><span class="ms">refresh</span></button>
-    <button id="btnNewFolder" hidden><span class="ms">create_new_folder</span> New folder</button>
+    <button class="ghost" id="btnNormalize" hidden><span class="ms">match_case</span> Normalize</button>
     <button class="primary" id="btnUploadToggle" hidden><span class="ms">upload</span> Upload</button>
     <button class="ghost" id="btnLogToggle" title="Protocol log" aria-label="Toggle protocol log" hidden><span class="ms">terminal</span></button>
     <span class="topbar-error" id="connError" hidden></span>
@@ -62,7 +58,8 @@
         <span class="ms" id="mainOverlayIcon">bluetooth_disabled</span>
         <div id="mainOverlaySpinner" hidden><md-circular-progress indeterminate></md-circular-progress></div>
         <span class="title" id="mainOverlayTitle">No device connected</span>
-        <span class="sub" id="mainOverlaySub">Click Connect above to get started.</span>
+        <span class="sub" id="mainOverlaySub"></span>
+        <button class="primary" id="btnConnectCta"><span class="ms">bluetooth</span> Connect to Pixl.js</button>
       </div>
     </div>
 
@@ -91,10 +88,6 @@
           <span class="panel-field-label"><span class="ms-sm">flag</span> Flags</span>
           <div id="panelFileFlags"></div>
         </div>
-        <div class="panel-field">
-          <span class="panel-field-label"><span class="ms-sm">notes</span> Notes</span>
-          <span id="panelFileNotes"></span>
-        </div>
         <!-- Amiibo subsection — shown for .bin files -->
         <div class="panel-field" id="panelAmiibo" hidden>
           <span class="panel-field-label"><span class="ms-sm">nfc</span> Amiibo ID</span>
@@ -116,10 +109,10 @@
           <button style="flex:1" id="btnPickFolder"><span class="ms">folder</span> Folder</button>
           <button style="flex:1" id="btnPickFiles"><span class="ms">upload_file</span> Files</button>
         </div>
-        <div id="uploadQueue"><div class="queue-empty">No uploads queued</div></div>
+        <div id="uploadQueue"><div class="queue-empty">Queue is empty</div></div>
         <div style="display:flex;gap:6px;margin-top:6px">
           <button class="primary" style="flex:1" id="btnUploadStart" disabled><span class="ms">play_arrow</span> Start</button>
-          <button class="danger" style="flex:1" id="btnUploadAbort" disabled><span class="ms">stop</span> Abort</button>
+          <button class="danger" style="flex:1" id="btnUploadAbort" disabled><span class="ms">stop</span> Stop</button>
           <button class="ghost" style="flex:1" id="btnUploadClear" disabled><span class="ms">delete</span> Clear</button>
         </div>
         <input id="folderInput" type="file" hidden multiple webkitdirectory directory>
@@ -135,20 +128,19 @@
         <div class="browser-lock-card">
           <span class="ms">lock</span>
           <span class="browser-lock-title" id="browserLockTitle">Operation in progress</span>
-          <span class="browser-lock-sub">File browsing is disabled until the operation completes.</span>
+          <span class="browser-lock-sub">File browsing is paused until this finishes.</span>
         </div>
       </div>
 
-      <!-- Selection bar -->
+      <!-- Navigation / selection bar -->
       <div id="selectionBar" class="selection-bar">
-        <span class="selection-count" id="selectionCount">0 selected</span>
-        <div class="selection-sep"></div>
-        <button id="btnLowercase"><span class="ms">match_case</span> Lowercase</button>
-        <div class="selection-sep"></div>
-        <button class="danger" id="btnDelete"><span class="ms">delete</span> Delete</button>
-        <div class="selection-spacer"></div>
-        <button class="ghost" id="btnSelectAll"><span class="ms">select_all</span> Select all</button>
-        <button class="ghost" title="Clear selection" aria-label="Clear selection" id="btnClearSelection"><span class="ms">deselect</span></button>
+        <button class="ghost" id="btnNavHome" title="Home"><span class="ms">home</span></button>
+        <button class="ghost" id="btnNavUp" title="Up one level"><span class="ms">arrow_upward</span></button>
+        <nav class="nav-breadcrumb" id="navBreadcrumb"></nav>
+        <span id="selectionCount" hidden></span>
+        <button class="danger" id="btnDeleteSelected" hidden><span class="ms">delete</span> Delete</button>
+        <button class="ghost" id="btnNewFolder" title="New folder" hidden><span class="ms">create_new_folder</span> New folder</button>
+        <button class="ghost" id="btnRefresh" title="Refresh" aria-label="Refresh folder" hidden><span class="ms">refresh</span></button>
       </div>
 
       <!-- File table -->
@@ -176,7 +168,7 @@
 <div class="log-overlay" id="logOverlay">
   <div class="log-overlay-panel">
     <div class="log-overlay-header">
-      <span style="font-size:0.72rem;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:#aaa">Protocol Log</span>
+      <span style="font-size:var(--fs-s);font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:#aaa">Protocol Log</span>
       <button class="ghost" id="btnLogClose" style="padding:2px 4px;color:#aaa" title="Close"><span class="ms-sm">close</span></button>
     </div>
     <pre class="log" id="protocolLog"></pre>
@@ -187,7 +179,7 @@
 <div id="formatModal" class="modal-overlay">
   <div class="modal-box">
     <h3>Format drive E:?</h3>
-    <p id="formatModalMsg">This will erase all data on E:. This action cannot be undone.</p>
+    <p id="formatModalMsg">All data on E: will be permanently erased. This cannot be undone.</p>
     <div class="modal-actions">
       <button class="ghost" id="btnFormatCancel">Cancel</button>
       <button class="danger" id="btnFormatConfirm">Format drive</button>
@@ -212,7 +204,7 @@
 <div id="renameModal" class="modal-overlay">
   <div class="modal-box">
     <h3 style="color:#1a1a2e">Rename</h3>
-    <p>Enter a new name:</p>
+    <p>New name:</p>
     <input type="text" class="path-input" id="renameInput" style="width:100%;margin-bottom:14px" placeholder="new name" spellcheck="false">
     <div class="modal-actions">
       <button class="ghost" id="btnRenameCancel">Cancel</button>
@@ -236,12 +228,12 @@
 <!-- Sanitize names modal — files selected -->
 <div id="sanitizeModalFiles" class="modal-overlay sanitize-modal">
   <div class="modal-box">
-    <h3 style="color:#1a1a2e">Lowercase names</h3>
-    <p>Rename <strong id="sanitizeFilesCount">0 selected files</strong> to lowercase on the device?</p>
-    <p id="sanitizeFilesList" style="font-size:0.78rem;color:#888;margin-bottom:14px"></p>
+    <h3 style="color:#1a1a2e">Normalize names</h3>
+    <p>Normalize <strong id="sanitizeFilesCount">0 selected files</strong> to lowercase on the device?</p>
+    <p id="sanitizeFilesList" style="font-size:var(--fs-base);color:#888;margin-bottom:14px"></p>
     <div class="modal-actions">
       <button class="ghost" id="btnSanitizeFilesCancel">Cancel</button>
-      <button class="primary" id="btnSanitizeFilesConfirm">Lowercase</button>
+      <button class="primary" id="btnSanitizeFilesConfirm">Normalize</button>
     </div>
   </div>
 </div>
@@ -249,19 +241,19 @@
 <!-- Sanitize names modal — folders selected -->
 <div id="sanitizeModalFolders" class="modal-overlay sanitize-modal">
   <div class="modal-box">
-    <h3 style="color:#1a1a2e">Lowercase names</h3>
+    <h3 style="color:#1a1a2e">Normalize names</h3>
     <p>Selection includes folders. How deep should this go?</p>
     <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px">
-      <label style="display:flex;align-items:center;gap:8px;font-size:0.85rem;cursor:pointer">
+      <label style="display:flex;align-items:center;gap:8px;font-size:var(--fs-md);cursor:pointer">
         <input type="radio" name="sanitizeFolderScope" value="selected" checked> Only the selected items
       </label>
-      <label style="display:flex;align-items:center;gap:8px;font-size:0.85rem;cursor:pointer">
+      <label style="display:flex;align-items:center;gap:8px;font-size:var(--fs-md);cursor:pointer">
         <input type="radio" name="sanitizeFolderScope" value="recursive"> Recursive — include all contents
       </label>
     </div>
     <div class="modal-actions">
       <button class="ghost" id="btnSanitizeFoldersCancel">Cancel</button>
-      <button class="primary" id="btnSanitizeFoldersConfirm">Lowercase</button>
+      <button class="primary" id="btnSanitizeFoldersConfirm">Normalize</button>
     </div>
   </div>
 </div>
@@ -269,22 +261,22 @@
 <!-- Sanitize names modal — nothing selected -->
 <div id="sanitizeModalNone" class="modal-overlay sanitize-modal">
   <div class="modal-box">
-    <h3 style="color:#1a1a2e">Lowercase names</h3>
-    <p>No items selected. What should be renamed in <strong style="font-family:monospace" id="sanitizeNonePath"></strong>?</p>
+    <h3 style="color:#1a1a2e">Normalize names</h3>
+    <p>What should be renamed in <strong style="font-family:monospace" id="sanitizeNonePath"></strong>?</p>
     <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px">
-      <label style="display:flex;align-items:center;gap:8px;font-size:0.85rem;cursor:pointer">
+      <label style="display:flex;align-items:center;gap:8px;font-size:var(--fs-md);cursor:pointer">
         <input type="radio" name="sanitizeNoneScope" value="files" checked> Files in this folder only
       </label>
-      <label style="display:flex;align-items:center;gap:8px;font-size:0.85rem;cursor:pointer">
+      <label style="display:flex;align-items:center;gap:8px;font-size:var(--fs-md);cursor:pointer">
         <input type="radio" name="sanitizeNoneScope" value="filesAndFolders"> Files and folders in this folder
       </label>
-      <label style="display:flex;align-items:center;gap:8px;font-size:0.85rem;cursor:pointer">
-        <input type="radio" name="sanitizeNoneScope" value="recursive"> Everything recursive
+      <label style="display:flex;align-items:center;gap:8px;font-size:var(--fs-md);cursor:pointer">
+        <input type="radio" name="sanitizeNoneScope" value="recursive"> Everything, recursively
       </label>
     </div>
     <div class="modal-actions">
       <button class="ghost" id="btnSanitizeNoneCancel">Cancel</button>
-      <button class="primary" id="btnSanitizeNoneConfirm">Lowercase</button>
+      <button class="primary" id="btnSanitizeNoneConfirm">Rename</button>
     </div>
   </div>
 </div>
