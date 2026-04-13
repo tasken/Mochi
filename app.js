@@ -5,7 +5,6 @@ const NUS_CHAR_TX_UUID = "6e400002-b5a3-f393-e0a9-e50e24dcca9e";
 const NUS_CHAR_RX_UUID = "6e400003-b5a3-f393-e0a9-e50e24dcca9e";
 
 const FRAME_HEADER_SIZE = 4;
-const MAX_ATT_BYTES = 247;
 const MAX_FILE_NAME_BYTES = 47;
 const MAX_FILE_PATH_BYTES = 65;
 const MAX_FOLDER_PATH_BYTES = 57;
@@ -83,49 +82,10 @@ function getParentPath(path) {
   return i <= 2 ? path.slice(0, 3) : path.slice(0, i);
 }
 
-function getDriveRoot(drive) {
-  return drive ? `${drive}:/` : "";
-}
-
 function joinChildPath(parent, child) {
   const c = String(child || "").replace(/^\/+|\/+$/g, "");
   if (!c) return parent;
   return parent.endsWith("/") ? `${parent}${c}` : `${parent}/${c}`;
-}
-
-function normalizeBasePath(input) {
-  let v = (input || "/").trim().replace(/\\/g, "/");
-  if (!v.startsWith("/")) v = `/${v}`;
-  v = v.replace(/\/+/g, "/");
-  if (v.length > 1 && v.endsWith("/")) v = v.slice(0, -1);
-  return v || "/";
-}
-
-function joinRemotePath(drive, basePath, relativePath) {
-  const base = normalizeBasePath(basePath);
-  const d = drive.endsWith(":") ? drive.slice(0, -1) : drive;
-  const root = `${d}:${base}`;
-  const rel = (relativePath || "").replace(/\\/g, "/").split("/").filter(Boolean).join("/");
-  if (!rel) return root;
-  return root.endsWith("/") ? `${root}${rel}` : `${root}/${rel}`;
-}
-
-function normalizeAbsolutePath(input, drive) {
-  const root = getDriveRoot(drive);
-  if (!root) return "";
-  let v = (input || root).trim().replace(/\\/g, "/");
-  if (!v) return root;
-  const m = v.match(/^([A-Za-z]):(.*)$/);
-  if (m) {
-    const d = m[1].toUpperCase();
-    if (drive && d !== drive.toUpperCase()) throw new Error(`Drive mismatch: expected ${drive}:, got ${d}:`);
-    let rest = m[2] || "/";
-    if (!rest.startsWith("/")) rest = `/${rest}`;
-    rest = rest.replace(/\/+/g, "/");
-    if (rest.length > 1 && rest.endsWith("/")) rest = rest.slice(0, -1);
-    return `${d}:${rest || "/"}`;
-  }
-  return joinRemotePath(drive, v.startsWith("/") ? v : `/${v}`, "");
 }
 
 function validateRemotePath(path, kind) {
@@ -143,12 +103,11 @@ function sortEntries(entries) {
   });
 }
 
-function itemCount(n, noun) { return `${n} ${noun}${n === 1 ? "" : "s"}`; }
-
-function nextFrame() { return new Promise(r => requestAnimationFrame(r)); }
-
-async function yieldToBrowser(i, interval = 24) {
-  if (i > 0 && i % interval === 0) await nextFrame();
+function triggerDownload(data, filename) {
+  const url = URL.createObjectURL(new Blob([data]));
+  const a = document.createElement("a");
+  a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
 }
 
 // === Binary cursor ===
@@ -157,11 +116,9 @@ class Cursor {
   constructor(bytes) { this.bytes = bytes; this.offset = 0; }
   remaining() { return this.bytes.length - this.offset; }
   u8() { return this.bytes[this.offset++]; }
-  i8() { const v = this.bytes[this.offset++]; return v > 127 ? v - 256 : v; }
   u16() { const v = this.bytes[this.offset] | (this.bytes[this.offset + 1] << 8); this.offset += 2; return v; }
   u32() { const view = new DataView(this.bytes.buffer, this.bytes.byteOffset + this.offset, 4); const v = view.getUint32(0, true); this.offset += 4; return v; }
   take(n) { const v = this.bytes.slice(this.offset, this.offset + n); this.offset += n; return v; }
-  skip(n) { this.offset += n; }
   string() { return decoder.decode(this.take(this.u16())); }
 }
 
@@ -282,10 +239,9 @@ class PixlToolsClient {
       const size = c.u32();
       const type = c.u8() === 1 ? "DIR" : "FILE";
       const metaSize = c.u8();
-      const meta = { flags: 0, amiiboHead: null, amiiboTail: null, raw: null };
+      const meta = { flags: 0, amiiboHead: null, amiiboTail: null };
       if (metaSize > 0) {
         const metaStart = c.offset;
-        meta.raw = c.bytes.slice(metaStart, metaStart + metaSize);
         const metaEnd = metaStart + metaSize;
         let pos = metaStart;
         // Firmware TLV format (vfs_meta.c): type 1 (NOTES) skipped, types 2 (FLAGS) and 3 (AMIIBO_ID) have no length prefix.
@@ -494,11 +450,91 @@ class PixlToolsClient {
   }
 }
 
+// === Dev Mock Client ===
+
+class DevMockClient {
+  constructor() {
+    this.onDisconnect = null;
+    this.createdFolders = new Set(); // populated externally by browseFolder(); cleared by invalidateCache()
+  }
+
+  async connect() {}
+
+  disconnect() {
+    this.onDisconnect?.();
+  }
+
+  async getVersion() {
+    return { ok: true, data: { version: "mock-1.0", bleAddress: "DE:V0:00:00:00:00" } };
+  }
+
+  async listDrives() {
+    return { ok: true, data: [{ label: "E", name: "E:", totalBytes: 8 * 1024 * 1024, usedBytes: 2 * 1024 * 1024 }] };
+  }
+
+  async readFolder(path) {
+    const fs = {
+      "E:/": [
+        { name: "nfc",        type: "DIR" },
+        { name: "save",       type: "DIR" },
+        { name: "README.txt", type: "FILE", size: 312, meta: { amiiboHead: null, amiiboTail: null } },
+      ],
+      "E:/nfc": [
+        { name: "zelda",     type: "DIR" },
+        { name: "Mario.bin", type: "FILE", size: 540, meta: { amiiboHead: 0x00000000, amiiboTail: 0x00000002 } },
+        { name: "Samus.bin", type: "FILE", size: 540, meta: { amiiboHead: 0x05C00000, amiiboTail: 0x04121302 } },
+      ],
+      "E:/nfc/zelda": [
+        { name: "Link - Archer.bin", type: "FILE", size: 540, meta: { amiiboHead: 0x01000000, amiiboTail: 0x03530902 } },
+        { name: "Link - Rider.bin",  type: "FILE", size: 540, meta: { amiiboHead: 0x01000000, amiiboTail: 0x03540902 } },
+      ],
+      "E:/save": [
+        { name: "backup.bin", type: "FILE", size: 1229, meta: { amiiboHead: null, amiiboTail: null } },
+      ],
+    };
+    return { ok: true, data: fs[path] ?? [] };
+  }
+
+  // Mutations always succeed but are not reflected in readFolder (static mock).
+  async createFolder()    { return { ok: true, data: null }; }
+  async removePath()      { return { ok: true, data: null }; }
+  async renamePath()      { return { ok: true, data: null }; }
+  async formatDrive()     { return { ok: true, data: null }; }
+  async openFile()        { return { ok: true, data: 0 }; }
+  async writeFileChunk()  { return { ok: true, data: null }; }
+  async closeFile()       { return { ok: true, data: null }; }
+  async readFileData(path) {
+    const mockFiles = {
+      "E:/README.txt":                  { size: 312,  amiiboHead: null,       amiiboTail: null },
+      "E:/nfc/Mario.bin":               { size: 540,  amiiboHead: 0x00000000, amiiboTail: 0x00000002 },
+      "E:/nfc/Samus.bin":               { size: 540,  amiiboHead: 0x05C00000, amiiboTail: 0x04121302 },
+      "E:/nfc/zelda/Link - Archer.bin": { size: 540,  amiiboHead: 0x01000000, amiiboTail: 0x03530902 },
+      "E:/nfc/zelda/Link - Rider.bin":  { size: 540,  amiiboHead: 0x01000000, amiiboTail: 0x03540902 },
+      "E:/save/backup.bin":             { size: 1229, amiiboHead: null,       amiiboTail: null },
+    };
+    const meta = mockFiles[path];
+    const size = meta?.size ?? 32;
+    const data = new Uint8Array(size);
+    if (meta?.amiiboHead != null && size >= 92) {
+      const dv = new DataView(data.buffer);
+      dv.setUint32(84, meta.amiiboHead, false);
+      dv.setUint32(88, meta.amiiboTail, false);
+    }
+    return { ok: true, data };
+  }
+  async ensureFolder()    {}
+
+  async uploadFile(path, file, onProgress) {
+    onProgress(file.size, file.size);
+  }
+}
+
 // === DOM References ===
 
 const el = {
   // Top bar
   btnConnect: document.getElementById("btnConnect"),
+  btnDev: document.getElementById("btnDev"),
   topbarBadge: document.getElementById("topbarBadge"),
   topbarDrive: document.getElementById("topbarDrive"),
   topbarDriveInfo: document.getElementById("topbarDriveInfo"),
@@ -570,11 +606,12 @@ const el = {
 
   // Multi-select bar
   selectionCount: document.getElementById("selectionCount"),
+  btnDownloadSelected: document.getElementById("btnDownloadSelected"),
   btnDeleteSelected: document.getElementById("btnDeleteSelected"),
+  toast: document.getElementById("toast"),
 
   // Modals
   formatModal: document.getElementById("formatModal"),
-  formatModalMsg: document.getElementById("formatModalMsg"),
   btnFormatCancel: document.getElementById("btnFormatCancel"),
   btnFormatConfirm: document.getElementById("btnFormatConfirm"),
 
@@ -596,8 +633,6 @@ const el = {
   btnDeleteConfirm: document.getElementById("btnDeleteConfirm"),
 
   sanitizeModalFiles: document.getElementById("sanitizeModalFiles"),
-  sanitizeFilesCount: document.getElementById("sanitizeFilesCount"),
-  sanitizeFilesList: document.getElementById("sanitizeFilesList"),
   btnSanitizeFilesCancel: document.getElementById("btnSanitizeFilesCancel"),
   btnSanitizeFilesConfirm: document.getElementById("btnSanitizeFilesConfirm"),
 
@@ -651,7 +686,6 @@ function log(msg, role) {
 
 // === Connection State Machine ===
 
-
 function setConnState(newState) {
   state.connState = newState;
 
@@ -694,6 +728,7 @@ function setConnState(newState) {
     renderFileTable();
     renderBreadcrumb("");
     el.topbarBadge.textContent = "";
+    el.topbarBadge.classList.remove("dev");
   }
 
   updateControls();
@@ -702,6 +737,14 @@ function setConnState(newState) {
 function showConnError(msg) {
   el.connError.textContent = msg;
   el.connError.hidden = false;
+}
+
+let _toastTimer;
+function showToast(msg) {
+  el.toast.textContent = msg;
+  el.toast.classList.add("visible");
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => el.toast.classList.remove("visible"), 2500);
 }
 
 // === Connection ===
@@ -730,9 +773,9 @@ async function connectOrDisconnect() {
       const parts = [];
       if (ver.data.version) parts.push(ver.data.version);
       if (ver.data.bleAddress) parts.push(ver.data.bleAddress);
-      el.topbarBadge.textContent = `● Pixl.js${parts.length ? " · " + parts.join(" · ") : ""}`;
+      el.topbarBadge.textContent = `Pixl.js${parts.length ? " · " + parts.join(" · ") : ""}`;
     } else {
-      el.topbarBadge.textContent = "● Pixl.js";
+      el.topbarBadge.textContent = "Pixl.js";
     }
 
     // List drives
@@ -750,6 +793,26 @@ async function connectOrDisconnect() {
     showConnError(err.message);
     setConnState("disconnected");
   }
+}
+
+async function devConnect() {
+  if (state.connState === "connected") return;
+  setConnState("connecting");
+  state.client = new DevMockClient();
+  state.client.onDisconnect = () => setConnState("disconnected");
+  setConnState("connected");
+
+  await state.client.getVersion();
+  el.topbarBadge.textContent = "DEV";
+  el.topbarBadge.classList.add("dev");
+
+  const dr = await state.client.listDrives();
+  if (dr.ok && dr.data.length > 0) {
+    state.drive = dr.data[0];
+    renderDrive(state.drive);
+  }
+
+  await browseFolder("E:/");
 }
 
 // === Drive Panel ===
@@ -879,7 +942,6 @@ async function browseFolder(path) {
 
 // === Render File Table ===
 
-
 function formatAmiiboHex(head, tail) {
   if (head == null || tail == null) return "\u2014";
   const h = (head >>> 0).toString(16).toUpperCase().padStart(8, "0");
@@ -949,16 +1011,9 @@ function renderFileTable() {
     const isPanelActive = state.drawerEntry && state.drawerEntry.name === entry.name;
     const isSelected = state.selectedNames.has(entry.name);
 
-    // Subtitle: amiibo name only (if known)
-    let sub = "";
-    if (!isDir && entry.meta) {
-      const cachedAmiibo = _amiiboCache.get(`${entry.meta.amiiboHead >>> 0}:${entry.meta.amiiboTail >>> 0}`);
-      if (cachedAmiibo) sub = escapeHtml(cachedAmiibo.name);
-    }
-
     const nameCell = isDir
       ? `<td class="cell-name folder"><span class="ms-sm">folder</span> ${escapeHtml(entry.name)}</td>`
-      : `<td class="cell-name"><span class="ms-sm">insert_drive_file</span> ${escapeHtml(entry.name)}${sub ? `<span class="cell-name-sub">${sub}</span>` : ""}</td>`;
+      : `<td class="cell-name"><span class="ms-sm">insert_drive_file</span> ${escapeHtml(entry.name)}</td>`;
 
     const classes = [isPanelActive ? "panel-active" : "", isSelected ? "selected" : ""].filter(Boolean).join(" ");
     rows.push(
@@ -967,6 +1022,7 @@ function renderFileTable() {
       nameCell +
       `<td class="cell-size">${size}</td>` +
       `<td class="cell-actions">` +
+      (!isDir ? `<button class="ghost" data-action="download" title="Download"><span class="ms-sm">download</span></button>` : "") +
       `<button class="ghost" data-action="rename" title="Rename"><span class="ms-sm">edit</span></button>` +
       `<button class="ghost" data-action="delete" title="Delete"><span class="ms-sm">delete</span></button>` +
       `</td>` +
@@ -1000,6 +1056,7 @@ function updateSelectionBar() {
   const hasSelection = count > 0;
   el.selectionCount.hidden = !hasSelection;
   el.selectionCount.textContent = `${count} selected`;
+  el.btnDownloadSelected.hidden = !hasSelection;
   el.btnDeleteSelected.hidden = !hasSelection;
   el.checkAll.checked = state.entries.length > 0 && count === state.entries.length;
   el.checkAll.indeterminate = hasSelection && count < state.entries.length;
@@ -1050,6 +1107,12 @@ el.fileTableBody.addEventListener("click", (e) => {
       state.selectedNames.clear();
       state.selectedNames.add(entry.name);
       openModal(el.deleteModal);
+    } else if (actionBtn.dataset.action === "download") {
+      const filePath = joinChildPath(state.currentPath, entry.name);
+      state.client.readFileData(filePath).then(res => {
+        if (!res.ok) { log(`Download failed: ${res.error}`); return; }
+        triggerDownload(res.data, entry.name);
+      }).catch(err => log(`Download failed: ${err.message}`));
     }
     return;
   }
@@ -1083,6 +1146,19 @@ el.btnDeleteSelected.addEventListener("click", () => {
   el.deleteCount.textContent = String(count);
   el.deleteModalMsg.textContent = `Permanently delete ${count === 1 ? "1 item" : `${count} items`}? This cannot be undone.`;
   openModal(el.deleteModal);
+});
+
+el.btnDownloadSelected.addEventListener("click", async () => {
+  const selected = state.entries.filter(e => state.selectedNames.has(e.name));
+  const files = selected.filter(e => e.type === "FILE");
+  if (selected.some(e => e.type === "DIR")) showToast("Folders are skipped — only files can be downloaded.");
+  if (files.length === 0) return;
+  for (const entry of files) {
+    const filePath = joinChildPath(state.currentPath, entry.name);
+    const res = await state.client.readFileData(filePath).catch(err => ({ ok: false, error: err.message }));
+    if (!res.ok) { log(`Download failed: ${entry.name}: ${res.error}`); continue; }
+    triggerDownload(res.data, entry.name);
+  }
 });
 
 // Navigation bar
@@ -1236,7 +1312,7 @@ function setPanelState(mode, entry) {
 
   // Populate folder info
   if (state.currentPath) {
-    const name = getBaseName(state.currentPath) || state.currentPath;
+    const name = state.currentPath === "E:/" ? "Pixl.js" : getBaseName(state.currentPath) || state.currentPath;
     el.panelFolderName.textContent = name;
     el.panelFolderPath.textContent = state.currentPath;
     el.panelFolderCount.textContent = `${state.entries.length} item${state.entries.length !== 1 ? "s" : ""}`;
@@ -1320,8 +1396,6 @@ el.renameInput.addEventListener("keydown", (e) => {
     el.btnRenameConfirm.click();
   }
 });
-
-// === Task 6: File Manager Operations ===
 
 let renameTarget = "";
 
@@ -1592,8 +1666,6 @@ el.btnSanitizeNoneConfirm.addEventListener("click", async () => {
     await executeSanitize(allOps, allSkipped);
   });
 });
-
-// === Task 7: Tree Upload ===
 
 // --- File/folder collection helpers ---
 
@@ -1867,6 +1939,12 @@ el.btnUploadClear.addEventListener("click", () => {
 
 const _buildCommit = document.querySelector('meta[name="build-commit"]')?.content;
 if (_buildCommit && _buildCommit !== "dev") el.navCommit.textContent = _buildCommit;
+
+const isDevMode = _buildCommit === "dev";
+if (isDevMode) {
+  el.btnDev.hidden = false;
+  el.btnDev.addEventListener("click", devConnect);
+}
 
 setConnState("disconnected");
 updateControls();
