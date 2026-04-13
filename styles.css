@@ -622,7 +622,7 @@
   .selection-bar button.ghost:hover:not(:disabled) {
     background: rgba(0,0,0,0.08);
   }
-  #selectionCount { font-weight: 700; font-size: var(--fs-s); }
+  #selectionCount { font-weight: 700; font-size: var(--fs-s); color: #666; }
 
   .nav-breadcrumb {
     display: flex;
@@ -638,7 +638,7 @@
     padding: 2px 5px;
     font-size: var(--fs-base);
     font-family: var(--mono);
-    color: var(--accent);
+    color: #6870a8;
     cursor: pointer;
     border-radius: 3px;
     white-space: nowrap;
@@ -648,14 +648,14 @@
   .nav-crumb:hover:not(.active) { background: rgba(0,0,0,0.07); }
 
   .nav-crumb.active {
-    color: var(--text);
+    color: #1a1a2e;
     cursor: default;
     font-weight: 600;
     pointer-events: none;
   }
 
   .nav-sep {
-    color: #bbb;
+    color: #c0c0d0;
     font-size: var(--fs-base);
     padding: 0 1px;
     user-select: none;
