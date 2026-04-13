@@ -43,6 +43,7 @@ jobs:
             --exclude='requirements-dev.txt' \
             ./ "$RUNNER_TEMP/site/"
           touch "$RUNNER_TEMP/site/.nojekyll"
+          sed -i "s/content=\"dev\"/content=\"$(git rev-parse --short HEAD)\"/" "$RUNNER_TEMP/site/index.html"
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
