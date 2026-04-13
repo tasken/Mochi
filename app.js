@@ -282,23 +282,20 @@ class PixlToolsClient {
       const size = c.u32();
       const type = c.u8() === 1 ? "DIR" : "FILE";
       const metaSize = c.u8();
-      const meta = { flags: 0, notes: "", amiiboHead: null, amiiboTail: null, raw: null };
+      const meta = { flags: 0, amiiboHead: null, amiiboTail: null, raw: null };
       if (metaSize > 0) {
         const metaStart = c.offset;
         meta.raw = c.bytes.slice(metaStart, metaStart + metaSize);
         const metaEnd = metaStart + metaSize;
         let pos = metaStart;
-        // Firmware TLV format (vfs_meta.c): each type has its own fixed structure —
-        // type 1 (NOTES) has a length byte; types 2 (FLAGS) and 3 (AMIIBO_ID) do not.
+        // Firmware TLV format (vfs_meta.c): type 1 (NOTES) skipped, types 2 (FLAGS) and 3 (AMIIBO_ID) have no length prefix.
         while (pos < metaEnd) {
           const tlvType = c.bytes[pos];
           pos += 1;
           if (tlvType === 1) {
-            // Notes: [len][...utf8...]
+            // Notes: [len][...utf8...] — skip
             if (pos >= metaEnd) break;
             const len = c.bytes[pos]; pos += 1;
-            if (pos + len > metaEnd) break;
-            meta.notes = decoder.decode(c.bytes.slice(pos, pos + len));
             pos += len;
           } else if (tlvType === 2) {
             // Flags: [flags_byte] — no length prefix
@@ -505,12 +502,10 @@ const el = {
   topbarBadge: document.getElementById("topbarBadge"),
   topbarDrive: document.getElementById("topbarDrive"),
   topbarDriveInfo: document.getElementById("topbarDriveInfo"),
-  topbarDiv: document.getElementById("topbarDiv"),
-  topbarBreadcrumb: document.getElementById("topbarBreadcrumb"),
   btnFormat: document.getElementById("btnFormat"),
-  btnUp: document.getElementById("btnUp"),
   btnRefresh: document.getElementById("btnRefresh"),
   btnNewFolder: document.getElementById("btnNewFolder"),
+  btnNormalize: document.getElementById("btnNormalize"),
   btnUploadToggle: document.getElementById("btnUploadToggle"),
   btnLogToggle: document.getElementById("btnLogToggle"),
   connError: document.getElementById("connError"),
@@ -521,6 +516,7 @@ const el = {
   mainOverlaySpinner: document.getElementById("mainOverlaySpinner"),
   mainOverlayTitle: document.getElementById("mainOverlayTitle"),
   mainOverlaySub: document.getElementById("mainOverlaySub"),
+  btnConnectCta: document.getElementById("btnConnectCta"),
 
   // Context panel — folder state
   panelFolder: document.getElementById("panelFolder"),
@@ -536,7 +532,6 @@ const el = {
   panelFileName: document.getElementById("panelFileName"),
   panelFileSize: document.getElementById("panelFileSize"),
   panelFileFlags: document.getElementById("panelFileFlags"),
-  panelFileNotes: document.getElementById("panelFileNotes"),
   panelAmiibo: document.getElementById("panelAmiibo"),
   panelAmiiboContent: document.getElementById("panelAmiiboContent"),
   panelBtnRename: document.getElementById("panelBtnRename"),
@@ -563,17 +558,18 @@ const el = {
   browserLockOverlay: document.getElementById("browserLockOverlay"),
   browserLockTitle: document.getElementById("browserLockTitle"),
 
-  // Selection bar
-  selectionBar: document.getElementById("selectionBar"),
-  selectionCount: document.getElementById("selectionCount"),
-  btnLowercase: document.getElementById("btnLowercase"),
-  btnDelete: document.getElementById("btnDelete"),
-  btnSelectAll: document.getElementById("btnSelectAll"),
-  btnClearSelection: document.getElementById("btnClearSelection"),
+  // Navigation bar
+  btnNavHome: document.getElementById("btnNavHome"),
+  btnNavUp: document.getElementById("btnNavUp"),
+  navBreadcrumb: document.getElementById("navBreadcrumb"),
 
   // File table
-  checkAll: document.getElementById("checkAll"),
   fileTableBody: document.getElementById("fileTableBody"),
+  checkAll: document.getElementById("checkAll"),
+
+  // Multi-select bar
+  selectionCount: document.getElementById("selectionCount"),
+  btnDeleteSelected: document.getElementById("btnDeleteSelected"),
 
   // Modals
   formatModal: document.getElementById("formatModal"),
@@ -666,36 +662,20 @@ function setConnState(newState) {
   el.mainOverlay.classList.toggle("active", !connected);
   el.mainOverlayIcon.hidden = connecting;
   el.mainOverlaySpinner.hidden = !connecting;
-  el.mainOverlayTitle.textContent = connecting ? "Connecting to device\u2026" : "No device connected";
-  el.mainOverlaySub.textContent = connecting ? "" : "Click Connect above to get started.";
+  el.mainOverlayTitle.textContent = connecting ? "Connecting to Pixl.js\u2026" : "No device connected";
+  el.mainOverlaySub.textContent = connecting ? "" : "Browse and manage files on your Pixl.js over Bluetooth.";
+  el.btnConnectCta.hidden = connecting;
+  el.btnConnectCta.disabled = connecting;
 
-  // Connect button
-  if (disconnected) {
-    el.btnConnect.innerHTML = '<span class="ms">bluetooth</span> Connect';
-    el.btnConnect.className = "primary";
-    el.btnConnect.disabled = false;
-    el.btnConnect.style.display = "";
-  } else if (connecting) {
-    el.btnConnect.innerHTML = '<md-circular-progress indeterminate></md-circular-progress> Connecting\u2026';
-    el.btnConnect.className = "btn-connecting";
-    el.btnConnect.disabled = true;
-    el.btnConnect.style.display = "";
-  } else {
-    // connected — button becomes Disconnect
-    el.btnConnect.innerHTML = '<span class="ms">bluetooth_disabled</span> Disconnect';
-    el.btnConnect.className = "danger";
-    el.btnConnect.disabled = false;
-    el.btnConnect.style.display = "";
-  }
+  // Disconnect button — only visible when connected
+  el.btnConnect.hidden = !connected;
 
   // Topbar connected elements
   el.topbarBadge.hidden = !connected;
   el.topbarDrive.hidden = !connected;
-  el.topbarDiv.hidden = !connected;
-  el.topbarBreadcrumb.hidden = !connected;
-  el.btnUp.hidden = !connected;
   el.btnRefresh.hidden = !connected;
   el.btnNewFolder.hidden = !connected;
+  el.btnNormalize.hidden = !connected;
   el.btnUploadToggle.hidden = !connected;
   el.btnLogToggle.hidden = !connected;
 
@@ -711,8 +691,7 @@ function setConnState(newState) {
     setPanelState("folder");
     renderDrive(null);
     renderFileTable();
-    updateSelectionBar();
-    el.topbarBreadcrumb.textContent = "";
+    renderBreadcrumb("");
     el.topbarBadge.textContent = "";
   }
 
@@ -840,17 +819,20 @@ for (const modal of [el.formatModal, el.newFolderModal, el.renameModal, el.delet
 function updateControls() {
   const connected = state.connState === "connected";
   const uploading = state.uploadActive;
-  el.btnUp.disabled = !connected || uploading || !state.currentPath || state.currentPath === "E:/";
+  const atRoot = !state.currentPath || state.currentPath === "E:/";
+  el.btnNavHome.disabled = !connected || atRoot;
+  el.btnNavUp.disabled = !connected || atRoot;
   el.btnRefresh.disabled = !connected || uploading;
   el.btnNewFolder.disabled = !connected || uploading;
+  el.btnNormalize.disabled = !connected || uploading;
   el.btnFormat.disabled = !connected || uploading;
-  el.checkAll.disabled = !connected || state.entries.length === 0;
   el.btnPickFolder.disabled = !connected || uploading;
   el.btnPickFiles.disabled = !connected || uploading;
   el.btnUploadStart.disabled = !connected || uploading || state.uploadPlan.length === 0;
   el.btnUploadAbort.disabled = !uploading;
   el.btnUploadClear.disabled = uploading || state.uploadPlan.length === 0;
   el.btnUploadToggle.disabled = uploading;
+  el.btnUploadClose.disabled = uploading;
 }
 
 // === Cache ===
@@ -888,23 +870,14 @@ async function browseFolder(path) {
   state.currentPath = path;
   state.entries = entries;
   state.selectedNames.clear();
-  el.topbarBreadcrumb.textContent = path;
-  el.checkAll.checked = false;
+  renderBreadcrumb(path);
   renderFileTable();
   if (state.panelMode !== "upload") setPanelState("folder");
-  updateSelectionBar();
   updateControls();
 }
 
 // === Render File Table ===
 
-function formatFlagShort(flags) {
-  const parts = [];
-  if (flags & 0x01) parts.push("R");
-  if (flags & 0x02) parts.push("H");
-  if (flags & 0x04) parts.push("S");
-  return parts.length > 0 ? parts.join(", ") : "\u2014";
-}
 
 function formatAmiiboHex(head, tail) {
   if (head == null || tail == null) return "\u2014";
@@ -964,57 +937,72 @@ function applyAmiiboDisplay(entry, head, tail) {
 function renderFileTable() {
   if (state.entries.length === 0) {
     el.fileTableBody.innerHTML = '<tr><td colspan="4" class="empty-state">This folder is empty.</td></tr>';
+    updateSelectionBar();
     return;
   }
 
   const rows = [];
   for (const entry of state.entries) {
     const isDir = entry.type === "DIR";
-    const checked = state.selectedNames.has(entry.name) ? "checked" : "";
     const size = isDir ? "\u2014" : formatBytes(entry.size);
     const isPanelActive = state.drawerEntry && state.drawerEntry.name === entry.name;
+    const isSelected = state.selectedNames.has(entry.name);
 
-    // Subtitle: amiibo name (if known) → flags abbreviation → empty
+    // Subtitle: amiibo name only (if known)
     let sub = "";
     if (!isDir && entry.meta) {
       const cachedAmiibo = _amiiboCache.get(`${entry.meta.amiiboHead >>> 0}:${entry.meta.amiiboTail >>> 0}`);
-      if (cachedAmiibo) {
-        sub = escapeHtml(cachedAmiibo.name);
-      } else {
-        const flagStr = formatFlagShort(entry.meta.flags);
-        if (flagStr !== "\u2014") sub = escapeHtml(flagStr);
-      }
+      if (cachedAmiibo) sub = escapeHtml(cachedAmiibo.name);
     }
 
     const nameCell = isDir
       ? `<td class="cell-name folder"><span class="ms-sm">folder</span> ${escapeHtml(entry.name)}</td>`
       : `<td class="cell-name"><span class="ms-sm">insert_drive_file</span> ${escapeHtml(entry.name)}${sub ? `<span class="cell-name-sub">${sub}</span>` : ""}</td>`;
 
+    const classes = [isPanelActive ? "panel-active" : "", isSelected ? "selected" : ""].filter(Boolean).join(" ");
     rows.push(
-      `<tr data-name="${escapeHtml(entry.name)}"${isPanelActive ? ' class="panel-active"' : ''}>` +
-      `<td class="cell-check"><input type="checkbox" ${checked}></td>` +
+      `<tr data-name="${escapeHtml(entry.name)}"${classes ? ` class="${classes}"` : ''}>` +
+      `<td class="cell-check"><input type="checkbox"${isSelected ? " checked" : ""}></td>` +
       nameCell +
       `<td class="cell-size">${size}</td>` +
-      `<td class="cell-actions"><button class="ghost" title="Rename"><span class="ms-sm">edit</span></button></td>` +
+      `<td class="cell-actions">` +
+      `<button class="ghost" data-action="rename" title="Rename"><span class="ms-sm">edit</span></button>` +
+      `<button class="ghost" data-action="delete" title="Delete"><span class="ms-sm">delete</span></button>` +
+      `</td>` +
       `</tr>`
     );
   }
   el.fileTableBody.innerHTML = rows.join("");
+  updateSelectionBar();
+}
+
+// === Navigation Breadcrumb ===
+
+function renderBreadcrumb(path) {
+  if (!path) { el.navBreadcrumb.innerHTML = ""; return; }
+  const trimmed = path.endsWith("/") ? path.slice(0, -1) : path;
+  const parts = trimmed.split("/");
+  const crumbs = parts.map((part, i) => ({
+    label: part,
+    path: i === 0 ? "E:/" : parts.slice(0, i + 1).join("/"),
+  }));
+  el.navBreadcrumb.innerHTML = crumbs.map((c, i) =>
+    (i > 0 ? '<span class="nav-sep">/</span>' : "") +
+    `<button class="nav-crumb${i === crumbs.length - 1 ? " active" : ""}" data-path="${escapeHtml(c.path)}">${escapeHtml(c.label)}</button>`
+  ).join("");
 }
 
 // === Selection Bar ===
 
 function updateSelectionBar() {
   const count = state.selectedNames.size;
-  el.selectionBar.classList.toggle("visible", state.entries.length > 0);
-  el.selectionCount.textContent = count > 0 ? `${count} selected` : "";
-  el.btnDelete.disabled = count === 0;
-  el.btnLowercase.disabled = false;
+  const hasSelection = count > 0;
+  el.selectionCount.hidden = !hasSelection;
+  el.selectionCount.textContent = `${count} selected`;
+  el.btnDeleteSelected.hidden = !hasSelection;
   el.checkAll.checked = state.entries.length > 0 && count === state.entries.length;
-  el.checkAll.indeterminate = count > 0 && count < state.entries.length;
+  el.checkAll.indeterminate = hasSelection && count < state.entries.length;
 }
-
-// === Helpers ===
 
 function applySelectionToRows(checked) {
   for (const row of el.fileTableBody.querySelectorAll("tr[data-name]")) {
@@ -1046,14 +1034,22 @@ el.fileTableBody.addEventListener("click", (e) => {
     return;
   }
 
-  // Rename button click
-  const renameBtn = e.target.closest(".cell-actions button");
-  if (renameBtn) {
-    renameTarget = entry.name;
-    el.renameInput.value = entry.name;
-    openModal(el.renameModal);
-    el.renameInput.focus();
-    el.renameInput.select();
+  // Action buttons
+  const actionBtn = e.target.closest(".cell-actions button[data-action]");
+  if (actionBtn) {
+    if (actionBtn.dataset.action === "rename") {
+      renameTarget = entry.name;
+      el.renameInput.value = entry.name;
+      openModal(el.renameModal);
+      el.renameInput.focus();
+      el.renameInput.select();
+    } else if (actionBtn.dataset.action === "delete") {
+      el.deleteCount.textContent = "1";
+      el.deleteModalMsg.textContent = `Permanently delete "${entry.name}"? This cannot be undone.`;
+      state.selectedNames.clear();
+      state.selectedNames.add(entry.name);
+      openModal(el.deleteModal);
+    }
     return;
   }
 
@@ -1069,7 +1065,7 @@ el.fileTableBody.addEventListener("click", (e) => {
   }
 });
 
-// Check all
+// Check-all header checkbox
 el.checkAll.addEventListener("change", () => {
   const checked = el.checkAll.checked;
   state.selectedNames.clear();
@@ -1080,13 +1076,28 @@ el.checkAll.addEventListener("change", () => {
   updateSelectionBar();
 });
 
-// Toolbar buttons
-el.btnUp.addEventListener("click", () => {
+el.btnDeleteSelected.addEventListener("click", () => {
+  const count = state.selectedNames.size;
+  if (count === 0) return;
+  el.deleteCount.textContent = String(count);
+  el.deleteModalMsg.textContent = `Permanently delete ${count === 1 ? "1 item" : `${count} items`}? This cannot be undone.`;
+  openModal(el.deleteModal);
+});
+
+// Navigation bar
+el.btnNavHome.addEventListener("click", () => browseFolder("E:/"));
+el.btnNavUp.addEventListener("click", () => {
   if (state.currentPath && state.currentPath !== "E:/") {
     browseFolder(getParentPath(state.currentPath));
   }
 });
+el.navBreadcrumb.addEventListener("click", (e) => {
+  const crumb = e.target.closest(".nav-crumb");
+  if (!crumb || !crumb.dataset.path) return;
+  if (crumb.dataset.path !== state.currentPath) browseFolder(crumb.dataset.path);
+});
 
+// Toolbar buttons
 el.btnRefresh.addEventListener("click", () => {
   if (state.currentPath) {
     state.folderCache.delete(state.currentPath);
@@ -1121,62 +1132,17 @@ el.btnNewFolderConfirm.addEventListener("click", async () => {
       log(`Failed to create folder: ${res.error}`, "err");
     }
   } catch (err) {
-    log(`Error creating folder: ${err.message}`, "err");
+    log(`Failed to create folder: ${err.message}`, "err");
   }
-});
-
-// Selection bar buttons
-el.btnSelectAll.addEventListener("click", () => {
-  state.selectedNames.clear();
-  for (const entry of state.entries) state.selectedNames.add(entry.name);
-  applySelectionToRows(true);
-  el.checkAll.checked = true;
-  updateSelectionBar();
-});
-
-el.btnClearSelection.addEventListener("click", () => {
-  state.selectedNames.clear();
-  for (const row of el.fileTableBody.querySelectorAll("tr[data-name]")) {
-    const cb = row.querySelector("input[type=checkbox]");
-    if (cb) cb.checked = false;
-    row.classList.remove("selected");
-  }
-  el.checkAll.checked = false;
-  updateSelectionBar();
-});
-
-// Delete modal (open only — actual delete is wired in a later task)
-el.btnDelete.addEventListener("click", () => {
-  const count = state.selectedNames.size;
-  if (count === 0) return;
-  el.deleteCount.textContent = String(count);
-  el.deleteModalMsg.textContent = `This will permanently delete ${itemCount(count, "item")}. This action cannot be undone.`;
-  openModal(el.deleteModal);
 });
 
 el.btnDeleteCancel.addEventListener("click", () => closeModal(el.deleteModal));
 el.btnRenameCancel.addEventListener("click", () => closeModal(el.renameModal));
 
-// Lowercase modal
-el.btnLowercase.addEventListener("click", () => {
-  const count = state.selectedNames.size;
-  if (count === 0) {
-    el.sanitizeNonePath.textContent = state.currentPath || "E:/";
-    openModal(el.sanitizeModalNone);
-    return;
-  }
-  const hasFolders = [...state.selectedNames].some(n => {
-    const entry = state.entries.find(e => e.name === n);
-    return entry && entry.type === "DIR";
-  });
-  if (hasFolders) {
-    openModal(el.sanitizeModalFolders);
-  } else {
-    el.sanitizeFilesCount.textContent = itemCount(count, "selected file");
-    const names = [...state.selectedNames].slice(0, 10).join(", ");
-    el.sanitizeFilesList.textContent = count > 10 ? `${names}, \u2026` : names;
-    openModal(el.sanitizeModalFiles);
-  }
+// Normalize modal
+el.btnNormalize.addEventListener("click", () => {
+  el.sanitizeNonePath.textContent = state.currentPath || "E:/";
+  openModal(el.sanitizeModalNone);
 });
 
 el.btnSanitizeFilesCancel.addEventListener("click", () => closeModal(el.sanitizeModalFiles));
@@ -1219,9 +1185,6 @@ function setPanelState(mode, entry) {
       const color = active ? "#3a8" : "#ccc";
       return `<div style="font-size:0.78rem"><span class="ms-sm" style="color:${color}">check</span> ${escapeHtml(f.label)}</div>`;
     }).join("");
-
-    // Notes
-    el.panelFileNotes.textContent = (entry.meta && entry.meta.notes) ? entry.meta.notes : "\u2014";
 
     // Amiibo section — only for .bin files
     el.panelFileLabel.textContent = entry.name.toLowerCase().endsWith(".bin") ? "Amiibo" : "File";
@@ -1298,7 +1261,7 @@ el.panelBtnRename.addEventListener("click", () => {
 el.panelBtnDelete.addEventListener("click", () => {
   if (!state.drawerEntry) return;
   el.deleteCount.textContent = "1";
-  el.deleteModalMsg.textContent = `This will permanently delete "${state.drawerEntry.name}". This action cannot be undone.`;
+  el.deleteModalMsg.textContent = `Permanently delete "${state.drawerEntry.name}"? This cannot be undone.`;
   // Pre-select the entry so the existing delete confirm handler works
   state.selectedNames.clear();
   state.selectedNames.add(state.drawerEntry.name);
@@ -1339,6 +1302,7 @@ el.btnUploadClose.addEventListener("click", () => {
 // === Connect button ===
 
 el.btnConnect.addEventListener("click", connectOrDisconnect);
+el.btnConnectCta.addEventListener("click", connectOrDisconnect);
 
 // === Keyboard: Enter in new-folder input ===
 
@@ -1384,7 +1348,7 @@ el.btnRenameConfirm.addEventListener("click", async () => {
       log(`Rename failed: ${res.error}`, "err");
     }
   } catch (err) {
-    log(`Rename error: ${err.message}`, "err");
+    log(`Failed to rename: ${err.message}`, "err");
   } finally {
     invalidateCache();
     await browseFolder(state.currentPath);
@@ -1414,7 +1378,7 @@ el.btnDeleteConfirm.addEventListener("click", async () => {
   });
 
   el.browserLockOverlay.classList.add("active");
-  el.browserLockTitle.textContent = "Delete in progress";
+  el.browserLockTitle.textContent = "Deleting…";
   updateControls();
   let deleted = 0;
   const total = paths.length;
@@ -1428,7 +1392,7 @@ el.btnDeleteConfirm.addEventListener("click", async () => {
           log(`Delete failed: ${item.name} \u2014 ${res.error}`, "err");
         }
       } catch (err) {
-        log(`Delete error: ${item.name} \u2014 ${err.message}`, "err");
+        log(`Failed to delete: ${item.name} \u2014 ${err.message}`, "err");
       }
     }
     log(`Deleted ${deleted} of ${total} ${total === 1 ? "item" : "items"}.`);
@@ -1510,10 +1474,10 @@ async function executeSanitize(allOps, allSkipped) {
       if (res.ok) {
         renamed++;
       } else {
-        log(`Lowercase failed: ${op.name} \u2014 ${res.error}`, "err");
+        log(`Failed to rename: ${op.name} \u2014 ${res.error}`, "err");
       }
     } catch (err) {
-      log(`Lowercase error: ${op.name} \u2014 ${err.message}`, "err");
+      log(`Failed to rename: ${op.name} \u2014 ${err.message}`, "err");
     }
   }
 
@@ -1521,10 +1485,10 @@ async function executeSanitize(allOps, allSkipped) {
   if (allSkipped.length > 0) {
     parts.push(`${allSkipped.length} skipped`);
     for (const s of allSkipped) {
-      log(`Skipped: ${s.name} \u2014 ${s.reason}`, "err");
+      log(`Skipped ${s.name}: ${s.reason}`, "err");
     }
   }
-  log(`Lowercase: ${parts.join(", ")}.`);
+  log(`Normalized: ${parts.join(", ")}.`);
 }
 
 async function withBrowserLock(title, fn) {
@@ -1548,7 +1512,7 @@ async function withBrowserLock(title, fn) {
 el.btnSanitizeFilesConfirm.addEventListener("click", async () => {
   closeModal(el.sanitizeModalFiles);
   if (!state.client) return;
-  await withBrowserLock("Lowercase rename in progress", async () => {
+  await withBrowserLock("Normalizing…", async () => {
     const selected = state.entries.filter(e => state.selectedNames.has(e.name) && e.type === "FILE");
     const { ops, skipped } = buildSanitizeOps(selected, state.currentPath);
     await executeSanitize(ops, skipped);
@@ -1563,7 +1527,7 @@ el.btnSanitizeFoldersConfirm.addEventListener("click", async () => {
 
   const scope = document.querySelector('input[name="sanitizeFolderScope"]:checked').value;
 
-  await withBrowserLock("Lowercase rename in progress", async () => {
+  await withBrowserLock("Normalizing…", async () => {
     const allOps = [];
     const allSkipped = [];
 
@@ -1602,7 +1566,7 @@ el.btnSanitizeNoneConfirm.addEventListener("click", async () => {
 
   const scope = document.querySelector('input[name="sanitizeNoneScope"]:checked').value;
 
-  await withBrowserLock("Lowercase rename in progress", async () => {
+  await withBrowserLock("Normalizing…", async () => {
     const allOps = [];
     const allSkipped = [];
 
@@ -1786,7 +1750,7 @@ async function runUpload() {
   state.uploadActive = true;
   state.abortController = new AbortController();
   el.browserLockOverlay.classList.add("active");
-  el.browserLockTitle.textContent = "Upload in progress";
+  el.browserLockTitle.textContent = "Uploading…";
 
   updateControls();
 
@@ -1888,7 +1852,7 @@ el.btnUploadStart.addEventListener("click", runUpload);
 el.btnUploadAbort.addEventListener("click", () => {
   if (state.abortController) {
     state.abortController.abort();
-    log("Upload abort requested.");
+    log("Upload cancelled.");
   }
 });
 
