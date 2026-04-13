@@ -515,44 +515,31 @@
   tr.selected td { background: rgba(120,120,204,0.08); }
   tr:hover td { background: rgba(0,0,0,0.015); }
   tr.selected:hover td { background: rgba(120,120,204,0.12); }
-  tr.drawer-active td { background: rgba(120,120,204,0.14); }
+  tr.panel-active td { background: rgba(120,120,204,0.14); }
 
   .cell-check { width: 32px; text-align: center; }
   .cell-check input { cursor: pointer; }
 
   .cell-name {
     font-weight: 600;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    max-width: 200px;
+    cursor: pointer;
   }
 
-  .cell-name.folder { cursor: pointer; color: #7878cc; }
+  .cell-name.folder { color: #7878cc; }
   .cell-name.folder:hover { text-decoration: underline; }
 
-  .cell-kind { font-size: 0.72rem; color: #666; }
+  /* subtitle line inside name cell */
+  .cell-name-sub {
+    display: block;
+    font-size: 0.72rem;
+    font-weight: 400;
+    color: #aaa;
+    font-family: "IBM Plex Mono", monospace;
+  }
+
   .cell-size {
     font-family: "IBM Plex Mono", monospace;
     font-size: 0.78rem;
-    white-space: nowrap;
-  }
-  .cell-flags {
-    font-family: "IBM Plex Mono", monospace;
-    font-size: 0.78rem;
-    color: #888;
-  }
-  .cell-amiibo {
-    font-family: "IBM Plex Mono", monospace;
-    font-size: 0.72rem;
-    color: #888;
-  }
-  .cell-notes {
-    font-size: 0.78rem;
-    color: #666;
-    max-width: 150px;
-    overflow: hidden;
-    text-overflow: ellipsis;
     white-space: nowrap;
   }
 
@@ -575,102 +562,6 @@
     color: #999;
     padding: 20px 10px;
     font-size: 0.85rem;
-  }
-
-  /* --- Metadata drawer --- */
-  .browser-area {
-    display: flex;
-    gap: 8px;
-    flex: 1;
-    min-height: 0;
-  }
-
-  .browser-table-wrap {
-    flex: 1;
-    overflow: auto;
-    min-width: 0;
-  }
-
-  .drawer {
-    width: 220px;
-    min-width: 220px;
-    border: 2px solid var(--border);
-    border-radius: var(--radius);
-    padding: 10px;
-    background: #fafafa;
-    display: none;
-    flex-direction: column;
-    gap: 8px;
-    overflow-y: auto;
-  }
-
-  .drawer.open { display: flex; }
-
-  .drawer h3 {
-    font-size: 0.82rem;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    word-break: break-all;
-  }
-
-  .drawer-field { display: flex; flex-direction: column; gap: 3px; }
-
-  .drawer-field > span:first-child {
-    font-size: 0.68rem;
-    font-weight: 800;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    color: #666;
-  }
-
-  .drawer-amiibo {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    padding: 6px 8px;
-    background: #f0f0f4;
-    border-radius: var(--radius);
-    min-height: 2rem;
-  }
-
-  .drawer-amiibo img {
-    width: 100%;
-    height: auto;
-    object-fit: contain;
-    border-radius: calc(var(--radius) / 2);
-    display: block;
-  }
-
-  .drawer-amiibo-info {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-  }
-
-  .drawer-amiibo-name {
-    font-family: "IBM Plex Sans", sans-serif;
-    font-size: 0.85rem;
-    font-weight: 600;
-    color: #1a1a2e;
-  }
-
-  .drawer-amiibo-series {
-    font-family: "IBM Plex Sans", sans-serif;
-    font-size: 0.72rem;
-    color: #888;
-  }
-
-  .drawer-amiibo-hex {
-    font-family: "IBM Plex Mono", monospace;
-    font-size: 0.68rem;
-    color: #aaa;
-  }
-
-  .drawer-amiibo-loading {
-    display: flex;
-    justify-content: center;
-    padding: 6px 0;
   }
 
   /* --- Selection actions --- */
@@ -805,26 +696,10 @@
   .main-overlay-card .title { font-weight: 700; font-size: 0.95rem; color: #1a1a2e; }
   .main-overlay-card .sub  { font-size: 0.8rem; color: #888; }
 
-  .section-disabled {
-    opacity: 0.35;
-    pointer-events: none;
-    user-select: none;
-  }
-
   /* Connecting pulse on the connect button */
   .btn-connecting { animation: pulse-ring 1.4s ease-out infinite; }
 
   /* --- Browser lock overlay --- */
-  .browser-lock-wrap {
-    position: relative;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    flex: 1;
-    min-height: 0;
-    overflow: hidden;
-  }
-
   .browser-lock-overlay {
     display: none;
     position: absolute;
