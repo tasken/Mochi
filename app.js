@@ -505,6 +505,7 @@ const el = {
   btnFormat: document.getElementById("btnFormat"),
   btnRefresh: document.getElementById("btnRefresh"),
   btnNewFolder: document.getElementById("btnNewFolder"),
+  navCommit: document.getElementById("navCommit"),
   btnNormalize: document.getElementById("btnNormalize"),
   btnUploadToggle: document.getElementById("btnUploadToggle"),
   btnLogToggle: document.getElementById("btnLogToggle"),
@@ -1863,6 +1864,9 @@ el.btnUploadClear.addEventListener("click", () => {
 });
 
 // === Initial state ===
+
+const _buildCommit = document.querySelector('meta[name="build-commit"]')?.content;
+if (_buildCommit && _buildCommit !== "dev") el.navCommit.textContent = _buildCommit;
 
 setConnState("disconnected");
 updateControls();

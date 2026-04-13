@@ -623,6 +623,7 @@
     background: rgba(0,0,0,0.08);
   }
   #selectionCount { font-weight: 700; font-size: var(--fs-s); color: #666; }
+  .nav-commit { font-family: var(--mono); font-size: var(--fs-xs); color: #bbb; margin-left: auto; padding: 0 4px; user-select: none; }
 
   .nav-breadcrumb {
     display: flex;
