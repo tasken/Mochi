@@ -992,10 +992,10 @@ function renderFileTable() {
   }
   el.fileTableBody.innerHTML = rows.join("");
 
-  // Reapply drawer-active if drawer is open for a visible entry
+  // Reapply panel-active if drawer is open for a visible entry
   if (state.drawerEntry) {
     const activeRow = el.fileTableBody.querySelector(`tr[data-name="${CSS.escape(state.drawerEntry.name)}"]`);
-    if (activeRow) activeRow.classList.add("drawer-active");
+    if (activeRow) activeRow.classList.add("panel-active");
   }
 }
 
