@@ -224,6 +224,8 @@
   transition: width 0.3s;
 }
 
+.panel-drive-bar-fill.high { background: #d44; }
+
 .panel-field {
   display: flex;
   flex-direction: column;
@@ -258,6 +260,36 @@
   object-fit: contain;
   border-radius: calc(var(--radius) / 2);
   display: block;
+}
+
+.drawer-amiibo-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.drawer-amiibo-name {
+  font-weight: 700;
+  font-size: 0.88rem;
+  color: #1a1a2e;
+}
+
+.drawer-amiibo-series {
+  font-size: 0.72rem;
+  color: #888;
+}
+
+.drawer-amiibo-hex {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.72rem;
+  color: #aaa;
+  word-break: break-all;
+}
+
+.drawer-amiibo-loading {
+  display: flex;
+  justify-content: center;
+  padding: 6px 0;
 }
 
 .panel-actions {
@@ -474,7 +506,10 @@
 
   /* --- Table --- */
   .table-wrap {
+    flex: 1;
+    min-height: 0;
     overflow-x: auto;
+    overflow-y: auto;
     border: 2px solid var(--border);
     border-radius: var(--radius);
     box-shadow: var(--shadow-sm);
