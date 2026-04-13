@@ -38,6 +38,9 @@ jobs:
             --exclude='LICENSE' \
             --exclude='.gitignore' \
             --exclude='.gitmodules' \
+            --exclude='server.py' \
+            --exclude='tasks.py' \
+            --exclude='requirements-dev.txt' \
             ./ "$RUNNER_TEMP/site/"
           touch "$RUNNER_TEMP/site/.nojekyll"
 
