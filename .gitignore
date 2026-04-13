@@ -3,3 +3,4 @@
 .local/
 .venv/
 tasks.py
+.superpowers/
