@@ -658,87 +658,62 @@ function log(msg, role) {
 function setConnState(newState) {
   state.connState = newState;
 
-  if (newState === "disconnected") {
+  const connected = newState === "connected";
+  const connecting = newState === "connecting";
+  const disconnected = newState === "disconnected";
 
-    // Main overlay
-    el.mainOverlay.classList.add("active");
-    el.mainOverlayIcon.hidden = false;
-    el.mainOverlayIcon.textContent = "bluetooth_disabled";
-    el.mainOverlaySpinner.hidden = true;
-    el.mainOverlayTitle.textContent = "No device connected";
-    el.mainOverlaySub.textContent = "Connect a device from the sidebar to get started.";
+  // Main overlay
+  el.mainOverlay.classList.toggle("active", !connected);
+  el.mainOverlayIcon.hidden = connecting;
+  el.mainOverlaySpinner.hidden = !connecting;
+  el.mainOverlayTitle.textContent = connecting ? "Connecting to device\u2026" : "No device connected";
+  el.mainOverlaySub.textContent = connecting ? "" : "Click Connect above to get started.";
 
-    // Sidebar sections disabled
-    el.driveSection.classList.add("section-disabled");
-    el.uploadSection.classList.add("section-disabled");
-
-    // Connect button
+  // Connect button
+  if (disconnected) {
     el.btnConnect.innerHTML = '<span class="ms">bluetooth</span> Connect';
-    el.btnConnect.classList.add("primary");
-    el.btnConnect.classList.remove("danger", "btn-connecting");
+    el.btnConnect.className = "primary";
     el.btnConnect.disabled = false;
+    el.btnConnect.style.display = "";
+  } else if (connecting) {
+    el.btnConnect.innerHTML = '<md-circular-progress indeterminate></md-circular-progress> Connecting\u2026';
+    el.btnConnect.className = "btn-connecting";
+    el.btnConnect.disabled = true;
+    el.btnConnect.style.display = "";
+  } else {
+    // connected — button becomes Disconnect
+    el.btnConnect.innerHTML = '<span class="ms">bluetooth_disabled</span> Disconnect';
+    el.btnConnect.className = "danger";
+    el.btnConnect.disabled = false;
+    el.btnConnect.style.display = "";
+  }
 
-    // Connection status
-    el.connStatus.textContent = "Not connected";
-    el.connStatus.classList.remove("connected");
-    el.connDetail.textContent = "";
-    el.connError.hidden = true;
-    el.connError.textContent = "";
+  // Topbar connected elements
+  el.topbarBadge.hidden = !connected;
+  el.topbarDrive.hidden = !connected;
+  el.topbarDiv.hidden = !connected;
+  el.topbarBreadcrumb.hidden = !connected;
+  el.btnUp.hidden = !connected;
+  el.btnRefresh.hidden = !connected;
+  el.btnNewFolder.hidden = !connected;
+  el.btnUploadToggle.hidden = !connected;
+  el.btnLogToggle.hidden = !connected;
 
-    // Clear state
+  // Error cleared on state change
+  el.connError.hidden = true;
+  el.connError.textContent = "";
+
+  if (disconnected) {
     state.drive = null;
     state.entries = [];
     state.selectedNames.clear();
     state.currentPath = "";
-    closeDrawer();
+    setPanelState("folder");
     renderDrive(null);
     renderFileTable();
     updateSelectionBar();
-    el.pathDisplay.textContent = "";
-
-  } else if (newState === "connecting") {
-
-    // Main overlay
-    el.mainOverlay.classList.add("active");
-    el.mainOverlayIcon.hidden = true;
-    el.mainOverlaySpinner.hidden = false;
-    el.mainOverlayTitle.textContent = "Connecting to device\u2026";
-    el.mainOverlaySub.textContent = "";
-
-    // Sidebar sections remain disabled
-    el.driveSection.classList.add("section-disabled");
-    el.uploadSection.classList.add("section-disabled");
-
-    // Connect button
-    el.btnConnect.innerHTML = '<md-circular-progress indeterminate></md-circular-progress> Connecting\u2026';
-    el.btnConnect.classList.add("btn-connecting");
-    el.btnConnect.disabled = true;
-
-    // Clear previous error
-    el.connError.hidden = true;
-    el.connError.textContent = "";
-
-  } else if (newState === "connected") {
-
-    // Main overlay
-    el.mainOverlay.classList.remove("active");
-
-    // Sidebar sections enabled
-    el.driveSection.classList.remove("section-disabled");
-    el.uploadSection.classList.remove("section-disabled");
-    el.logSection.classList.remove("section-disabled");
-
-    // Connect button becomes disconnect
-    el.btnConnect.innerHTML = '<span class="ms">bluetooth_connected</span> Disconnect';
-    el.btnConnect.classList.remove("primary", "btn-connecting");
-    el.btnConnect.classList.add("danger");
-    el.btnConnect.disabled = false;
-
-    // Connection status
-    el.connStatus.textContent = "Connected";
-    el.connStatus.classList.add("connected");
-    el.connError.hidden = true;
-    el.connError.textContent = "";
+    el.topbarBreadcrumb.textContent = "";
+    el.topbarBadge.textContent = "";
   }
 
   updateControls();
@@ -775,7 +750,9 @@ async function connectOrDisconnect() {
       const parts = [];
       if (ver.data.version) parts.push(ver.data.version);
       if (ver.data.bleAddress) parts.push(ver.data.bleAddress);
-      el.connDetail.textContent = parts.join(" \u2014 ");
+      el.topbarBadge.textContent = `● Pixl.js${parts.length ? " · " + parts.join(" · ") : ""}`;
+    } else {
+      el.topbarBadge.textContent = "● Pixl.js";
     }
 
     // List drives
@@ -799,20 +776,21 @@ async function connectOrDisconnect() {
 
 function renderDrive(driveData) {
   if (!driveData) {
-    el.driveBarFill.style.width = "0%";
-    el.driveBarFill.classList.remove("high");
-    el.driveInfo.innerHTML = "&mdash;";
+    el.panelDriveBarFill.style.width = "0%";
+    el.panelDriveBarFill.classList.remove("high");
+    el.panelDriveUsage.textContent = "";
+    el.topbarDriveInfo.textContent = "—";
     return;
   }
-
   const pct = driveData.totalBytes > 0
     ? Math.round((driveData.usedBytes / driveData.totalBytes) * 100)
     : 0;
-  el.driveBarFill.style.width = `${pct}%`;
-  el.driveBarFill.classList.toggle("high", pct >= 85);
+  el.panelDriveBarFill.style.width = `${pct}%`;
+  el.panelDriveBarFill.classList.toggle("high", pct >= 85);
   const used = formatBytes(driveData.usedBytes);
   const total = formatBytes(driveData.totalBytes);
-  el.driveInfo.textContent = `${used} / ${total}`;
+  el.panelDriveUsage.textContent = `${used} / ${total}`;
+  el.topbarDriveInfo.textContent = `${used} / ${total}`;
 }
 
 // === Format Modal ===
