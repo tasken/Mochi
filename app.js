@@ -850,6 +850,7 @@ function updateControls() {
   el.btnUploadStart.disabled = !connected || uploading || state.uploadPlan.length === 0;
   el.btnUploadAbort.disabled = !uploading;
   el.btnUploadClear.disabled = uploading || state.uploadPlan.length === 0;
+  el.btnUploadToggle.disabled = uploading;
 }
 
 // === Cache ===
@@ -887,10 +888,10 @@ async function browseFolder(path) {
   state.currentPath = path;
   state.entries = entries;
   state.selectedNames.clear();
-  setPanelState("folder");
-  el.pathDisplay.textContent = path;
+  el.topbarBreadcrumb.textContent = path;
   el.checkAll.checked = false;
   renderFileTable();
+  if (state.panelMode !== "upload") setPanelState("folder");
   updateSelectionBar();
   updateControls();
 }
