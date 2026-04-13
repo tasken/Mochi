@@ -27,6 +27,14 @@
   --shadow-lg:  0px 2px 5px 0px oklch(0.83 0.09 247.96 / 0.10), 0px 4px 6px -1px oklch(0.83 0.09 247.96 / 0.10);
   --shadow-xl:  0px 2px 5px 0px oklch(0.83 0.09 247.96 / 0.10), 0px 8px 10px -1px oklch(0.83 0.09 247.96 / 0.10);
   --shadow-2xl: 0px 2px 5px 0px oklch(0.83 0.09 247.96 / 0.25);
+
+  /* --- Type scale --- */
+  --fs-xs:      0.68rem;   /* tiny labels, table headers */
+  --fs-s:       0.72rem;   /* secondary text, badges */
+  --fs-base:    0.8rem;    /* standard UI text, buttons */
+  --fs-md:      0.875rem;  /* medium emphasis, card titles */
+  --fs-xl:      1rem;      /* headings, panel titles */
+  --fs-display: 2rem;      /* large icons */
 }
 
   * { box-sizing: border-box; margin: 0; }
@@ -60,7 +68,7 @@
 }
 
 .topbar-brand {
-  font-size: 0.82rem;
+  font-size: var(--fs-base);
   font-weight: 700;
   opacity: 0.5;
   letter-spacing: 0.03em;
@@ -69,7 +77,7 @@
 }
 
 .topbar-badge {
-  font-size: 0.75rem;
+  font-size: var(--fs-s);
   background: rgba(51,170,136,0.2);
   color: #3a8;
   border: 1px solid rgba(51,170,136,0.3);
@@ -78,11 +86,12 @@
   white-space: nowrap;
 }
 
+.topbar-drive[hidden] { display: none; }
 .topbar-drive {
   display: flex;
   align-items: center;
   gap: 4px;
-  font-size: 0.72rem;
+  font-size: var(--fs-s);
   color: rgba(255,255,255,0.5);
   white-space: nowrap;
 }
@@ -96,7 +105,7 @@
 
 .topbar-breadcrumb {
   font-family: "IBM Plex Mono", monospace;
-  font-size: 0.72rem;
+  font-size: var(--fs-s);
   color: rgba(255,255,255,0.6);
   white-space: nowrap;
   overflow: hidden;
@@ -107,7 +116,7 @@
 .topbar-spacer { flex: 1; }
 
 .topbar-error {
-  font-size: 0.72rem;
+  font-size: var(--fs-s);
   color: #f88;
   max-width: 200px;
   white-space: nowrap;
@@ -117,7 +126,7 @@
 
 /* Topbar button overrides — smaller, no borders, white text */
 .topbar button {
-  font-size: 0.72rem;
+  font-size: var(--fs-s);
   padding: 4px 8px;
   border-color: rgba(255,255,255,0.15);
   background: rgba(255,255,255,0.08);
@@ -175,6 +184,7 @@
   gap: 10px;
 }
 
+.panel-state[hidden] { display: none; }
 .panel-state {
   display: flex;
   flex-direction: column;
@@ -182,7 +192,7 @@
 }
 
 .panel-label {
-  font-size: 0.65rem;
+  font-size: var(--fs-xs);
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.07em;
@@ -190,7 +200,7 @@
 }
 
 .panel-title {
-  font-size: 0.95rem;
+  font-size: var(--fs-xl);
   font-weight: 700;
   color: #1a1a2e;
   word-break: break-all;
@@ -198,14 +208,14 @@
 }
 
 .panel-sub {
-  font-size: 0.72rem;
+  font-size: var(--fs-s);
   color: #888;
   font-family: "IBM Plex Mono", monospace;
   word-break: break-all;
 }
 
 .panel-meta {
-  font-size: 0.72rem;
+  font-size: var(--fs-s);
   color: #aaa;
 }
 
@@ -232,11 +242,11 @@
   gap: 2px;
   padding: 6px 0;
   border-top: 1px solid #eee;
-  font-size: 0.82rem;
+  font-size: var(--fs-base);
 }
 
 .panel-field-label {
-  font-size: 0.65rem;
+  font-size: var(--fs-xs);
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -270,18 +280,18 @@
 
 .drawer-amiibo-name {
   font-weight: 700;
-  font-size: 0.88rem;
+  font-size: var(--fs-md);
   color: #1a1a2e;
 }
 
 .drawer-amiibo-series {
-  font-size: 0.72rem;
+  font-size: var(--fs-s);
   color: #888;
 }
 
 .drawer-amiibo-hex {
   font-family: "IBM Plex Mono", monospace;
-  font-size: 0.72rem;
+  font-size: var(--fs-s);
   color: #aaa;
   word-break: break-all;
 }
@@ -324,15 +334,12 @@
   position: fixed;
   inset: 0;
   z-index: 50;
-  background: rgba(10,10,20,0.5);
-  align-items: flex-end;
 }
 
 .log-overlay.open { display: flex; }
 
 .log-overlay-panel {
-  width: 100%;
-  height: 35vh;
+  flex: 1;
   background: #1a1a2e;
   display: flex;
   flex-direction: column;
@@ -352,7 +359,7 @@
     align-items: center;
     gap: 6px;
     padding: 4px 0;
-    font-size: 0.78rem;
+    font-size: var(--fs-base);
     border-bottom: 1px solid #f0f0f0;
   }
 
@@ -364,7 +371,7 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     font-family: "IBM Plex Mono", monospace;
-    font-size: 0.72rem;
+    font-size: var(--fs-s);
   }
 
   .queue-bar {
@@ -383,7 +390,7 @@
   }
 
   .queue-status {
-    font-size: 0.68rem;
+    font-size: var(--fs-xs);
     font-weight: 700;
     min-width: 50px;
     text-align: right;
@@ -396,7 +403,7 @@
   .queue-status.aborted { color: #b80; }
 
   .queue-summary {
-    font-size: 0.75rem;
+    font-size: var(--fs-s);
     color: #666;
     margin-top: 4px;
     padding-top: 4px;
@@ -404,7 +411,7 @@
   }
 
   .queue-empty {
-    font-size: 0.78rem;
+    font-size: var(--fs-base);
     color: #999;
     padding: 4px 0;
   }
@@ -414,7 +421,7 @@
     background: #1a1a2e;
     color: #e0e0e0;
     font-family: "IBM Plex Mono", monospace;
-    font-size: 0.72rem;
+    font-size: var(--fs-s);
     line-height: 1.6;
     padding: 8px;
     border-radius: var(--radius);
@@ -449,7 +456,7 @@
     flex: 1;
     min-width: 120px;
     font-family: "IBM Plex Mono", monospace;
-    font-size: 0.82rem;
+    font-size: var(--fs-base);
     padding: 4px 8px;
     border: 2px solid var(--border);
     border-radius: var(--radius);
@@ -465,7 +472,7 @@
   /* --- Buttons --- */
   button {
     font-family: inherit;
-    font-size: 0.78rem;
+    font-size: var(--fs-base);
     font-weight: 700;
     padding: 5px 10px;
     border: 2px solid var(--border);
@@ -518,7 +525,7 @@
   table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 0.82rem;
+    font-size: var(--fs-base);
   }
 
   th, td {
@@ -529,7 +536,7 @@
   }
 
   th {
-    font-size: 0.7rem;
+    font-size: var(--fs-xs);
     font-weight: 800;
     text-transform: uppercase;
     letter-spacing: 0.04em;
@@ -547,8 +554,8 @@
 
   tr:last-child td { border-bottom: none; }
 
-  tr.selected td { background: rgba(120,120,204,0.08); }
   tr:hover td { background: rgba(0,0,0,0.015); }
+  tr.selected td { background: rgba(120,120,204,0.08); }
   tr.selected:hover td { background: rgba(120,120,204,0.12); }
   tr.panel-active td { background: rgba(120,120,204,0.14); }
 
@@ -566,7 +573,7 @@
   /* subtitle line inside name cell */
   .cell-name-sub {
     display: block;
-    font-size: 0.72rem;
+    font-size: var(--fs-s);
     font-weight: 400;
     color: #aaa;
     font-family: "IBM Plex Mono", monospace;
@@ -574,13 +581,13 @@
 
   .cell-size {
     font-family: "IBM Plex Mono", monospace;
-    font-size: 0.78rem;
+    font-size: var(--fs-base);
     white-space: nowrap;
   }
 
   .cell-actions {
-    width: 32px;
-    text-align: center;
+    width: 60px;
+    text-align: right;
     white-space: nowrap;
   }
 
@@ -596,32 +603,64 @@
     text-align: center;
     color: #999;
     padding: 20px 10px;
-    font-size: 0.85rem;
+    font-size: var(--fs-md);
   }
 
-  /* --- Selection actions --- */
+  /* --- Navigation bar --- */
   .selection-bar {
-    display: none;
+    display: flex;
     align-items: center;
-    gap: 6px;
-    padding: 6px 10px;
+    gap: 4px;
+    padding: 4px 6px;
     background: #f0f0f8;
     border: 2px solid var(--border);
     border-radius: var(--radius);
-    font-size: 0.78rem;
-  }
-
-  .selection-bar.visible { display: flex; }
-
-  .selection-count { font-weight: 700; }
-  .selection-sep {
-    width: 1px;
-    height: 18px;
-    background: #ccc;
     flex-shrink: 0;
-    margin: 0 2px;
   }
-  .selection-spacer { flex: 1; }
+
+  /* Ghost buttons sit on the nav bar's tinted background — override hover to be visible */
+  .selection-bar button.ghost:hover:not(:disabled) {
+    background: rgba(0,0,0,0.08);
+  }
+  #selectionCount { font-weight: 700; font-size: var(--fs-s); }
+
+  .nav-breadcrumb {
+    display: flex;
+    align-items: center;
+    overflow: hidden;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .nav-crumb {
+    background: none;
+    border: none;
+    padding: 2px 5px;
+    font-size: var(--fs-base);
+    font-family: var(--mono);
+    color: var(--accent);
+    cursor: pointer;
+    border-radius: 3px;
+    white-space: nowrap;
+    line-height: 1.4;
+  }
+
+  .nav-crumb:hover:not(.active) { background: rgba(0,0,0,0.07); }
+
+  .nav-crumb.active {
+    color: var(--text);
+    cursor: default;
+    font-weight: 600;
+    pointer-events: none;
+  }
+
+  .nav-sep {
+    color: #bbb;
+    font-size: var(--fs-base);
+    padding: 0 1px;
+    user-select: none;
+    flex-shrink: 0;
+  }
 
   /* --- Modal overlay --- */
   .modal-overlay {
@@ -647,13 +686,13 @@
   }
 
   .modal-box h3 {
-    font-size: 1rem;
+    font-size: var(--fs-xl);
     color: #d44;
     margin-bottom: 8px;
   }
 
   .modal-box p {
-    font-size: 0.85rem;
+    font-size: var(--fs-md);
     color: #555;
     margin-bottom: 14px;
     line-height: 1.5;
@@ -686,7 +725,7 @@
   .path-display {
     flex: 1;
     font-family: "IBM Plex Mono", monospace;
-    font-size: 0.82rem;
+    font-size: var(--fs-base);
     padding: 4px 8px;
     border: 2px solid var(--border);
     border-radius: var(--radius);
@@ -723,13 +762,14 @@
     box-shadow: var(--shadow-md);
     text-align: center;
   }
-  .main-overlay-card .ms { font-size: 2.4rem; color: #7878cc; }
+  .main-overlay-card > .ms { font-size: 2.4rem; color: #7878cc; }
+  #btnConnectCta { align-self: center; margin-top: 4px; }
   #mainOverlaySpinner md-circular-progress {
     --md-circular-progress-size: 40px;
     --md-circular-progress-active-indicator-color: #7878cc;
   }
-  .main-overlay-card .title { font-weight: 700; font-size: 0.95rem; color: #1a1a2e; }
-  .main-overlay-card .sub  { font-size: 0.8rem; color: #888; }
+  .main-overlay-card .title { font-weight: 700; font-size: var(--fs-xl); color: #1a1a2e; }
+  .main-overlay-card .sub  { font-size: var(--fs-base); color: #888; }
 
   /* Connecting pulse on the connect button */
   .btn-connecting { animation: pulse-ring 1.4s ease-out infinite; }
@@ -763,18 +803,18 @@
   }
 
   .browser-lock-card .ms {
-    font-size: 2rem;
+    font-size: var(--fs-display);
     color: #7878cc;
   }
 
   .browser-lock-title {
     font-weight: 700;
-    font-size: 0.88rem;
+    font-size: var(--fs-md);
     color: #1a1a2e;
   }
 
   .browser-lock-sub {
-    font-size: 0.78rem;
+    font-size: var(--fs-base);
     color: #888;
   }
 
