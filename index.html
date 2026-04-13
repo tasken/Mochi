@@ -1,367 +1,294 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>MochiNest</title>
-  <link rel="stylesheet" href="./styles.css">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MochiNest Tools</title>
+<link rel="icon" type="image/svg+xml" href="./favicon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;1,100;1,200;1,300;1,400;1,500;1,600;1,700&family=IBM+Plex+Sans:ital,wght@0,100..700;1,100..700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,1,0">
+<link rel="stylesheet" href="./styles.css">
+<script type="module">import 'https://esm.sh/@material/web/progress/circular-progress.js';</script>
+<style>
+  @keyframes ui-reveal {
+    from { opacity: 0; transform: translateY(6px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes ui-fade {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+  }
+
+  /* App body fades in */
+  .app-body {
+    animation: ui-fade 0.45s 0.07s ease-out backwards;
+  }
+</style>
 </head>
 <body>
-  <div class="page-shell">
-    <header class="hero">
-      <div class="hero-copy">
-        <div class="eyebrow">MochiNest</div>
-        <h1>A cozy little BLE nest for your Pixl.js files</h1>
-        <p>MochiNest works with Pixl.js BLE File Transfer mode. Use it to choose a destination folder, upload nested files, browse device storage, and run cleanup actions with clear progress while the device works.</p>
+<div class="app">
+  <!-- Top bar -->
+  <header class="topbar" id="topbar">
+    <span class="topbar-brand">MochiNest</span>
+    <button class="primary btn-connecting" id="btnConnect" style="display:none">
+      <span class="ms">bluetooth</span> Connect
+    </button>
+    <!-- shown only when connected -->
+    <span class="topbar-badge" id="topbarBadge" hidden></span>
+    <span class="topbar-drive" id="topbarDrive" hidden>
+      <span id="topbarDriveInfo">—</span>
+      <button class="ghost" id="btnFormat" title="Format drive E:" style="padding:2px 6px;font-size:0.68rem">
+        <span class="ms-sm">delete_forever</span>
+      </button>
+    </span>
+    <span class="topbar-div" id="topbarDiv" hidden></span>
+    <span class="topbar-breadcrumb" id="topbarBreadcrumb" hidden></span>
+    <span class="topbar-spacer"></span>
+    <button class="ghost" id="btnUp" title="Up" hidden><span class="ms">arrow_upward</span></button>
+    <button class="ghost" id="btnRefresh" title="Refresh" hidden><span class="ms">refresh</span></button>
+    <button id="btnNewFolder" hidden><span class="ms">create_new_folder</span> New folder</button>
+    <button class="primary" id="btnUploadToggle" hidden><span class="ms">upload</span> Upload</button>
+    <button class="ghost" id="btnLogToggle" title="Protocol log" hidden><span class="ms">terminal</span></button>
+    <span class="topbar-error" id="connError" hidden></span>
+  </header>
+
+  <!-- App body -->
+  <div class="app-body">
+    <!-- Disconnected overlay -->
+    <div class="main-overlay active" id="mainOverlay">
+      <div class="main-overlay-card">
+        <span class="ms" id="mainOverlayIcon">bluetooth_disabled</span>
+        <div id="mainOverlaySpinner" hidden><md-circular-progress indeterminate></md-circular-progress></div>
+        <span class="title" id="mainOverlayTitle">No device connected</span>
+        <span class="sub" id="mainOverlaySub">Click Connect above to get started.</span>
       </div>
-      <div class="chip-row">
-        <span class="chip">Web Bluetooth</span>
-        <span class="chip">Tree uploader</span>
-        <span class="chip">Remote file manager</span>
-        <span class="chip">Safe bulk actions</span>
-        <span class="chip">Chunk-safe writes</span>
+    </div>
+
+    <!-- Left context panel -->
+    <aside class="context-panel" id="contextPanel">
+
+      <!-- State 1: Folder -->
+      <div class="panel-state" id="panelFolder">
+        <span class="panel-label">Folder</span>
+        <span class="panel-title" id="panelFolderName"></span>
+        <span class="panel-sub" id="panelFolderPath"></span>
+        <span class="panel-meta" id="panelFolderCount"></span>
+        <div class="panel-drive-bar"><div class="panel-drive-bar-fill" id="panelDriveBarFill" style="width:0%"></div></div>
+        <span class="panel-meta" id="panelDriveUsage"></span>
       </div>
-    </header>
 
-    <main class="layout">
-      <section class="panel wide workspace-panel">
-        <div class="split-header split-header-stack">
-          <div>
-            <h2>Workspace</h2>
-            <p class="section-copy">Choose how you want to work. Tree uploader sends local content to the selected device folder. File manager lets you browse and change storage on the device.</p>
-          </div>
-          <span id="modeDescription" class="mode-badge">Tree uploader selected</span>
+      <!-- State 2+3: File / Amiibo -->
+      <div class="panel-state" id="panelFile" hidden>
+        <span class="panel-label" id="panelFileLabel">File</span>
+        <span class="panel-title" id="panelFileName"></span>
+        <div class="panel-field">
+          <span class="panel-field-label"><span class="ms-sm">straighten</span> Size</span>
+          <span id="panelFileSize"></span>
         </div>
-
-        <div class="mode-switch-grid" role="tablist" aria-label="MochiNest workspace modes">
-          <button id="modeUploaderButton" class="mode-card active" type="button" role="tab" aria-selected="true">
-            <span class="mode-card-eyebrow">Plan from local files</span>
-            <strong class="mode-card-title">Tree uploader</strong>
-            <span class="mode-card-copy">Build a recursive upload plan from local files and folders, prepare missing device folders, and transfer it over BLE with clear progress.</span>
-          </button>
-
-          <button id="modeManagerButton" class="mode-card secondary" type="button" role="tab" aria-selected="false">
-            <span class="mode-card-eyebrow">Work on device storage</span>
-            <strong class="mode-card-title">File manager</strong>
-            <span class="mode-card-copy">Browse the connected drive, create folders, lowercase names, and run careful bulk actions without changing the firmware.</span>
-          </button>
+        <div class="panel-field">
+          <span class="panel-field-label"><span class="ms-sm">flag</span> Flags</span>
+          <div id="panelFileFlags"></div>
         </div>
-
-        <p class="hint">Quick start: connect the device, refresh the drive list, then choose a workspace. In File manager, Use for upload copies the current device folder into the uploader.</p>
-      </section>
-
-      <section class="panel connection-panel">
-        <div class="split-header split-header-stack">
-          <div>
-            <h2>Connection</h2>
-            <p class="section-copy">Connect the device, refresh the drive list, then choose the drive and destination folder you want to work with.</p>
-          </div>
+        <div class="panel-field">
+          <span class="panel-field-label"><span class="ms-sm">notes</span> Notes</span>
+          <span id="panelFileNotes"></span>
         </div>
-
-        <div class="field-grid">
-          <div class="field">
-            <label for="connectButton">Device</label>
-            <button id="connectButton">Connect device</button>
-          </div>
-
-          <div class="field">
-            <label for="refreshButton">Drive list</label>
-            <button id="refreshButton" class="secondary" disabled>Refresh drive list</button>
-          </div>
-
-          <div class="field">
-            <label for="driveSelect">Device drive</label>
-            <select id="driveSelect" disabled>
-              <option value="">Connect first</option>
-            </select>
-          </div>
-
-          <div id="uploaderBaseField" class="field">
-            <label for="remoteBaseInput">Destination folder</label>
-            <input id="remoteBaseInput" type="text" value="/" spellcheck="false" placeholder="/amiibo/imports">
-          </div>
+        <!-- Amiibo subsection — shown for .bin files -->
+        <div id="panelAmiibo" hidden>
+          <span class="panel-field-label"><span class="ms-sm">nfc</span> Amiibo ID</span>
+          <div class="panel-amiibo-content" id="panelAmiiboContent"></div>
         </div>
-
-        <div id="uploaderBaseActions" class="toolbar toolbar-compact">
-          <button id="createPathButton" class="ghost" disabled>Create destination folder</button>
+        <div class="panel-actions">
+          <button class="ghost" id="panelBtnRename"><span class="ms-sm">edit</span> Rename</button>
+          <button class="danger" id="panelBtnDelete"><span class="ms-sm">delete</span> Delete</button>
         </div>
+      </div>
 
-        <div class="status-grid">
-          <div class="status-card">
-            <span>Status</span>
-            <strong id="connectionState">Not connected</strong>
-          </div>
-
-          <div class="status-card">
-            <span>Firmware</span>
-            <strong id="firmwareVersion">-</strong>
-          </div>
-
-          <div class="status-card">
-            <span>BLE address</span>
-            <strong id="bleAddress">-</strong>
-          </div>
+      <!-- State 4: Upload -->
+      <div class="panel-state" id="panelUpload" hidden>
+        <div class="panel-upload-header">
+          <span class="panel-label">Upload</span>
+          <button class="ghost" id="btnUploadClose" style="padding:2px 4px" title="Close"><span class="ms-sm">close</span></button>
         </div>
-
-        <p class="hint">Use Chrome or Edge over HTTPS or localhost. Put the device in BLE File Transfer mode first. If you already opened the right folder in File manager, Use for upload fills the destination folder for you.</p>
-      </section>
-
-      <section id="treeUploaderPanel" class="panel">
-        <div class="split-header split-header-stack">
-          <div>
-            <h2>Tree uploader</h2>
-            <p class="section-copy">Choose a local folder or a set of files, review the plan, then send it to the destination folder above.</p>
-          </div>
+        <div style="display:flex;gap:6px;margin-bottom:6px">
+          <button style="flex:1" id="btnPickFolder"><span class="ms">folder</span> Folder</button>
+          <button style="flex:1" id="btnPickFiles"><span class="ms">upload_file</span> Files</button>
         </div>
-
-        <div class="toolbar">
-          <button id="pickFolderButton" disabled>Choose folder</button>
-          <button id="pickFilesButton" class="secondary" disabled>Choose files</button>
-          <label class="toggle">
-            <input id="preserveRootToggle" type="checkbox" checked>
-            Keep top-level folder
-          </label>
+        <div id="uploadQueue"><div class="queue-empty">No uploads queued</div></div>
+        <div style="display:flex;gap:6px;margin-top:6px">
+          <button class="primary" style="flex:1" id="btnUploadStart" disabled><span class="ms">play_arrow</span> Start</button>
+          <button class="danger" style="flex:1" id="btnUploadAbort" disabled><span class="ms">stop</span> Abort</button>
+          <button class="ghost" style="flex:1" id="btnUploadClear" disabled><span class="ms">delete</span> Clear</button>
         </div>
-
         <input id="folderInput" type="file" hidden multiple webkitdirectory directory>
         <input id="filesInput" type="file" hidden multiple>
-
-        <div id="selectionSummary" class="selection-summary">Choose a folder or files to build an upload plan for the selected destination folder.</div>
-
-        <div class="summary-grid">
-          <div class="summary-card">
-            <span>Folders</span>
-            <strong id="folderCount">0</strong>
-          </div>
-
-          <div class="summary-card">
-            <span>Files</span>
-            <strong id="fileCount">0</strong>
-          </div>
-
-          <div class="summary-card">
-            <span>Total bytes</span>
-            <strong id="totalBytes">0 B</strong>
-          </div>
-        </div>
-
-        <div class="toolbar toolbar-spaced">
-          <button id="startUploadButton" disabled>Start upload</button>
-          <button id="abortButton" class="warn" disabled>Stop upload</button>
-          <button id="clearPlanButton" class="ghost" disabled>Clear plan</button>
-        </div>
-
-        <div class="progress-wrap">
-          <div class="progress-label">
-            <span id="overallProgressLabel">0 of 0 bytes</span>
-            <span id="overallProgressPercent">0%</span>
-          </div>
-          <div class="progress-track">
-            <div id="overallProgressBar" class="progress-bar"></div>
-          </div>
-        </div>
-      </section>
-
-      <section id="uploadPlanPanel" class="panel wide">
-        <div class="split-header split-header-stack">
-          <div>
-            <h2>Upload plan</h2>
-            <p class="section-copy">Review the queued folders and files before you start. Status and per-file progress update here during transfer.</p>
-          </div>
-          <span id="queueStats">0 queued items</span>
-        </div>
-
-        <div class="table-shell">
-          <table>
-            <thead>
-              <tr>
-                <th>Kind</th>
-                <th>Local path</th>
-                <th>Device path</th>
-                <th>Size</th>
-                <th>Status</th>
-                <th>Progress</th>
-              </tr>
-            </thead>
-            <tbody id="planTableBody">
-              <tr>
-                <td colspan="6" class="empty-state">Choose a folder or file set after connecting to the device.</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      <section id="fileManagerPanel" class="panel wide" hidden>
-        <div class="split-header split-header-stack">
-          <div>
-            <h2>File manager</h2>
-            <p class="section-copy">Browse the selected drive, create folders, lowercase names, and delete items. Changes happen on the device, so review the status and summaries before moving on.</p>
-          </div>
-          <span id="managerStatusLabel" class="panel-status">Connect to a device and choose a drive to browse.</span>
-        </div>
-
-        <div class="toolbar">
-          <div class="field grow">
-            <label for="managerPathInput">Current device folder</label>
-            <input id="managerPathInput" type="text" value="/" spellcheck="false" placeholder="E:/">
-          </div>
-          <button id="managerOpenButton" class="secondary" disabled>Open</button>
-          <button id="managerUpButton" class="ghost" disabled>Up</button>
-          <button id="managerRefreshButton" class="ghost" disabled>Reload</button>
-          <button id="managerUsePathButton" class="secondary" disabled>Use for upload</button>
-        </div>
-
-        <div class="toolbar toolbar-wrapped">
-          <div class="field grow">
-            <label for="managerFolderNameInput">New folder name</label>
-            <input id="managerFolderNameInput" type="text" value="" spellcheck="false" placeholder="new-folder">
-          </div>
-          <button id="managerCreateFolderButton" disabled>Create folder</button>
-          <button id="managerSanitizeButton" class="secondary" disabled>Lowercase names</button>
-          <button id="managerSelectAllButton" class="ghost" disabled>Select all</button>
-          <button id="managerClearSelectionButton" class="ghost" disabled>Clear selection</button>
-          <button id="managerDeleteButton" class="warn" disabled>Delete selected</button>
-        </div>
-
-        <div class="summary-grid manager-summary-grid">
-          <div class="summary-card">
-            <span>Current folder</span>
-            <strong id="managerCurrentPath">-</strong>
-          </div>
-
-          <div class="summary-card">
-            <span>Entries</span>
-            <strong id="managerEntryCount">0</strong>
-          </div>
-
-          <div class="summary-card">
-            <span>Selection</span>
-            <strong id="managerSelectionInfo">Nothing selected</strong>
-          </div>
-        </div>
-
-        <div id="managerOutcomeBanner" class="notice-banner" hidden aria-live="polite">
-          <div class="notice-banner-copy">
-            <strong id="managerOutcomeTitle">No recent device action</strong>
-            <p id="managerOutcomeText">Bulk results, skipped items, and path-limit warnings will appear here.</p>
-          </div>
-        </div>
-
-        <div id="managerBusyState" class="operation-state-card" hidden aria-live="polite">
-          <div class="operation-state-top">
-            <span id="managerBusyEyebrow" class="operation-eyebrow">Updating device storage</span>
-            <span id="managerBusyBadge" class="status-pill active">Running</span>
-          </div>
-
-          <h3 id="managerBusyTitle">Working in the current folder</h3>
-
-          <div class="operation-counter-row">
-            <strong id="managerBusyCount" class="operation-count">0 of 0</strong>
-            <span id="managerBusyPhase" class="operation-phase">Waiting for the next device step</span>
-          </div>
-
-          <div class="progress-wrap">
-            <div class="progress-label">
-              <span id="managerBusyLabel">Preparing device change</span>
-              <span id="managerBusyPercent">0%</span>
-            </div>
-            <div class="progress-track">
-              <div id="managerBusyBar" class="progress-bar"></div>
-            </div>
-          </div>
-
-          <p class="operation-footnote">The file list stays hidden while remote state is changing, so you never act on stale rows.</p>
-        </div>
-
-        <div id="managerBrowserShell">
-          <div class="table-shell">
-            <table>
-              <thead>
-                <tr>
-                  <th class="selection-cell">Select</th>
-                  <th>Name</th>
-                  <th>Kind</th>
-                  <th>Size</th>
-                  <th>Action</th>
-                </tr>
-              </thead>
-              <tbody id="managerTableBody">
-                <tr>
-                  <td colspan="5" class="empty-state">Connect first.</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </section>
-
-      <section class="panel wide activity-panel">
-        <div class="split-header split-header-stack">
-          <div>
-            <h2>Activity</h2>
-            <p class="section-copy">This panel shows what the device is doing now, what just finished, and what needs your attention next.</p>
-          </div>
-          <button id="clearLogButton" class="ghost">Clear log</button>
-        </div>
-
-        <div id="activityStatusCard" class="activity-status-card" data-state="idle" aria-live="polite">
-          <div class="activity-status-top">
-            <div>
-              <span id="activityPhaseLabel" class="activity-eyebrow">Ready</span>
-              <h3 id="activityOperationTitle">Waiting for the next device task</h3>
-            </div>
-            <span id="activityStatusBadge" class="status-pill pending">Ready</span>
-          </div>
-
-          <div class="activity-metric-grid">
-            <div class="activity-metric-card">
-              <span class="activity-metric-label">Progress</span>
-              <strong id="activityProgressCount" class="activity-progress-count">0 of 0</strong>
-            </div>
-
-            <div class="activity-metric-card">
-              <span class="activity-metric-label">Current detail</span>
-              <strong id="activityProgressDetail" class="activity-progress-detail">Connect to a device, choose a drive, then start an upload or open the file manager.</strong>
-            </div>
-          </div>
-
-          <div class="progress-wrap">
-            <div class="progress-label">
-              <span id="activityProgressLabel">No active task</span>
-              <span id="activityProgressPercent">0%</span>
-            </div>
-            <div class="progress-track">
-              <div id="activityProgressBar" class="progress-bar"></div>
-            </div>
-          </div>
-
-          <div id="activityOutcomeBanner" class="notice-banner" hidden aria-live="polite">
-            <div class="notice-banner-copy">
-              <strong id="activityOutcomeTitle">No recent activity</strong>
-              <p id="activityOutcomeText">Completed work, partial results, skipped items, and path-limit warnings will appear here.</p>
-            </div>
-          </div>
-        </div>
-
-        <pre id="logOutput" class="log">Ready.</pre>
-      </section>
-    </main>
-
-    <footer class="app-footer">
-      <div class="footer-copy">
-        <p class="footer-label">MochiNest for Pixl.js</p>
-        <p class="footer-text">Browser workspace for Pixl.js BLE File Transfer mode, with tree uploads, device browsing, and careful bulk actions on top of the existing firmware protocol.</p>
       </div>
 
-      <div class="footer-meta">
-        <p class="footer-text">Project repo: <a class="footer-link" href="https://github.com/tasken/MochiNest" target="_blank" rel="noreferrer">tasken/MochiNest</a></p>
-        <p class="footer-text">Upstream project: <a class="footer-link" href="https://github.com/solosky/pixl.js" target="_blank" rel="noreferrer">solosky/pixl.js</a></p>
-        <p class="footer-text">Special thanks to @Caleeeeeeeeeeeee for the bootloader work, @白橙 for the enclosure design, and @impeeza for the documentation translation.</p>
+    </aside>
+
+    <!-- File browser -->
+    <div class="browser-wrap">
+      <!-- Browser lock overlay (active only during transfer/delete) -->
+      <div class="browser-lock-overlay" id="browserLockOverlay">
+        <div class="browser-lock-card">
+          <span class="ms">lock</span>
+          <span class="browser-lock-title" id="browserLockTitle">Operation in progress</span>
+          <span class="browser-lock-sub">File browsing is disabled until the operation completes.</span>
+        </div>
       </div>
-    </footer>
+
+      <!-- Selection bar -->
+      <div id="selectionBar" class="selection-bar">
+        <span class="selection-count" id="selectionCount">0 selected</span>
+        <div class="selection-sep"></div>
+        <button id="btnLowercase"><span class="ms">match_case</span> Lowercase</button>
+        <div class="selection-sep"></div>
+        <button class="danger" id="btnDelete"><span class="ms">delete</span> Delete</button>
+        <div class="selection-spacer"></div>
+        <button class="ghost" id="btnSelectAll"><span class="ms">select_all</span> Select all</button>
+        <button class="ghost" title="Clear selection" id="btnClearSelection"><span class="ms">deselect</span></button>
+      </div>
+
+      <!-- File table -->
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th class="cell-check"><input type="checkbox" id="checkAll" title="Select all"></th>
+              <th>Name</th>
+              <th>Size</th>
+              <th class="cell-actions"></th>
+            </tr>
+          </thead>
+          <tbody id="fileTableBody">
+            <tr><td colspan="4" class="empty-state">This folder is empty.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div><!-- end browser-wrap -->
+
+  </div><!-- end app-body -->
+</div><!-- end .app -->
+
+<!-- Log overlay -->
+<div class="log-overlay" id="logOverlay">
+  <div class="log-overlay-panel">
+    <div class="log-overlay-header">
+      <span style="font-size:0.72rem;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:#aaa">Protocol Log</span>
+      <button class="ghost" id="btnLogClose" style="padding:2px 4px;color:#aaa" title="Close"><span class="ms-sm">close</span></button>
+    </div>
+    <pre class="log" id="protocolLog"></pre>
   </div>
+</div>
 
-  <script type="module" src="./app.js"></script>
+<!-- Format drive modal -->
+<div id="formatModal" class="modal-overlay">
+  <div class="modal-box">
+    <h3>Format drive E:?</h3>
+    <p id="formatModalMsg">This will erase all data on E:. This action cannot be undone.</p>
+    <div class="modal-actions">
+      <button class="ghost" id="btnFormatCancel">Cancel</button>
+      <button class="danger" id="btnFormatConfirm">Format drive</button>
+    </div>
+  </div>
+</div>
+
+<!-- New folder modal -->
+<div id="newFolderModal" class="modal-overlay">
+  <div class="modal-box">
+    <h3 style="color:#1a1a2e">New folder</h3>
+    <p>Create a folder inside <strong style="font-family:monospace" id="newFolderPath"></strong></p>
+    <input type="text" class="path-input" id="newFolderInput" style="width:100%;margin-bottom:14px" placeholder="folder name" spellcheck="false" autofocus>
+    <div class="modal-actions">
+      <button class="ghost" id="btnNewFolderCancel">Cancel</button>
+      <button class="primary" id="btnNewFolderConfirm">Create</button>
+    </div>
+  </div>
+</div>
+
+<!-- Rename modal -->
+<div id="renameModal" class="modal-overlay">
+  <div class="modal-box">
+    <h3 style="color:#1a1a2e">Rename</h3>
+    <p>Enter a new name:</p>
+    <input type="text" class="path-input" id="renameInput" style="width:100%;margin-bottom:14px" placeholder="new name" spellcheck="false">
+    <div class="modal-actions">
+      <button class="ghost" id="btnRenameCancel">Cancel</button>
+      <button class="primary" id="btnRenameConfirm">Rename</button>
+    </div>
+  </div>
+</div>
+
+<!-- Delete confirmation modal -->
+<div id="deleteModal" class="modal-overlay">
+  <div class="modal-box">
+    <h3>Delete <span id="deleteCount">0</span> items?</h3>
+    <p id="deleteModalMsg"></p>
+    <div class="modal-actions">
+      <button class="ghost" id="btnDeleteCancel">Cancel</button>
+      <button class="danger" id="btnDeleteConfirm">Delete</button>
+    </div>
+  </div>
+</div>
+
+<!-- Sanitize names modal — files selected -->
+<div id="sanitizeModalFiles" class="modal-overlay sanitize-modal">
+  <div class="modal-box">
+    <h3 style="color:#1a1a2e">Lowercase names</h3>
+    <p>Rename <strong id="sanitizeFilesCount">0 selected files</strong> to lowercase on the device?</p>
+    <p id="sanitizeFilesList" style="font-size:0.78rem;color:#888;margin-bottom:14px"></p>
+    <div class="modal-actions">
+      <button class="ghost" id="btnSanitizeFilesCancel">Cancel</button>
+      <button class="primary" id="btnSanitizeFilesConfirm">Lowercase</button>
+    </div>
+  </div>
+</div>
+
+<!-- Sanitize names modal — folders selected -->
+<div id="sanitizeModalFolders" class="modal-overlay sanitize-modal">
+  <div class="modal-box">
+    <h3 style="color:#1a1a2e">Lowercase names</h3>
+    <p>Selection includes folders. How deep should this go?</p>
+    <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px">
+      <label style="display:flex;align-items:center;gap:8px;font-size:0.85rem;cursor:pointer">
+        <input type="radio" name="sanitizeFolderScope" value="selected" checked> Only the selected items
+      </label>
+      <label style="display:flex;align-items:center;gap:8px;font-size:0.85rem;cursor:pointer">
+        <input type="radio" name="sanitizeFolderScope" value="recursive"> Recursive — include all contents
+      </label>
+    </div>
+    <div class="modal-actions">
+      <button class="ghost" id="btnSanitizeFoldersCancel">Cancel</button>
+      <button class="primary" id="btnSanitizeFoldersConfirm">Lowercase</button>
+    </div>
+  </div>
+</div>
+
+<!-- Sanitize names modal — nothing selected -->
+<div id="sanitizeModalNone" class="modal-overlay sanitize-modal">
+  <div class="modal-box">
+    <h3 style="color:#1a1a2e">Lowercase names</h3>
+    <p>No items selected. What should be renamed in <strong style="font-family:monospace" id="sanitizeNonePath"></strong>?</p>
+    <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px">
+      <label style="display:flex;align-items:center;gap:8px;font-size:0.85rem;cursor:pointer">
+        <input type="radio" name="sanitizeNoneScope" value="files" checked> Files in this folder only
+      </label>
+      <label style="display:flex;align-items:center;gap:8px;font-size:0.85rem;cursor:pointer">
+        <input type="radio" name="sanitizeNoneScope" value="filesAndFolders"> Files and folders in this folder
+      </label>
+      <label style="display:flex;align-items:center;gap:8px;font-size:0.85rem;cursor:pointer">
+        <input type="radio" name="sanitizeNoneScope" value="recursive"> Everything recursive
+      </label>
+    </div>
+    <div class="modal-actions">
+      <button class="ghost" id="btnSanitizeNoneCancel">Cancel</button>
+      <button class="primary" id="btnSanitizeNoneConfirm">Lowercase</button>
+    </div>
+  </div>
+</div>
+
+<script type="module" src="./app.js"></script>
 </body>
 </html>
