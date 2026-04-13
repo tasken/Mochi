@@ -1,10 +1,11 @@
+// === Constants ===
+
 const NUS_SERVICE_UUID = "6e400001-b5a3-f393-e0a9-e50e24dcca9e";
 const NUS_CHAR_TX_UUID = "6e400002-b5a3-f393-e0a9-e50e24dcca9e";
 const NUS_CHAR_RX_UUID = "6e400003-b5a3-f393-e0a9-e50e24dcca9e";
 
 const FRAME_HEADER_SIZE = 4;
 const MAX_ATT_BYTES = 247;
-const MAX_WRITE_CHUNK = MAX_ATT_BYTES - FRAME_HEADER_SIZE - 1;
 const MAX_FILE_NAME_BYTES = 47;
 const MAX_FILE_PATH_BYTES = 65;
 const MAX_FOLDER_PATH_BYTES = 57;
@@ -12,558 +13,35 @@ const MAX_FOLDER_PATH_BYTES = 57;
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
-const elements = {
-  modeUploaderButton: document.getElementById("modeUploaderButton"),
-  modeManagerButton: document.getElementById("modeManagerButton"),
-  modeDescription: document.getElementById("modeDescription"),
-
-  connectButton: document.getElementById("connectButton"),
-  refreshButton: document.getElementById("refreshButton"),
-  driveSelect: document.getElementById("driveSelect"),
-  remoteBaseInput: document.getElementById("remoteBaseInput"),
-  createPathButton: document.getElementById("createPathButton"),
-  uploaderBaseField: document.getElementById("uploaderBaseField"),
-  uploaderBaseActions: document.getElementById("uploaderBaseActions"),
-  connectionState: document.getElementById("connectionState"),
-  firmwareVersion: document.getElementById("firmwareVersion"),
-  bleAddress: document.getElementById("bleAddress"),
-
-  treeUploaderPanel: document.getElementById("treeUploaderPanel"),
-  uploadPlanPanel: document.getElementById("uploadPlanPanel"),
-  fileManagerPanel: document.getElementById("fileManagerPanel"),
-
-  pickFolderButton: document.getElementById("pickFolderButton"),
-  pickFilesButton: document.getElementById("pickFilesButton"),
-  preserveRootToggle: document.getElementById("preserveRootToggle"),
-  folderInput: document.getElementById("folderInput"),
-  filesInput: document.getElementById("filesInput"),
-  selectionSummary: document.getElementById("selectionSummary"),
-  folderCount: document.getElementById("folderCount"),
-  fileCount: document.getElementById("fileCount"),
-  totalBytes: document.getElementById("totalBytes"),
-  startUploadButton: document.getElementById("startUploadButton"),
-  abortButton: document.getElementById("abortButton"),
-  clearPlanButton: document.getElementById("clearPlanButton"),
-  overallProgressLabel: document.getElementById("overallProgressLabel"),
-  overallProgressPercent: document.getElementById("overallProgressPercent"),
-  overallProgressBar: document.getElementById("overallProgressBar"),
-  queueStats: document.getElementById("queueStats"),
-  planTableBody: document.getElementById("planTableBody"),
-
-  managerStatusLabel: document.getElementById("managerStatusLabel"),
-  managerPathInput: document.getElementById("managerPathInput"),
-  managerOpenButton: document.getElementById("managerOpenButton"),
-  managerUpButton: document.getElementById("managerUpButton"),
-  managerRefreshButton: document.getElementById("managerRefreshButton"),
-  managerUsePathButton: document.getElementById("managerUsePathButton"),
-  managerFolderNameInput: document.getElementById("managerFolderNameInput"),
-  managerCreateFolderButton: document.getElementById("managerCreateFolderButton"),
-  managerSanitizeButton: document.getElementById("managerSanitizeButton"),
-  managerSelectAllButton: document.getElementById("managerSelectAllButton"),
-  managerClearSelectionButton: document.getElementById("managerClearSelectionButton"),
-  managerDeleteButton: document.getElementById("managerDeleteButton"),
-  managerCurrentPath: document.getElementById("managerCurrentPath"),
-  managerEntryCount: document.getElementById("managerEntryCount"),
-  managerSelectionInfo: document.getElementById("managerSelectionInfo"),
-  managerOutcomeBanner: document.getElementById("managerOutcomeBanner"),
-  managerOutcomeTitle: document.getElementById("managerOutcomeTitle"),
-  managerOutcomeText: document.getElementById("managerOutcomeText"),
-  managerBusyState: document.getElementById("managerBusyState"),
-  managerBusyEyebrow: document.getElementById("managerBusyEyebrow"),
-  managerBusyBadge: document.getElementById("managerBusyBadge"),
-  managerBusyTitle: document.getElementById("managerBusyTitle"),
-  managerBusyCount: document.getElementById("managerBusyCount"),
-  managerBusyPhase: document.getElementById("managerBusyPhase"),
-  managerBusyLabel: document.getElementById("managerBusyLabel"),
-  managerBusyPercent: document.getElementById("managerBusyPercent"),
-  managerBusyBar: document.getElementById("managerBusyBar"),
-  managerBrowserShell: document.getElementById("managerBrowserShell"),
-  managerTableBody: document.getElementById("managerTableBody"),
-
-  activityStatusCard: document.getElementById("activityStatusCard"),
-  activityPhaseLabel: document.getElementById("activityPhaseLabel"),
-  activityOperationTitle: document.getElementById("activityOperationTitle"),
-  activityStatusBadge: document.getElementById("activityStatusBadge"),
-  activityProgressCount: document.getElementById("activityProgressCount"),
-  activityProgressDetail: document.getElementById("activityProgressDetail"),
-  activityProgressLabel: document.getElementById("activityProgressLabel"),
-  activityProgressPercent: document.getElementById("activityProgressPercent"),
-  activityProgressBar: document.getElementById("activityProgressBar"),
-  activityOutcomeBanner: document.getElementById("activityOutcomeBanner"),
-  activityOutcomeTitle: document.getElementById("activityOutcomeTitle"),
-  activityOutcomeText: document.getElementById("activityOutcomeText"),
-  clearLogButton: document.getElementById("clearLogButton"),
-  logOutput: document.getElementById("logOutput")
+const VFS_ERRORS = {
+  0: "OK",
+  [-1]: "Device error",
+  [-2]: "Out of memory",
+  [-3]: "End of file",
+  [-4]: "Already exists",
+  [-5]: "Name too long",
+  [-6]: "Drive not found",
+  [-7]: "Storage corrupted",
+  [-90]: "Not found",
+  [-91]: "No space left",
+  [-99]: "Unsupported",
 };
 
-function createDefaultActivityState() {
-  return {
-    status: "idle",
-    phaseLabel: "Ready",
-    title: "Waiting for the next device task",
-    detail: "Connect to a device, choose a drive, then start an upload or open the file manager.",
-    progressLabel: "No active task",
-    current: 0,
-    total: 0,
-    percent: 0,
-    outcome: {
-      visible: false,
-      title: "No recent activity",
-      text: "Completed work, partial results, skipped items, and path-limit warnings will appear here."
-    }
-  };
-}
-
-function createDefaultManagerBusyState() {
-  return {
-    eyebrow: "Updating device storage",
-    badgeTone: "active",
-    badgeLabel: "Working",
-    title: "Working in the current folder",
-    phase: "Waiting for the next device step",
-    label: "Preparing device change",
-    current: 0,
-    total: 0,
-    percent: 0
-  };
-}
-
-function createDefaultManagerOutcome() {
-  return {
-    visible: false,
-    title: "No recent device action",
-    text: "Bulk results, skipped items, and path-limit warnings will appear here."
-  };
-}
-
-const state = {
-  client: null,
-  connected: false,
-  mode: "uploader",
-  drives: [],
-  plan: [],
-  queuedFolders: [],
-  queuedFiles: [],
-  uploadActive: false,
-  abortRequested: false,
-  itemSeed: 0,
-  activity: createDefaultActivityState(),
-  manager: {
-    currentPath: "",
-    entries: [],
-    selectedPaths: [],
-    loaded: false,
-    busy: false,
-    busyState: createDefaultManagerBusyState(),
-    outcome: createDefaultManagerOutcome()
-  }
+const CMD_NAMES = {
+  0x01: "VERSION_INFO",
+  0x10: "DRIVE_LIST",
+  0x11: "DRIVE_FORMAT",
+  0x12: "FILE_OPEN",
+  0x13: "FILE_CLOSE",
+  0x14: "FILE_READ",
+  0x15: "FILE_WRITE",
+  0x16: "DIR_READ",
+  0x17: "DIR_CREATE",
+  0x18: "REMOVE",
+  0x19: "RENAME",
 };
 
-class Cursor {
-  constructor(bytes) {
-    this.bytes = bytes;
-    this.offset = 0;
-  }
-
-  remaining() {
-    return this.bytes.length - this.offset;
-  }
-
-  u8() {
-    const value = this.bytes[this.offset];
-    this.offset += 1;
-    return value;
-  }
-
-  u16() {
-    const value = this.bytes[this.offset] | (this.bytes[this.offset + 1] << 8);
-    this.offset += 2;
-    return value;
-  }
-
-  u32() {
-    const view = new DataView(this.bytes.buffer, this.bytes.byteOffset + this.offset, 4);
-    const value = view.getUint32(0, true);
-    this.offset += 4;
-    return value;
-  }
-
-  take(length) {
-    const value = this.bytes.slice(this.offset, this.offset + length);
-    this.offset += length;
-    return value;
-  }
-
-  skip(length) {
-    this.offset += length;
-  }
-
-  string() {
-    return decoder.decode(this.take(this.u16()));
-  }
-}
-
-class PixlBleClient {
-  constructor(logFn) {
-    this.log = logFn;
-    this.device = null;
-    this.txCharacteristic = null;
-    this.rxCharacteristic = null;
-    this.commandQueue = Promise.resolve();
-    this.pending = null;
-    this.chunking = false;
-    this.rxParts = [];
-    this.createdFolders = new Set();
-
-    this.handleNotification = this.handleNotification.bind(this);
-    this.handleDisconnect = this.handleDisconnect.bind(this);
-  }
-
-  async connect() {
-    if (!navigator.bluetooth) {
-      throw new Error("Web Bluetooth is not available in this browser.");
-    }
-
-    this.log("Requesting BLE device...");
-    const device = await navigator.bluetooth.requestDevice({
-      filters: [{ services: [NUS_SERVICE_UUID] }],
-      optionalServices: [NUS_SERVICE_UUID]
-    });
-
-    device.addEventListener("gattserverdisconnected", this.handleDisconnect);
-
-    const server = await device.gatt.connect();
-    const service = await server.getPrimaryService(NUS_SERVICE_UUID);
-    const characteristics = await service.getCharacteristics();
-
-    characteristics.forEach((characteristic) => {
-      if (characteristic.uuid === NUS_CHAR_TX_UUID) {
-        this.txCharacteristic = characteristic;
-      } else if (characteristic.uuid === NUS_CHAR_RX_UUID) {
-        this.rxCharacteristic = characteristic;
-      }
-    });
-
-    if (!this.txCharacteristic || !this.rxCharacteristic) {
-      throw new Error("The Nordic UART characteristics are missing on this device.");
-    }
-
-    this.device = device;
-    await this.rxCharacteristic.startNotifications();
-    this.rxCharacteristic.addEventListener("characteristicvaluechanged", this.handleNotification);
-    this.createdFolders.clear();
-    this.log(`Connected to ${device.name || "BLE device"}.`);
-  }
-
-  disconnect() {
-    if (this.device && this.device.gatt.connected) {
-      this.device.gatt.disconnect();
-      return;
-    }
-
-    this.resetTransport("Device disconnected.");
-  }
-
-  resetTransport(reason) {
-    if (this.rxCharacteristic) {
-      this.rxCharacteristic.removeEventListener("characteristicvaluechanged", this.handleNotification);
-    }
-
-    if (this.device) {
-      this.device.removeEventListener("gattserverdisconnected", this.handleDisconnect);
-    }
-
-    if (this.pending) {
-      this.pending.reject(new Error(reason));
-      this.pending = null;
-    }
-
-    this.device = null;
-    this.txCharacteristic = null;
-    this.rxCharacteristic = null;
-    this.commandQueue = Promise.resolve();
-    this.chunking = false;
-    this.rxParts = [];
-    this.createdFolders.clear();
-  }
-
-  handleDisconnect() {
-    this.log("Device disconnected.");
-    this.resetTransport("Device disconnected.");
-    setConnected(false);
-    setActivityStatus({
-      status: "error",
-      phaseLabel: "Connection lost",
-      title: "The device disconnected",
-      detail: "Reconnect, refresh the drive list, then continue browsing or uploading.",
-      current: 0,
-      total: 1,
-      progressLabel: "Connection closed"
-    });
-    showActivityOutcome("Device disconnected", "The Bluetooth connection closed. Reconnect and refresh the drive list to continue.", "error");
-  }
-
-  async getVersion() {
-    const response = await this.sendCommand(0x01);
-    if (response.status !== 0) {
-      throw new Error(`Version request failed with status ${response.status}.`);
-    }
-
-    const cursor = new Cursor(response.payload);
-    return {
-      version: cursor.string(),
-      bleAddress: cursor.remaining() > 0 ? cursor.string() : ""
-    };
-  }
-
-  async listDrives() {
-    const response = await this.sendCommand(0x10);
-    if (response.status !== 0) {
-      throw new Error(`Drive listing failed with status ${response.status}.`);
-    }
-
-    const cursor = new Cursor(response.payload);
-    const count = cursor.u8();
-    const drives = [];
-
-    for (let index = 0; index < count; index += 1) {
-      drives.push({
-        status: cursor.u8(),
-        label: String.fromCharCode(cursor.u8()),
-        name: cursor.string(),
-        totalBytes: cursor.u32(),
-        usedBytes: cursor.u32()
-      });
-    }
-
-    return drives;
-  }
-
-  async readFolder(path) {
-    const response = await this.sendCommand(0x16, encodeString(path));
-    if (response.status !== 0) {
-      throw new Error(`Read folder failed for ${path} with status ${response.status}.`);
-    }
-
-    const cursor = new Cursor(response.payload);
-    const entries = [];
-    while (cursor.remaining() > 0) {
-      const name = cursor.string();
-      const size = cursor.u32();
-      const type = cursor.u8();
-      const metaSize = cursor.u8();
-      cursor.skip(metaSize);
-      entries.push({
-        name,
-        size,
-        type: type === 1 ? "DIR" : "FILE"
-      });
-    }
-
-    return entries;
-  }
-
-  async createFolder(path) {
-    const response = await this.sendCommand(0x17, encodeString(path));
-    if (response.status !== 0) {
-      throw new Error(`Create folder failed for ${path} with status ${response.status}.`);
-    }
-  }
-
-  async removePath(path) {
-    const response = await this.sendCommand(0x18, encodeString(path));
-    if (response.status !== 0) {
-      throw new Error(`Delete failed for ${path} with status ${response.status}.`);
-    }
-  }
-
-  async renamePath(oldPath, newPath) {
-    const response = await this.sendCommand(0x19, concatUint8Arrays(encodeString(oldPath), encodeString(newPath)));
-    if (response.status !== 0) {
-      throw new Error(`Rename failed for ${oldPath} -> ${newPath} with status ${response.status}.`);
-    }
-  }
-
-  async openFile(path, mode) {
-    const payload = concatUint8Arrays(
-      encodeString(path),
-      Uint8Array.of(mode === "r" ? 0x08 : 0x16)
-    );
-
-    const response = await this.sendCommand(0x12, payload);
-    if (response.status !== 0) {
-      throw new Error(`Open file failed for ${path} with status ${response.status}.`);
-    }
-
-    const cursor = new Cursor(response.payload);
-    return cursor.u8();
-  }
-
-  async writeFileChunk(fileId, chunk) {
-    const response = await this.sendCommand(0x15, concatUint8Arrays(Uint8Array.of(fileId), chunk));
-    if (response.status !== 0) {
-      throw new Error(`Write chunk failed with status ${response.status}.`);
-    }
-  }
-
-  async closeFile(fileId) {
-    const response = await this.sendCommand(0x13, Uint8Array.of(fileId));
-    if (response.status !== 0) {
-      throw new Error(`Close file failed with status ${response.status}.`);
-    }
-  }
-
-  async ensureFolder(remotePath) {
-    const root = remotePath.slice(0, 3);
-    if (remotePath === root) {
-      return;
-    }
-
-    const segments = remotePath.slice(3).split("/").filter(Boolean);
-    let current = root;
-
-    for (const segment of segments) {
-      current = current === root ? `${root}${segment}` : `${current}/${segment}`;
-      validateRemotePath(current, "folder");
-
-      if (this.createdFolders.has(current)) {
-        continue;
-      }
-
-      try {
-        await this.createFolder(current);
-        this.log(`Created ${current}`);
-      } catch (error) {
-        const parent = getParentRemotePath(current);
-        const entries = await this.readFolder(parent);
-        const exists = entries.some((entry) => entry.type === "DIR" && entry.name === getBaseName(current));
-        if (!exists) {
-          throw error;
-        }
-        this.log(`Using existing ${current}`);
-      }
-
-      this.createdFolders.add(current);
-    }
-  }
-
-  async uploadFile(remotePath, file, onProgress) {
-    validateRemotePath(remotePath, "file");
-    const fileId = await this.openFile(remotePath, "w");
-    const bytes = new Uint8Array(await file.arrayBuffer());
-
-    try {
-      if (bytes.length === 0) {
-        onProgress(0, 0);
-        return;
-      }
-
-      let offset = 0;
-      while (offset < bytes.length) {
-        if (state.abortRequested) {
-          throw new Error("Upload aborted by user.");
-        }
-
-        const end = Math.min(offset + MAX_WRITE_CHUNK, bytes.length);
-        await this.writeFileChunk(fileId, bytes.slice(offset, end));
-        offset = end;
-        onProgress(offset, bytes.length);
-      }
-    } finally {
-      await this.closeFile(fileId);
-    }
-  }
-
-  sendCommand(cmd, payload = new Uint8Array()) {
-    const run = () => this.performCommand(cmd, payload);
-    this.commandQueue = this.commandQueue.catch(() => undefined).then(run);
-    return this.commandQueue;
-  }
-
-  async performCommand(cmd, payload) {
-    if (!this.txCharacteristic) {
-      throw new Error("Not connected to a BLE device.");
-    }
-
-    return new Promise(async (resolve, reject) => {
-      this.pending = { resolve, reject, cmd };
-
-      try {
-        await this.writeFrame(cmd, payload);
-      } catch (error) {
-        this.pending = null;
-        reject(error);
-      }
-    });
-  }
-
-  async writeFrame(cmd, payload) {
-    const frame = new Uint8Array(FRAME_HEADER_SIZE + payload.length);
-    frame[0] = cmd;
-    frame[1] = 0;
-    frame[2] = 0;
-    frame[3] = 0;
-    frame.set(payload, FRAME_HEADER_SIZE);
-
-    if (typeof this.txCharacteristic.writeValueWithResponse === "function") {
-      await this.txCharacteristic.writeValueWithResponse(frame);
-      return;
-    }
-
-    await this.txCharacteristic.writeValue(frame);
-  }
-
-  handleNotification(event) {
-    if (!this.pending) {
-      return;
-    }
-
-    const incoming = new Uint8Array(
-      event.target.value.buffer.slice(
-        event.target.value.byteOffset,
-        event.target.value.byteOffset + event.target.value.byteLength
-      )
-    );
-
-    const chunk = incoming[2] | (incoming[3] << 8);
-    const hasMore = (chunk & 0x8000) !== 0;
-
-    if (hasMore) {
-      if (!this.chunking) {
-        this.rxParts = [incoming];
-        this.chunking = true;
-      } else {
-        this.rxParts.push(incoming.slice(FRAME_HEADER_SIZE));
-      }
-      return;
-    }
-
-    let frame = incoming;
-    if (this.chunking) {
-      this.rxParts.push(incoming.slice(FRAME_HEADER_SIZE));
-      frame = concatUint8Arrays(...this.rxParts);
-      this.rxParts = [];
-      this.chunking = false;
-    }
-
-    const response = {
-      cmd: frame[0],
-      status: frame[1],
-      chunk: frame[2] | (frame[3] << 8),
-      payload: frame.slice(FRAME_HEADER_SIZE)
-    };
-
-    const pending = this.pending;
-    this.pending = null;
-
-    if (response.cmd !== pending.cmd) {
-      pending.reject(new Error(`Unexpected response 0x${response.cmd.toString(16)} for command 0x${pending.cmd.toString(16)}.`));
-      return;
-    }
-
-    pending.resolve(response);
-  }
-}
+// === Utilities ===
 
 function encodeString(value) {
   const bytes = encoder.encode(value);
@@ -574,68 +52,25 @@ function encodeString(value) {
   return output;
 }
 
-function concatUint8Arrays(...chunks) {
-  const totalLength = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
-  const output = new Uint8Array(totalLength);
+function concatBytes(...chunks) {
+  const total = chunks.reduce((sum, c) => sum + c.length, 0);
+  const out = new Uint8Array(total);
   let offset = 0;
-  chunks.forEach((chunk) => {
-    output.set(chunk, offset);
-    offset += chunk.length;
-  });
-  return output;
+  for (const c of chunks) { out.set(c, offset); offset += c.length; }
+  return out;
 }
 
-function percentFromProgress(current, total) {
-  if (!Number.isFinite(total) || total <= 0) {
-    return 0;
-  }
-  const safeCurrent = Math.max(0, Math.min(current, total));
-  return Math.round((safeCurrent / total) * 100);
+function utf8Length(value) { return encoder.encode(value).length; }
+
+function formatBytes(bytes) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(2)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
 }
 
-function formatProgressCount(current, total) {
-  const safeCurrent = Number.isFinite(current) ? Math.max(0, current) : 0;
-  const safeTotal = Number.isFinite(total) ? Math.max(0, total) : 0;
-  return `${safeCurrent} of ${safeTotal}`;
-}
-
-function formatItemCount(count, noun) {
-  return `${count} ${noun}${count === 1 ? "" : "s"}`;
-}
-
-function nextFrame() {
-  return new Promise((resolve) => {
-    requestAnimationFrame(() => resolve());
-  });
-}
-
-async function yieldToBrowser(index, interval = 24) {
-  if (index > 0 && index % interval === 0) {
-    await nextFrame();
-  }
-}
-
-function normalizeRemoteBasePath(input) {
-  let value = (input || "/").trim().replace(/\\/g, "/");
-  if (!value.startsWith("/")) {
-    value = `/${value}`;
-  }
-  value = value.replace(/\/+/g, "/");
-  if (value.length > 1 && value.endsWith("/")) {
-    value = value.slice(0, -1);
-  }
-  return value || "/";
-}
-
-function joinRemotePath(drive, basePath, relativePath) {
-  const normalizedBase = normalizeRemoteBasePath(basePath);
-  const cleanedDrive = drive.endsWith(":") ? drive.slice(0, -1) : drive;
-  const root = `${cleanedDrive}:${normalizedBase}`;
-  const cleanedRelative = (relativePath || "").replace(/\\/g, "/").split("/").filter(Boolean).join("/");
-  if (!cleanedRelative) {
-    return root;
-  }
-  return root.endsWith("/") ? `${root}${cleanedRelative}` : `${root}/${cleanedRelative}`;
+function escapeHtml(value) {
+  return String(value).replace(/&/g, "&amp;").replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
 function getBaseName(path) {
@@ -643,2184 +78,1767 @@ function getBaseName(path) {
   return parts.length === 0 ? "" : parts[parts.length - 1];
 }
 
-function getParentRemotePath(path) {
-  const index = path.lastIndexOf("/");
-  return index <= 2 ? path.slice(0, 3) : path.slice(0, index);
+function getParentPath(path) {
+  const i = path.lastIndexOf("/");
+  return i <= 2 ? path.slice(0, 3) : path.slice(0, i);
 }
 
 function getDriveRoot(drive) {
   return drive ? `${drive}:/` : "";
 }
 
-function joinRemoteChildPath(parentPath, childName) {
-  const normalizedChild = String(childName || "").replace(/^\/+|\/+$/g, "");
-  if (!normalizedChild) {
-    return parentPath;
-  }
-  return parentPath.endsWith("/") ? `${parentPath}${normalizedChild}` : `${parentPath}/${normalizedChild}`;
+function joinChildPath(parent, child) {
+  const c = String(child || "").replace(/^\/+|\/+$/g, "");
+  if (!c) return parent;
+  return parent.endsWith("/") ? `${parent}${c}` : `${parent}/${c}`;
 }
 
-function normalizeAbsoluteRemoteFolderPath(input, drive = getSelectedDrive()) {
+function normalizeBasePath(input) {
+  let v = (input || "/").trim().replace(/\\/g, "/");
+  if (!v.startsWith("/")) v = `/${v}`;
+  v = v.replace(/\/+/g, "/");
+  if (v.length > 1 && v.endsWith("/")) v = v.slice(0, -1);
+  return v || "/";
+}
+
+function joinRemotePath(drive, basePath, relativePath) {
+  const base = normalizeBasePath(basePath);
+  const d = drive.endsWith(":") ? drive.slice(0, -1) : drive;
+  const root = `${d}:${base}`;
+  const rel = (relativePath || "").replace(/\\/g, "/").split("/").filter(Boolean).join("/");
+  if (!rel) return root;
+  return root.endsWith("/") ? `${root}${rel}` : `${root}/${rel}`;
+}
+
+function normalizeAbsolutePath(input, drive) {
   const root = getDriveRoot(drive);
-  if (!root) {
-    return "";
-  }
-
-  let value = (input || root).trim().replace(/\\/g, "/");
-  if (!value) {
-    return root;
-  }
-
-  const absoluteMatch = value.match(/^([A-Za-z]):(.*)$/);
-  if (absoluteMatch) {
-    const requestedDrive = absoluteMatch[1].toUpperCase();
-    if (drive && requestedDrive !== drive.toUpperCase()) {
-      throw new Error(`Selected drive is ${drive}:/, but requested path is ${requestedDrive}:/.`);
-    }
-
-    let rest = absoluteMatch[2] || "/";
-    if (!rest.startsWith("/")) {
-      rest = `/${rest}`;
-    }
+  if (!root) return "";
+  let v = (input || root).trim().replace(/\\/g, "/");
+  if (!v) return root;
+  const m = v.match(/^([A-Za-z]):(.*)$/);
+  if (m) {
+    const d = m[1].toUpperCase();
+    if (drive && d !== drive.toUpperCase()) throw new Error(`Drive mismatch: expected ${drive}:, got ${d}:`);
+    let rest = m[2] || "/";
+    if (!rest.startsWith("/")) rest = `/${rest}`;
     rest = rest.replace(/\/+/g, "/");
-    if (rest.length > 1 && rest.endsWith("/")) {
-      rest = rest.slice(0, -1);
-    }
-    return `${requestedDrive}:${rest || "/"}`;
+    if (rest.length > 1 && rest.endsWith("/")) rest = rest.slice(0, -1);
+    return `${d}:${rest || "/"}`;
   }
-
-  return joinRemotePath(drive, value.startsWith("/") ? value : `/${value}`, "");
-}
-
-function sortRemoteEntries(entries) {
-  return [...entries].sort((left, right) => {
-    if (left.type !== right.type) {
-      return left.type === "DIR" ? -1 : 1;
-    }
-    return left.name.localeCompare(right.name, undefined, { numeric: true, sensitivity: "base" });
-  });
-}
-
-function utf8Length(value) {
-  return encoder.encode(value).length;
+  return joinRemotePath(drive, v.startsWith("/") ? v : `/${v}`, "");
 }
 
 function validateRemotePath(path, kind) {
-  const fullLimit = kind === "folder" ? MAX_FOLDER_PATH_BYTES : MAX_FILE_PATH_BYTES;
-  const length = utf8Length(path);
-  if (length > fullLimit) {
-    throw new Error(`${kind === "folder" ? "Folder" : "File"} path is ${length} bytes. The current firmware allows at most ${fullLimit} UTF-8 bytes for this type: ${path}`);
-  }
-
-  const baseName = getBaseName(path);
-  if (baseName && utf8Length(baseName) > MAX_FILE_NAME_BYTES) {
-    throw new Error(`Path segment exceeds ${MAX_FILE_NAME_BYTES} UTF-8 bytes: ${baseName}`);
-  }
+  const limit = kind === "folder" ? MAX_FOLDER_PATH_BYTES : MAX_FILE_PATH_BYTES;
+  const len = utf8Length(path);
+  if (len > limit) throw new Error(`${kind === "folder" ? "Folder" : "File"} path is ${len} bytes (max ${limit}): ${path}`);
+  const base = getBaseName(path);
+  if (base && utf8Length(base) > MAX_FILE_NAME_BYTES) throw new Error(`Name exceeds ${MAX_FILE_NAME_BYTES} bytes: ${base}`);
 }
 
-function formatBytes(bytes) {
-  if (bytes < 1024) {
-    return `${bytes} B`;
-  }
-  if (bytes < 1024 * 1024) {
-    return `${(bytes / 1024).toFixed(2)} KB`;
-  }
-  return `${(bytes / 1024 / 1024).toFixed(2)} MB`;
-}
-
-function escapeHtml(value) {
-  return String(value)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
-
-function invalidateClientFolderCache() {
-  if (state.client) {
-    state.client.createdFolders.clear();
-  }
-}
-
-function getActivityBadgeTone(status) {
-  switch (status) {
-    case "running":
-      return "active";
-    case "success":
-      return "done";
-    case "warning":
-      return "aborted";
-    case "error":
-      return "error";
-    default:
-      return "pending";
-  }
-}
-
-function getActivityBadgeLabel(status) {
-  switch (status) {
-    case "running":
-      return "Working";
-    case "success":
-      return "Complete";
-    case "warning":
-      return "Needs review";
-    case "error":
-      return "Error";
-    default:
-      return "Ready";
-  }
-}
-
-function applyStatusPill(element, tone, label) {
-  element.className = `status-pill ${tone}`;
-  element.textContent = label;
-}
-
-function renderActivityStatus() {
-  elements.activityStatusCard.dataset.state = state.activity.status;
-  elements.activityPhaseLabel.textContent = state.activity.phaseLabel;
-  elements.activityOperationTitle.textContent = state.activity.title;
-  elements.activityProgressCount.textContent = formatProgressCount(state.activity.current, state.activity.total);
-  elements.activityProgressDetail.textContent = state.activity.detail;
-  elements.activityProgressLabel.textContent = state.activity.progressLabel;
-  elements.activityProgressPercent.textContent = `${state.activity.percent}%`;
-  elements.activityProgressBar.style.width = `${state.activity.percent}%`;
-  applyStatusPill(elements.activityStatusBadge, getActivityBadgeTone(state.activity.status), getActivityBadgeLabel(state.activity.status));
-
-  elements.activityOutcomeBanner.hidden = !state.activity.outcome.visible;
-  elements.activityOutcomeTitle.textContent = state.activity.outcome.title;
-  elements.activityOutcomeText.textContent = state.activity.outcome.text;
-}
-
-function setActivityStatus(patch) {
-  const outcome = state.activity.outcome;
-  const nextState = {
-    ...state.activity,
-    ...patch,
-    outcome
-  };
-  nextState.percent = Object.prototype.hasOwnProperty.call(patch, "percent")
-    ? patch.percent
-    : percentFromProgress(nextState.current, nextState.total);
-  state.activity = nextState;
-  renderActivityStatus();
-}
-
-function resetActivityStatus() {
-  const outcome = state.activity.outcome;
-  state.activity = {
-    ...createDefaultActivityState(),
-    outcome
-  };
-  renderActivityStatus();
-}
-
-function clearActivityOutcome() {
-  state.activity.outcome = createDefaultActivityState().outcome;
-  renderActivityStatus();
-}
-
-function showActivityOutcome(title, text, status = null) {
-  state.activity.outcome = {
-    visible: true,
-    title,
-    text
-  };
-  if (status) {
-    state.activity.status = status;
-  }
-  renderActivityStatus();
-}
-
-function renderManagerOutcome() {
-  elements.managerOutcomeBanner.hidden = !state.manager.outcome.visible;
-  elements.managerOutcomeTitle.textContent = state.manager.outcome.title;
-  elements.managerOutcomeText.textContent = state.manager.outcome.text;
-}
-
-function clearManagerOutcome() {
-  state.manager.outcome = createDefaultManagerOutcome();
-  renderManagerOutcome();
-}
-
-function showManagerOutcome(title, text) {
-  state.manager.outcome = {
-    visible: true,
-    title,
-    text
-  };
-  renderManagerOutcome();
-}
-
-function renderManagerBusyState() {
-  elements.managerBusyState.hidden = !state.manager.busy;
-  elements.managerBrowserShell.hidden = state.manager.busy;
-  elements.managerBusyEyebrow.textContent = state.manager.busyState.eyebrow;
-  elements.managerBusyTitle.textContent = state.manager.busyState.title;
-  elements.managerBusyCount.textContent = formatProgressCount(state.manager.busyState.current, state.manager.busyState.total);
-  elements.managerBusyPhase.textContent = state.manager.busyState.phase;
-  elements.managerBusyLabel.textContent = state.manager.busyState.label;
-  elements.managerBusyPercent.textContent = `${state.manager.busyState.percent}%`;
-  elements.managerBusyBar.style.width = `${state.manager.busyState.percent}%`;
-  applyStatusPill(elements.managerBusyBadge, state.manager.busyState.badgeTone, state.manager.busyState.badgeLabel);
-}
-
-function syncActivityFromManagerBusy() {
-  setActivityStatus({
-    status: "running",
-    phaseLabel: state.manager.busyState.eyebrow,
-    title: state.manager.busyState.title,
-    detail: state.manager.busyState.label,
-    progressLabel: state.manager.busyState.phase,
-    current: state.manager.busyState.current,
-    total: state.manager.busyState.total,
-    percent: state.manager.busyState.percent
+function sortEntries(entries) {
+  return [...entries].sort((a, b) => {
+    if (a.type !== b.type) return a.type === "DIR" ? -1 : 1;
+    return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" });
   });
 }
 
-function beginManagerBusy(patch) {
-  clearManagerOutcome();
-  clearActivityOutcome();
-  state.manager.busy = true;
-  state.manager.busyState = {
-    ...createDefaultManagerBusyState(),
-    ...patch
-  };
-  state.manager.busyState.percent = Object.prototype.hasOwnProperty.call(patch, "percent")
-    ? patch.percent
-    : percentFromProgress(state.manager.busyState.current, state.manager.busyState.total);
-  syncActivityFromManagerBusy();
-  renderManager();
-  updateControls();
+function itemCount(n, noun) { return `${n} ${noun}${n === 1 ? "" : "s"}`; }
+
+function nextFrame() { return new Promise(r => requestAnimationFrame(r)); }
+
+async function yieldToBrowser(i, interval = 24) {
+  if (i > 0 && i % interval === 0) await nextFrame();
 }
 
-function updateManagerBusy(patch) {
-  state.manager.busyState = {
-    ...state.manager.busyState,
-    ...patch
-  };
-  state.manager.busyState.percent = Object.prototype.hasOwnProperty.call(patch, "percent")
-    ? patch.percent
-    : percentFromProgress(state.manager.busyState.current, state.manager.busyState.total);
-  syncActivityFromManagerBusy();
-  renderManager();
+// === Binary cursor ===
+
+class Cursor {
+  constructor(bytes) { this.bytes = bytes; this.offset = 0; }
+  remaining() { return this.bytes.length - this.offset; }
+  u8() { return this.bytes[this.offset++]; }
+  i8() { const v = this.bytes[this.offset++]; return v > 127 ? v - 256 : v; }
+  u16() { const v = this.bytes[this.offset] | (this.bytes[this.offset + 1] << 8); this.offset += 2; return v; }
+  u32() { const view = new DataView(this.bytes.buffer, this.bytes.byteOffset + this.offset, 4); const v = view.getUint32(0, true); this.offset += 4; return v; }
+  take(n) { const v = this.bytes.slice(this.offset, this.offset + n); this.offset += n; return v; }
+  skip(n) { this.offset += n; }
+  string() { return decoder.decode(this.take(this.u16())); }
 }
 
-function endManagerBusy() {
-  state.manager.busy = false;
-  state.manager.busyState = createDefaultManagerBusyState();
-  renderManager();
-  updateControls();
-}
+// === BLE Client ===
 
-function log(message) {
-  const now = new Date();
-  const stamp = now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
-  elements.logOutput.textContent += `${elements.logOutput.textContent ? "\n" : ""}[${stamp}] ${message}`;
-  elements.logOutput.scrollTop = elements.logOutput.scrollHeight;
-}
-
-function clearLog() {
-  elements.logOutput.textContent = "Ready.";
-}
-
-function getSelectedManagerEntries() {
-  if (state.manager.selectedPaths.length === 0) {
-    return [];
+class PixlToolsClient {
+  constructor(logFn) {
+    this._log = logFn;
+    this.device = null;
+    this.txChar = null;
+    this.rxChar = null;
+    this.queue = Promise.resolve();
+    this.pending = null;
+    this.chunking = false;
+    this.rxParts = [];
+    this.createdFolders = new Set();
+    this._onNotification = this._onNotification.bind(this);
+    this._onDisconnect = this._onDisconnect.bind(this);
+    this.onDisconnect = null;
   }
 
-  const selectedSet = new Set(state.manager.selectedPaths);
-  return state.manager.entries.filter((entry) => selectedSet.has(entry.fullPath));
-}
-
-function setManagerSelection(paths) {
-  const allowedPaths = new Set(state.manager.entries.map((entry) => entry.fullPath));
-  const nextPaths = new Set(paths.filter((path) => allowedPaths.has(path)));
-  state.manager.selectedPaths = state.manager.entries
-    .filter((entry) => nextPaths.has(entry.fullPath))
-    .map((entry) => entry.fullPath);
-}
-
-function isManagerEntrySelected(path) {
-  return state.manager.selectedPaths.includes(path);
-}
-
-function toggleManagerSelection(path, forceSelected = !isManagerEntrySelected(path)) {
-  const nextPaths = new Set(state.manager.selectedPaths);
-  if (forceSelected) {
-    nextPaths.add(path);
-  } else {
-    nextPaths.delete(path);
-  }
-  setManagerSelection([...nextPaths]);
-}
-
-function selectAllManagerEntries() {
-  if (!state.manager.loaded || state.manager.entries.length === 0 || state.manager.busy) {
-    return;
-  }
-
-  setManagerSelection(state.manager.entries.map((entry) => entry.fullPath));
-  renderManager();
-  updateControls();
-}
-
-function clearManagerSelection() {
-  if (state.manager.selectedPaths.length === 0) {
-    return;
-  }
-
-  state.manager.selectedPaths = [];
-  renderManager();
-  updateControls();
-}
-
-function formatManagerSelectionInfo(selectedEntries) {
-  if (selectedEntries.length === 0) {
-    return "Nothing selected";
-  }
-
-  if (selectedEntries.length === 1) {
-    const [entry] = selectedEntries;
-    return `${entry.type === "DIR" ? "Folder" : "File"}: ${entry.name}`;
-  }
-
-  const folderCount = selectedEntries.filter((entry) => entry.type === "DIR").length;
-  const fileCount = selectedEntries.length - folderCount;
-  const detailParts = [];
-
-  if (folderCount > 0) {
-    detailParts.push(formatItemCount(folderCount, "folder"));
-  }
-  if (fileCount > 0) {
-    detailParts.push(formatItemCount(fileCount, "file"));
-  }
-
-  return `${formatItemCount(selectedEntries.length, "item")} selected, ${detailParts.join(", ")}`;
-}
-
-function sanitizeRemoteEntryName(name) {
-  return String(name || "").toLowerCase();
-}
-
-function buildSanitizeOperations(entries, parentPath) {
-  const operations = [];
-  const skipped = [];
-  const existingNames = new Set(entries.map((entry) => entry.name));
-  const candidateGroups = new Map();
-
-  entries.forEach((entry) => {
-    const sanitizedName = sanitizeRemoteEntryName(entry.name);
-    if (!sanitizedName || sanitizedName === entry.name) {
-      return;
-    }
-
-    if (!candidateGroups.has(sanitizedName)) {
-      candidateGroups.set(sanitizedName, []);
-    }
-
-    candidateGroups.get(sanitizedName).push(entry);
-  });
-
-  candidateGroups.forEach((group, sanitizedName) => {
-    if (group.length > 1) {
-      group.forEach((entry) => {
-        skipped.push({
-          path: joinRemoteChildPath(parentPath, entry.name),
-          reason: `multiple names would become ${sanitizedName}`
-        });
-      });
-      return;
-    }
-
-    const [entry] = group;
-    if (existingNames.has(sanitizedName)) {
-      skipped.push({
-        path: joinRemoteChildPath(parentPath, entry.name),
-        reason: `target name ${sanitizedName} already exists`
-      });
-      return;
-    }
-
-    const currentPath = joinRemoteChildPath(parentPath, entry.name);
-    const nextPath = joinRemoteChildPath(parentPath, sanitizedName);
-    const kind = entry.type === "DIR" ? "folder" : "file";
-
-    try {
-      validateRemotePath(nextPath, kind);
-    } catch (error) {
-      skipped.push({
-        path: currentPath,
-        reason: error.message
-      });
-      return;
-    }
-
-    operations.push({
-      from: currentPath,
-      to: nextPath,
-      type: entry.type
+  async connect() {
+    if (!navigator.bluetooth) throw new Error("Web Bluetooth is not available.");
+    this._log("Requesting BLE device...");
+    const device = await navigator.bluetooth.requestDevice({
+      filters: [{ services: [NUS_SERVICE_UUID] }],
+      optionalServices: [NUS_SERVICE_UUID],
     });
-  });
+    device.addEventListener("gattserverdisconnected", this._onDisconnect);
+    const server = await device.gatt.connect();
+    const service = await server.getPrimaryService(NUS_SERVICE_UUID);
+    const chars = await service.getCharacteristics();
+    for (const c of chars) {
+      if (c.uuid === NUS_CHAR_TX_UUID) this.txChar = c;
+      else if (c.uuid === NUS_CHAR_RX_UUID) this.rxChar = c;
+    }
+    if (!this.txChar || !this.rxChar) throw new Error("NUS characteristics not found.");
+    this.device = device;
+    await this.rxChar.startNotifications();
+    this.rxChar.addEventListener("characteristicvaluechanged", this._onNotification);
+    this.createdFolders.clear();
+    this._log(`Connected to ${device.name || "BLE device"}.`);
 
-  return {
-    operations,
-    skipped
-  };
-}
+    // Stale handle cleanup: close any dangling file handle from a prior session.
+    // The device returns an error if no file was open; suppress that log entry.
+    const savedLog = this._log;
+    this._log = () => {};
+    try {
+      await this._sendCommand(0x13, Uint8Array.of(0));
+    } finally {
+      this._log = savedLog;
+    }
+  }
 
-function summarizeSanitizeSkips(skipped) {
-  const summary = {
-    collisionCount: 0,
-    pathLimitCount: 0,
-    otherCount: 0
-  };
+  disconnect() {
+    if (this.device && this.device.gatt.connected) { this.device.gatt.disconnect(); return; }
+    this._resetTransport("Disconnected.");
+  }
 
-  skipped.forEach((item) => {
-    if (item.reason.includes("already exists") || item.reason.includes("would become")) {
-      summary.collisionCount += 1;
-    } else if (item.reason.includes("bytes") || item.reason.includes("at most") || item.reason.includes("exceeds")) {
-      summary.pathLimitCount += 1;
+  _resetTransport(reason) {
+    if (this.rxChar) this.rxChar.removeEventListener("characteristicvaluechanged", this._onNotification);
+    if (this.device) this.device.removeEventListener("gattserverdisconnected", this._onDisconnect);
+    if (this.pending) { this.pending.reject(new Error(reason)); this.pending = null; }
+    this.device = null; this.txChar = null; this.rxChar = null;
+    this.queue = Promise.resolve(); this.chunking = false; this.rxParts = [];
+    this.createdFolders.clear();
+  }
+
+  _onDisconnect() {
+    this._log("Device disconnected.");
+    this._resetTransport("Device disconnected.");
+    if (this.onDisconnect) this.onDisconnect();
+  }
+
+  // --- Commands that return { ok, error, data } ---
+
+  async getVersion() {
+    const r = await this._sendCommand(0x01);
+    if (r.status !== 0) return { ok: false, error: this._vfsError(r.status), data: null };
+    const c = new Cursor(r.payload);
+    const version = c.string();
+    const bleAddress = c.remaining() > 0 ? c.string() : "";
+    return { ok: true, error: null, data: { version, bleAddress } };
+  }
+
+  async listDrives() {
+    const r = await this._sendCommand(0x10);
+    if (r.status !== 0) return { ok: false, error: this._vfsError(r.status), data: null };
+    const c = new Cursor(r.payload);
+    const count = c.u8();
+    const drives = [];
+    for (let i = 0; i < count; i++) {
+      drives.push({
+        status: c.u8(),
+        label: String.fromCharCode(c.u8()),
+        name: c.string(),
+        totalBytes: c.u32(),
+        usedBytes: c.u32(),
+      });
+    }
+    return { ok: true, error: null, data: drives };
+  }
+
+  async formatDrive(label) {
+    const payload = Uint8Array.of(label.charCodeAt(0));
+    const r = await this._sendCommand(0x11, payload);
+    if (r.status !== 0) return { ok: false, error: this._vfsError(r.status), data: null };
+    return { ok: true, error: null, data: null };
+  }
+
+  async readFolder(path) {
+    const r = await this._sendCommand(0x16, encodeString(path));
+    if (r.status !== 0) return { ok: false, error: this._vfsError(r.status), data: null };
+    const c = new Cursor(r.payload);
+    const entries = [];
+    while (c.remaining() > 0) {
+      const name = c.string();
+      const size = c.u32();
+      const type = c.u8() === 1 ? "DIR" : "FILE";
+      const metaSize = c.u8();
+      const meta = { flags: 0, notes: "", amiiboHead: null, amiiboTail: null, raw: null };
+      if (metaSize > 0) {
+        const metaStart = c.offset;
+        meta.raw = c.bytes.slice(metaStart, metaStart + metaSize);
+        const metaEnd = metaStart + metaSize;
+        let pos = metaStart;
+        // Firmware TLV format (vfs_meta.c): each type has its own fixed structure —
+        // type 1 (NOTES) has a length byte; types 2 (FLAGS) and 3 (AMIIBO_ID) do not.
+        while (pos < metaEnd) {
+          const tlvType = c.bytes[pos];
+          pos += 1;
+          if (tlvType === 1) {
+            // Notes: [len][...utf8...]
+            if (pos >= metaEnd) break;
+            const len = c.bytes[pos]; pos += 1;
+            if (pos + len > metaEnd) break;
+            meta.notes = decoder.decode(c.bytes.slice(pos, pos + len));
+            pos += len;
+          } else if (tlvType === 2) {
+            // Flags: [flags_byte] — no length prefix
+            if (pos >= metaEnd) break;
+            meta.flags = c.bytes[pos]; pos += 1;
+          } else if (tlvType === 3) {
+            // Amiibo ID: [head u32 LE][tail u32 LE] — no length prefix
+            if (pos + 8 > metaEnd) break;
+            const mv = new DataView(c.bytes.buffer, c.bytes.byteOffset + pos, 8);
+            meta.amiiboHead = mv.getUint32(0, true);
+            meta.amiiboTail = mv.getUint32(4, true);
+            pos += 8;
+          } else {
+            break; // unknown type, length unknown — cannot continue
+          }
+        }
+        c.offset = metaEnd;
+      }
+      entries.push({ name, size, type, meta });
+    }
+    return { ok: true, error: null, data: entries };
+  }
+
+  async createFolder(path) {
+    const r = await this._sendCommand(0x17, encodeString(path));
+    if (r.status !== 0) return { ok: false, error: this._vfsError(r.status), data: null };
+    return { ok: true, error: null, data: null };
+  }
+
+  async removePath(path) {
+    const r = await this._sendCommand(0x18, encodeString(path));
+    if (r.status !== 0) return { ok: false, error: this._vfsError(r.status), data: null };
+    return { ok: true, error: null, data: null };
+  }
+
+  async renamePath(oldPath, newPath) {
+    const r = await this._sendCommand(0x19, concatBytes(encodeString(oldPath), encodeString(newPath)));
+    if (r.status !== 0) return { ok: false, error: this._vfsError(r.status), data: null };
+    return { ok: true, error: null, data: null };
+  }
+
+  async openFile(path, mode) {
+    const payload = concatBytes(encodeString(path), Uint8Array.of(mode === "r" ? 0x08 : 0x16));
+    const r = await this._sendCommand(0x12, payload);
+    if (r.status !== 0) return { ok: false, error: this._vfsError(r.status), data: null };
+    const c = new Cursor(r.payload);
+    return { ok: true, error: null, data: c.u8() };
+  }
+
+  async writeFileChunk(fileId, chunk) {
+    const r = await this._sendCommand(0x15, concatBytes(Uint8Array.of(fileId), chunk));
+    if (r.status !== 0) return { ok: false, error: this._vfsError(r.status), data: null };
+    return { ok: true, error: null, data: null };
+  }
+
+  async closeFile(fileId) {
+    const r = await this._sendCommand(0x13, Uint8Array.of(fileId));
+    if (r.status !== 0) return { ok: false, error: this._vfsError(r.status), data: null };
+    return { ok: true, error: null, data: null };
+  }
+
+  async readFileData(path) {
+    const openRes = await this.openFile(path, "r");
+    if (!openRes.ok) return { ok: false, error: openRes.error, data: null };
+    const fileId = openRes.data;
+    const r = await this._sendCommand(0x14, Uint8Array.of(fileId));
+    await this.closeFile(fileId);
+    if (r.status !== 0) return { ok: false, error: this._vfsError(r.status), data: null };
+    return { ok: true, error: null, data: r.payload };
+  }
+
+  // --- Higher-level helpers ---
+
+  async ensureFolder(remotePath) {
+    const root = remotePath.slice(0, 3);
+    if (remotePath === root) return;
+    const segments = remotePath.slice(3).split("/").filter(Boolean);
+    let current = root;
+    for (const seg of segments) {
+      current = current === root ? `${root}${seg}` : `${current}/${seg}`;
+      validateRemotePath(current, "folder");
+      if (this.createdFolders.has(current)) continue;
+      const res = await this.createFolder(current);
+      if (!res.ok) {
+        const parent = getParentPath(current);
+        const listing = await this.readFolder(parent);
+        if (!listing.ok) throw new Error(listing.error);
+        const exists = listing.data.some(e => e.type === "DIR" && e.name === getBaseName(current));
+        if (!exists) throw new Error(res.error);
+        this._log(`Using existing ${current}`);
+      } else {
+        this._log(`Created ${current}`);
+      }
+      this.createdFolders.add(current);
+    }
+  }
+
+  async uploadFile(remotePath, file, onProgress, abortSignal, chunkSize = 128) {
+    validateRemotePath(remotePath, "file");
+    const openRes = await this.openFile(remotePath, "w");
+    if (!openRes.ok) throw new Error(openRes.error);
+    const fileId = openRes.data;
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    try {
+      if (bytes.length === 0) { onProgress(0, 0); return; }
+      let offset = 0;
+      while (offset < bytes.length) {
+        if (abortSignal && abortSignal.aborted) throw new Error("Upload aborted by user.");
+        const end = Math.min(offset + chunkSize, bytes.length);
+        const res = await this.writeFileChunk(fileId, bytes.slice(offset, end));
+        if (!res.ok) throw new Error(res.error);
+        offset = end;
+        onProgress(offset, bytes.length);
+      }
+    } finally {
+      await this.closeFile(fileId);
+    }
+  }
+
+  // --- Transport ---
+
+  _vfsError(status) {
+    const signed = status > 127 ? status - 256 : status;
+    return VFS_ERRORS[signed] || `Unknown error (status ${signed})`;
+  }
+
+  _sendCommand(cmd, payload = new Uint8Array()) {
+    const cmdName = CMD_NAMES[cmd] || `0x${cmd.toString(16)}`;
+    const run = () => this._performCommand(cmd, payload, cmdName);
+    this.queue = this.queue.catch(() => undefined).then(run);
+    return this.queue;
+  }
+
+  async _performCommand(cmd, payload, cmdName) {
+    if (!this.txChar) throw new Error("Not connected.");
+    this._log(`→ ${cmdName}${payload.length > 0 ? ` (${payload.length}B)` : ""}`);
+    return new Promise(async (resolve, reject) => {
+      this.pending = { resolve, reject, cmd };
+      try {
+        const frame = new Uint8Array(FRAME_HEADER_SIZE + payload.length);
+        frame[0] = cmd; frame[1] = 0; frame[2] = 0; frame[3] = 0;
+        frame.set(payload, FRAME_HEADER_SIZE);
+        if (typeof this.txChar.writeValueWithResponse === "function") {
+          await this.txChar.writeValueWithResponse(frame);
+        } else {
+          await this.txChar.writeValue(frame);
+        }
+      } catch (err) {
+        this.pending = null;
+        reject(err);
+      }
+    });
+  }
+
+  _onNotification(event) {
+    if (!this.pending) return;
+    const incoming = new Uint8Array(
+      event.target.value.buffer.slice(
+        event.target.value.byteOffset,
+        event.target.value.byteOffset + event.target.value.byteLength
+      )
+    );
+    const chunk = incoming[2] | (incoming[3] << 8);
+    const hasMore = (chunk & 0x8000) !== 0;
+    if (hasMore) {
+      if (!this.chunking) { this.rxParts = [incoming]; this.chunking = true; }
+      else { this.rxParts.push(incoming.slice(FRAME_HEADER_SIZE)); }
+      return;
+    }
+    let frame = incoming;
+    if (this.chunking) {
+      this.rxParts.push(incoming.slice(FRAME_HEADER_SIZE));
+      frame = concatBytes(...this.rxParts);
+      this.rxParts = []; this.chunking = false;
+    }
+    const response = {
+      cmd: frame[0],
+      status: frame[1],
+      chunk: frame[2] | (frame[3] << 8),
+      payload: frame.slice(FRAME_HEADER_SIZE),
+    };
+    const p = this.pending;
+    this.pending = null;
+    const cmdName = CMD_NAMES[response.cmd] || `0x${response.cmd.toString(16)}`;
+    if (response.status === 0) {
+      this._log(`← ${cmdName} OK${response.payload.length > 0 ? ` (${response.payload.length}B)` : ""}`);
     } else {
-      summary.otherCount += 1;
+      const errMsg = this._vfsError(response.status);
+      this._log(`← ${cmdName} ERR: ${errMsg}`);
     }
-  });
-
-  return summary;
-}
-
-function buildSanitizeOutcomeText(renamedCount, skipped) {
-  const parts = [`Updated ${formatItemCount(renamedCount, "name")}.`];
-  if (skipped.length === 0) {
-    return parts.join(" ");
-  }
-
-  const summary = summarizeSanitizeSkips(skipped);
-  const reasonParts = [];
-  if (summary.collisionCount > 0) {
-    reasonParts.push(`${formatItemCount(summary.collisionCount, "collision")}`);
-  }
-  if (summary.pathLimitCount > 0) {
-    reasonParts.push(`${formatItemCount(summary.pathLimitCount, "path-limit issue")}`);
-  }
-  if (summary.otherCount > 0) {
-    reasonParts.push(`${formatItemCount(summary.otherCount, "other issue")}`);
-  }
-
-  parts.push(`Skipped ${formatItemCount(skipped.length, "item")}${reasonParts.length > 0 ? `, ${reasonParts.join(", ")}` : ""}.`);
-  return parts.join(" ");
-}
-
-function logSanitizeSkips(skipped) {
-  if (skipped.length === 0) {
-    return;
-  }
-
-  const previewCount = Math.min(skipped.length, 6);
-  for (const item of skipped.slice(0, previewCount)) {
-    log(`Skipped ${item.path}, ${item.reason}.`);
-  }
-
-  if (skipped.length > previewCount) {
-    log(`Skipped ${skipped.length - previewCount} more item${skipped.length - previewCount === 1 ? "" : "s"} during name cleanup.`);
-  }
-}
-
-function sortManagerEntriesForDelete(entries) {
-  return [...entries].sort((left, right) => {
-    const depthDifference = right.fullPath.split("/").length - left.fullPath.split("/").length;
-    if (depthDifference !== 0) {
-      return depthDifference;
+    if (response.cmd !== p.cmd) {
+      p.reject(new Error(`Unexpected response 0x${response.cmd.toString(16)} for 0x${p.cmd.toString(16)}`));
+      return;
     }
-
-    if (left.type !== right.type) {
-      return left.type === "FILE" ? -1 : 1;
-    }
-
-    return left.name.localeCompare(right.name, undefined, { numeric: true, sensitivity: "base" });
-  });
-}
-
-function canManagerGoUp() {
-  const drive = getSelectedDrive();
-  if (!drive || !state.manager.currentPath) {
-    return false;
+    p.resolve(response);
   }
-  return state.manager.currentPath !== getDriveRoot(drive);
 }
 
-function resetManagerState() {
-  state.manager.currentPath = "";
-  state.manager.entries = [];
-  state.manager.selectedPaths = [];
-  state.manager.loaded = false;
-  state.manager.busy = false;
-  state.manager.busyState = createDefaultManagerBusyState();
-  state.manager.outcome = createDefaultManagerOutcome();
+// === DOM References ===
+
+const el = {
+  // Top bar
+  btnConnect: document.getElementById("btnConnect"),
+  topbarBadge: document.getElementById("topbarBadge"),
+  topbarDrive: document.getElementById("topbarDrive"),
+  topbarDriveInfo: document.getElementById("topbarDriveInfo"),
+  topbarDiv: document.getElementById("topbarDiv"),
+  topbarBreadcrumb: document.getElementById("topbarBreadcrumb"),
+  btnFormat: document.getElementById("btnFormat"),
+  btnUp: document.getElementById("btnUp"),
+  btnRefresh: document.getElementById("btnRefresh"),
+  btnNewFolder: document.getElementById("btnNewFolder"),
+  btnUploadToggle: document.getElementById("btnUploadToggle"),
+  btnLogToggle: document.getElementById("btnLogToggle"),
+  connError: document.getElementById("connError"),
+
+  // Main overlay
+  mainOverlay: document.getElementById("mainOverlay"),
+  mainOverlayIcon: document.getElementById("mainOverlayIcon"),
+  mainOverlaySpinner: document.getElementById("mainOverlaySpinner"),
+  mainOverlayTitle: document.getElementById("mainOverlayTitle"),
+  mainOverlaySub: document.getElementById("mainOverlaySub"),
+
+  // Context panel — folder state
+  panelFolder: document.getElementById("panelFolder"),
+  panelFolderName: document.getElementById("panelFolderName"),
+  panelFolderPath: document.getElementById("panelFolderPath"),
+  panelFolderCount: document.getElementById("panelFolderCount"),
+  panelDriveBarFill: document.getElementById("panelDriveBarFill"),
+  panelDriveUsage: document.getElementById("panelDriveUsage"),
+
+  // Context panel — file/amiibo state
+  panelFile: document.getElementById("panelFile"),
+  panelFileLabel: document.getElementById("panelFileLabel"),
+  panelFileName: document.getElementById("panelFileName"),
+  panelFileSize: document.getElementById("panelFileSize"),
+  panelFileFlags: document.getElementById("panelFileFlags"),
+  panelFileNotes: document.getElementById("panelFileNotes"),
+  panelAmiibo: document.getElementById("panelAmiibo"),
+  panelAmiiboContent: document.getElementById("panelAmiiboContent"),
+  panelBtnRename: document.getElementById("panelBtnRename"),
+  panelBtnDelete: document.getElementById("panelBtnDelete"),
+
+  // Context panel — upload state
+  panelUpload: document.getElementById("panelUpload"),
+  btnPickFolder: document.getElementById("btnPickFolder"),
+  btnPickFiles: document.getElementById("btnPickFiles"),
+  uploadQueue: document.getElementById("uploadQueue"),
+  btnUploadStart: document.getElementById("btnUploadStart"),
+  btnUploadAbort: document.getElementById("btnUploadAbort"),
+  btnUploadClear: document.getElementById("btnUploadClear"),
+  folderInput: document.getElementById("folderInput"),
+  filesInput: document.getElementById("filesInput"),
+  btnUploadClose: document.getElementById("btnUploadClose"),
+
+  // Log overlay
+  logOverlay: document.getElementById("logOverlay"),
+  protocolLog: document.getElementById("protocolLog"),
+  btnLogClose: document.getElementById("btnLogClose"),
+
+  // Browser lock
+  browserLockOverlay: document.getElementById("browserLockOverlay"),
+  browserLockTitle: document.getElementById("browserLockTitle"),
+
+  // Selection bar
+  selectionBar: document.getElementById("selectionBar"),
+  selectionCount: document.getElementById("selectionCount"),
+  btnLowercase: document.getElementById("btnLowercase"),
+  btnDelete: document.getElementById("btnDelete"),
+  btnSelectAll: document.getElementById("btnSelectAll"),
+  btnClearSelection: document.getElementById("btnClearSelection"),
+
+  // File table
+  checkAll: document.getElementById("checkAll"),
+  fileTableBody: document.getElementById("fileTableBody"),
+
+  // Modals
+  formatModal: document.getElementById("formatModal"),
+  formatModalMsg: document.getElementById("formatModalMsg"),
+  btnFormatCancel: document.getElementById("btnFormatCancel"),
+  btnFormatConfirm: document.getElementById("btnFormatConfirm"),
+
+  newFolderModal: document.getElementById("newFolderModal"),
+  newFolderPath: document.getElementById("newFolderPath"),
+  newFolderInput: document.getElementById("newFolderInput"),
+  btnNewFolderCancel: document.getElementById("btnNewFolderCancel"),
+  btnNewFolderConfirm: document.getElementById("btnNewFolderConfirm"),
+
+  renameModal: document.getElementById("renameModal"),
+  renameInput: document.getElementById("renameInput"),
+  btnRenameCancel: document.getElementById("btnRenameCancel"),
+  btnRenameConfirm: document.getElementById("btnRenameConfirm"),
+
+  deleteModal: document.getElementById("deleteModal"),
+  deleteCount: document.getElementById("deleteCount"),
+  deleteModalMsg: document.getElementById("deleteModalMsg"),
+  btnDeleteCancel: document.getElementById("btnDeleteCancel"),
+  btnDeleteConfirm: document.getElementById("btnDeleteConfirm"),
+
+  sanitizeModalFiles: document.getElementById("sanitizeModalFiles"),
+  sanitizeFilesCount: document.getElementById("sanitizeFilesCount"),
+  sanitizeFilesList: document.getElementById("sanitizeFilesList"),
+  btnSanitizeFilesCancel: document.getElementById("btnSanitizeFilesCancel"),
+  btnSanitizeFilesConfirm: document.getElementById("btnSanitizeFilesConfirm"),
+
+  sanitizeModalFolders: document.getElementById("sanitizeModalFolders"),
+  btnSanitizeFoldersCancel: document.getElementById("btnSanitizeFoldersCancel"),
+  btnSanitizeFoldersConfirm: document.getElementById("btnSanitizeFoldersConfirm"),
+
+  sanitizeModalNone: document.getElementById("sanitizeModalNone"),
+  sanitizeNonePath: document.getElementById("sanitizeNonePath"),
+  btnSanitizeNoneCancel: document.getElementById("btnSanitizeNoneCancel"),
+  btnSanitizeNoneConfirm: document.getElementById("btnSanitizeNoneConfirm"),
+};
+
+// === App State ===
+
+const state = {
+  client: null,
+  connState: "disconnected",
+  drive: null,
+  currentPath: "",
+  entries: [],
+  selectedNames: new Set(),
+  drawerEntry: null,       // currently displayed file entry in panel
+  panelMode: "folder",     // "folder" | "file" | "upload"
+  panelPrevMode: "folder", // restored when upload panel closes
+  uploadPlan: [],
+  uploadActive: false,
+  abortController: null,
+  transferSpeed: "",
+  folderCache: new Map(),
+};
+
+// === Protocol Log ===
+
+function log(msg, role) {
+  if (!role) {
+    if (msg.startsWith("\u2192")) role = "cmd";
+    else if (msg.includes("ERR")) role = "err";
+    else if (msg.startsWith("\u2190")) role = "ok";
+  }
+  const now = new Date();
+  const ts = [now.getHours(), now.getMinutes(), now.getSeconds()]
+    .map(n => String(n).padStart(2, "0")).join(":");
+  const line = document.createElement("span");
+  line.innerHTML = `<span class="ts">[${ts}]</span> ` +
+    (role ? `<span class="${role}">${escapeHtml(msg)}</span>` : escapeHtml(msg)) +
+    "\n";
+  el.protocolLog.appendChild(line);
+  el.protocolLog.scrollTop = el.protocolLog.scrollHeight;
 }
 
-function syncManagerPathWithDrive(forceRoot = false) {
-  const drive = getSelectedDrive();
-  if (!drive) {
-    resetManagerState();
-    elements.managerPathInput.value = "";
-    return;
+// === Connection State Machine ===
+
+
+function setConnState(newState) {
+  state.connState = newState;
+
+  if (newState === "disconnected") {
+
+    // Main overlay
+    el.mainOverlay.classList.add("active");
+    el.mainOverlayIcon.hidden = false;
+    el.mainOverlayIcon.textContent = "bluetooth_disabled";
+    el.mainOverlaySpinner.hidden = true;
+    el.mainOverlayTitle.textContent = "No device connected";
+    el.mainOverlaySub.textContent = "Connect a device from the sidebar to get started.";
+
+    // Sidebar sections disabled
+    el.driveSection.classList.add("section-disabled");
+    el.uploadSection.classList.add("section-disabled");
+
+    // Connect button
+    el.btnConnect.innerHTML = '<span class="ms">bluetooth</span> Connect';
+    el.btnConnect.classList.add("primary");
+    el.btnConnect.classList.remove("danger", "btn-connecting");
+    el.btnConnect.disabled = false;
+
+    // Connection status
+    el.connStatus.textContent = "Not connected";
+    el.connStatus.classList.remove("connected");
+    el.connDetail.textContent = "";
+    el.connError.hidden = true;
+    el.connError.textContent = "";
+
+    // Clear state
+    state.drive = null;
+    state.entries = [];
+    state.selectedNames.clear();
+    state.currentPath = "";
+    closeDrawer();
+    renderDrive(null);
+    renderFileTable();
+    updateSelectionBar();
+    el.pathDisplay.textContent = "";
+
+  } else if (newState === "connecting") {
+
+    // Main overlay
+    el.mainOverlay.classList.add("active");
+    el.mainOverlayIcon.hidden = true;
+    el.mainOverlaySpinner.hidden = false;
+    el.mainOverlayTitle.textContent = "Connecting to device\u2026";
+    el.mainOverlaySub.textContent = "";
+
+    // Sidebar sections remain disabled
+    el.driveSection.classList.add("section-disabled");
+    el.uploadSection.classList.add("section-disabled");
+
+    // Connect button
+    el.btnConnect.innerHTML = '<md-circular-progress indeterminate></md-circular-progress> Connecting\u2026';
+    el.btnConnect.classList.add("btn-connecting");
+    el.btnConnect.disabled = true;
+
+    // Clear previous error
+    el.connError.hidden = true;
+    el.connError.textContent = "";
+
+  } else if (newState === "connected") {
+
+    // Main overlay
+    el.mainOverlay.classList.remove("active");
+
+    // Sidebar sections enabled
+    el.driveSection.classList.remove("section-disabled");
+    el.uploadSection.classList.remove("section-disabled");
+    el.logSection.classList.remove("section-disabled");
+
+    // Connect button becomes disconnect
+    el.btnConnect.innerHTML = '<span class="ms">bluetooth_connected</span> Disconnect';
+    el.btnConnect.classList.remove("primary", "btn-connecting");
+    el.btnConnect.classList.add("danger");
+    el.btnConnect.disabled = false;
+
+    // Connection status
+    el.connStatus.textContent = "Connected";
+    el.connStatus.classList.add("connected");
+    el.connError.hidden = true;
+    el.connError.textContent = "";
   }
 
-  const root = getDriveRoot(drive);
-  if (forceRoot || !state.manager.currentPath || !state.manager.currentPath.startsWith(`${drive}:`)) {
-    state.manager.currentPath = root;
-    state.manager.entries = [];
-    state.manager.selectedPaths = [];
-    state.manager.loaded = false;
-  }
-
-  elements.managerPathInput.value = state.manager.currentPath;
-}
-
-function setConnected(connected) {
-  state.connected = connected;
-  elements.connectionState.textContent = connected ? "Connected" : "Not connected";
-  elements.connectButton.textContent = connected ? "Disconnect device" : "Connect device";
   updateControls();
+}
 
-  if (!connected) {
-    state.drives = [];
-    elements.firmwareVersion.textContent = "-";
-    elements.bleAddress.textContent = "-";
-    resetManagerState();
-    renderDriveOptions();
-    renderManager();
+function showConnError(msg) {
+  el.connError.textContent = msg;
+  el.connError.hidden = false;
+}
+
+// === Connection ===
+
+async function connectOrDisconnect() {
+  if (state.connState === "connected") {
+    if (state.client) state.client.disconnect();
+    setConnState("disconnected");
+    return;
+  }
+
+  setConnState("connecting");
+
+  if (!state.client) {
+    state.client = new PixlToolsClient(log);
+    state.client.onDisconnect = () => setConnState("disconnected");
+  }
+
+  try {
+    await state.client.connect();
+    setConnState("connected");
+
+    // Get version info
+    const ver = await state.client.getVersion();
+    if (ver.ok) {
+      const parts = [];
+      if (ver.data.version) parts.push(ver.data.version);
+      if (ver.data.bleAddress) parts.push(ver.data.bleAddress);
+      el.connDetail.textContent = parts.join(" \u2014 ");
+    }
+
+    // List drives
+    const dr = await state.client.listDrives();
+    if (dr.ok && dr.data.length > 0) {
+      state.drive = dr.data[0];
+      renderDrive(state.drive);
+    }
+
+    // Browse root
+    await browseFolder("E:/");
+
+  } catch (err) {
+    log(`Connection failed: ${err.message}`);
+    showConnError(err.message);
+    setConnState("disconnected");
   }
 }
+
+// === Drive Panel ===
+
+function renderDrive(driveData) {
+  if (!driveData) {
+    el.driveBarFill.style.width = "0%";
+    el.driveBarFill.classList.remove("high");
+    el.driveInfo.innerHTML = "&mdash;";
+    return;
+  }
+
+  const pct = driveData.totalBytes > 0
+    ? Math.round((driveData.usedBytes / driveData.totalBytes) * 100)
+    : 0;
+  el.driveBarFill.style.width = `${pct}%`;
+  el.driveBarFill.classList.toggle("high", pct >= 85);
+  const used = formatBytes(driveData.usedBytes);
+  const total = formatBytes(driveData.totalBytes);
+  el.driveInfo.textContent = `${used} / ${total}`;
+}
+
+// === Format Modal ===
+
+function openModal(modalEl) { modalEl.classList.add("open"); }
+function closeModal(modalEl) { modalEl.classList.remove("open"); }
+
+el.btnFormat.addEventListener("click", () => openModal(el.formatModal));
+el.btnFormatCancel.addEventListener("click", () => closeModal(el.formatModal));
+
+el.btnFormatConfirm.addEventListener("click", async () => {
+  closeModal(el.formatModal);
+  if (!state.client) return;
+  try {
+    el.btnFormatConfirm.disabled = true;
+    const res = await state.client.formatDrive("E");
+    if (res.ok) {
+      log("Drive E: formatted successfully.");
+      invalidateCache();
+      // Refresh drive info
+      const dr = await state.client.listDrives();
+      if (dr.ok && dr.data.length > 0) {
+        state.drive = dr.data[0];
+        renderDrive(state.drive);
+      }
+      await browseFolder("E:/");
+    } else {
+      log(`Format failed: ${res.error}`, "err");
+    }
+  } catch (err) {
+    log(`Format error: ${err.message}`, "err");
+  } finally {
+    el.btnFormatConfirm.disabled = false;
+  }
+});
+
+// Close modals on backdrop click
+for (const modal of [el.formatModal, el.newFolderModal, el.renameModal, el.deleteModal,
+    el.sanitizeModalFiles, el.sanitizeModalFolders, el.sanitizeModalNone]) {
+  modal.addEventListener("click", (e) => {
+    if (e.target === modal) closeModal(modal);
+  });
+}
+
+// === Update Controls ===
 
 function updateControls() {
-  const hasPlan = state.plan.length > 0;
-  const hasDrive = Boolean(getSelectedDrive());
-  const repoBusy = state.uploadActive || state.manager.busy;
-  const managerReady = state.connected && hasDrive && !state.uploadActive;
-  const selectedCount = state.manager.selectedPaths.length;
-  const allSelected = state.manager.loaded && state.manager.entries.length > 0 && selectedCount === state.manager.entries.length;
-
-  elements.modeUploaderButton.disabled = repoBusy;
-  elements.modeManagerButton.disabled = repoBusy;
-
-  elements.refreshButton.disabled = !state.connected || repoBusy;
-  elements.driveSelect.disabled = !state.connected || repoBusy;
-  elements.remoteBaseInput.disabled = !state.connected || repoBusy;
-  elements.createPathButton.disabled = !state.connected || repoBusy;
-
-  elements.pickFolderButton.disabled = !state.connected || repoBusy;
-  elements.pickFilesButton.disabled = !state.connected || repoBusy;
-  elements.startUploadButton.disabled = !state.connected || !hasPlan || repoBusy;
-  elements.abortButton.disabled = !state.uploadActive;
-  elements.clearPlanButton.disabled = repoBusy || !hasPlan;
-
-  elements.managerPathInput.disabled = !managerReady || state.manager.busy;
-  elements.managerOpenButton.disabled = !managerReady || state.manager.busy;
-  elements.managerRefreshButton.disabled = !managerReady || state.manager.busy;
-  elements.managerUpButton.disabled = !managerReady || state.manager.busy || !canManagerGoUp();
-  elements.managerUsePathButton.disabled = !managerReady || !state.manager.currentPath;
-  elements.managerFolderNameInput.disabled = !managerReady || state.manager.busy;
-  elements.managerCreateFolderButton.disabled = !managerReady || state.manager.busy || !elements.managerFolderNameInput.value.trim();
-  elements.managerSanitizeButton.disabled = !managerReady || state.manager.busy || !state.manager.loaded || state.manager.entries.length === 0;
-  elements.managerSelectAllButton.disabled = !managerReady || state.manager.busy || !state.manager.loaded || state.manager.entries.length === 0 || allSelected;
-  elements.managerClearSelectionButton.disabled = !managerReady || state.manager.busy || selectedCount === 0;
-  elements.managerDeleteButton.disabled = !managerReady || state.manager.busy || selectedCount === 0;
-  elements.managerDeleteButton.textContent = selectedCount > 0 ? `Delete ${selectedCount} selected` : "Delete selected";
+  const connected = state.connState === "connected";
+  const uploading = state.uploadActive;
+  el.btnUp.disabled = !connected || uploading || !state.currentPath || state.currentPath === "E:/";
+  el.btnRefresh.disabled = !connected || uploading;
+  el.btnNewFolder.disabled = !connected || uploading;
+  el.btnFormat.disabled = !connected || uploading;
+  el.checkAll.disabled = !connected || state.entries.length === 0;
+  el.btnPickFolder.disabled = !connected || uploading;
+  el.btnPickFiles.disabled = !connected || uploading;
+  el.btnUploadStart.disabled = !connected || uploading || state.uploadPlan.length === 0;
+  el.btnUploadAbort.disabled = !uploading;
+  el.btnUploadClear.disabled = uploading || state.uploadPlan.length === 0;
 }
 
-function renderDriveOptions() {
-  elements.driveSelect.innerHTML = "";
-  if (!state.drives.length) {
-    const option = document.createElement("option");
-    option.value = "";
-    option.textContent = state.connected ? "No writable drives found" : "Connect first";
-    elements.driveSelect.appendChild(option);
-    syncManagerPathWithDrive();
-    return;
+// === Cache ===
+
+function invalidateCache() {
+  state.folderCache.clear();
+  if (state.client) state.client.createdFolders.clear();
+}
+
+// === File Browser ===
+
+async function browseFolder(path) {
+  if (!state.client || state.connState !== "connected") return;
+
+  // Check cache first
+  let entries = state.folderCache.get(path);
+  if (!entries) {
+    try {
+      const res = await state.client.readFolder(path);
+      if (!res.ok) {
+        log(`Failed to read ${path}: ${res.error}`, "err");
+        return;
+      }
+      entries = sortEntries(res.data);
+      state.folderCache.set(path, entries);
+      for (const e of entries) {
+        if (e.type === "DIR") state.client.createdFolders.add(joinChildPath(path, e.name));
+      }
+    } catch (err) {
+      log(`Error reading ${path}: ${err.message}`, "err");
+      return;
+    }
   }
 
-  state.drives.forEach((drive, index) => {
-    const option = document.createElement("option");
-    option.value = drive.label;
-    option.textContent = `${drive.label}:/ ${drive.name} ${drive.status === 0 ? `(${formatBytes(drive.usedBytes)}/${formatBytes(drive.totalBytes)})` : `(status ${drive.status})`}`;
-    option.disabled = drive.status !== 0;
-    if (index === 0) {
-      option.selected = true;
-    }
-    elements.driveSelect.appendChild(option);
-  });
-
-  syncManagerPathWithDrive();
-}
-
-function getSelectedDrive() {
-  return elements.driveSelect.value;
-}
-
-function resetPlan() {
-  state.plan = [];
-  state.queuedFolders = [];
-  state.queuedFiles = [];
-  state.itemSeed = 0;
-  renderPlan();
-  renderSummary();
+  state.currentPath = path;
+  state.entries = entries;
+  state.selectedNames.clear();
+  closeDrawer();
+  el.pathDisplay.textContent = path;
+  el.checkAll.checked = false;
+  renderFileTable();
+  updateSelectionBar();
   updateControls();
 }
 
-function buildUploadPlanSummaryText() {
-  return `Plan ready: ${formatItemCount(state.queuedFolders.length, "folder")} and ${formatItemCount(state.queuedFiles.length, "file")} for ${getSelectedDrive() || "?"}:${normalizeRemoteBasePath(elements.remoteBaseInput.value)}.`;
+// === Render File Table ===
+
+function formatFlagShort(flags) {
+  const parts = [];
+  if (flags & 0x01) parts.push("R");
+  if (flags & 0x02) parts.push("H");
+  if (flags & 0x04) parts.push("S");
+  return parts.length > 0 ? parts.join(", ") : "\u2014";
 }
 
-function renderSummary() {
-  const totalBytes = state.queuedFiles.reduce((sum, file) => sum + file.file.size, 0);
-  elements.folderCount.textContent = `${state.queuedFolders.length}`;
-  elements.fileCount.textContent = `${state.queuedFiles.length}`;
-  elements.totalBytes.textContent = formatBytes(totalBytes);
-  elements.queueStats.textContent = `${state.plan.length} queued item${state.plan.length === 1 ? "" : "s"}`;
+function formatAmiiboHex(head, tail) {
+  if (head == null || tail == null) return "\u2014";
+  const h = (head >>> 0).toString(16).toUpperCase().padStart(8, "0");
+  const t = (tail >>> 0).toString(16).toUpperCase().padStart(8, "0");
+  return `${h}:${t}`;
+}
 
-  if (state.plan.length === 0) {
-    elements.selectionSummary.textContent = "Choose a folder or files to build an upload plan.";
+// AmiiboAPI lookup — session cache to avoid re-fetching the same ID
+const _amiiboCache = new Map();
+
+async function lookupAmiibo(head, tail) {
+  const key = `${head >>> 0}:${tail >>> 0}`;
+  if (_amiiboCache.has(key)) return _amiiboCache.get(key);
+  const headHex = (head >>> 0).toString(16).toUpperCase().padStart(8, "0");
+  const tailHex = (tail >>> 0).toString(16).toUpperCase().padStart(8, "0");
+  let info = null;
+  try {
+    const res = await fetch(`https://amiiboapi.org/api/amiibo/?head=${headHex}&tail=${tailHex}`);
+    if (res.ok) info = (await res.json()).amiibo?.[0] ?? null;
+  } catch { /* network unavailable — leave null */ }
+  _amiiboCache.set(key, info);
+  return info;
+}
+
+function renderAmiiboField(head, tail, info) {
+  const hex = `<span class="drawer-amiibo-hex">${escapeHtml(formatAmiiboHex(head, tail))}</span>`;
+  if (!info) return hex;
+  const seriesLine = info.amiiboSeries && info.amiiboSeries !== info.gameSeries
+    ? `${escapeHtml(info.gameSeries)} · ${escapeHtml(info.amiiboSeries)}`
+    : escapeHtml(info.gameSeries);
+  return `<div class="drawer-amiibo-info">` +
+    `<span class="drawer-amiibo-name">${escapeHtml(info.name)}</span>` +
+    `<span class="drawer-amiibo-series">${seriesLine}</span>` +
+    hex +
+    `</div>` +
+    `<img src="${escapeHtml(info.image)}" alt="${escapeHtml(info.name)}" loading="lazy">`;
+}
+
+function applyAmiiboDisplay(entry, head, tail) {
+  const key = `${head >>> 0}:${tail >>> 0}`;
+  if (_amiiboCache.has(key)) {
+    // Already cached — render immediately, no spinner
+    el.drawerAmiibo.innerHTML = renderAmiiboField(head, tail, _amiiboCache.get(key));
+    return;
+  }
+  // Show hex + spinner while API fetches
+  el.drawerAmiibo.innerHTML =
+    `<div class="drawer-amiibo-info">` +
+    `<span class="drawer-amiibo-hex">${escapeHtml(formatAmiiboHex(head, tail))}</span>` +
+    `</div>` +
+    `<div class="drawer-amiibo-loading"><md-circular-progress indeterminate style="--md-circular-progress-size:28px"></md-circular-progress></div>`;
+  lookupAmiibo(head, tail).then(info => {
+    if (state.drawerEntry !== entry) return;
+    el.drawerAmiibo.innerHTML = renderAmiiboField(head, tail, info);
+  });
+}
+
+function renderFileTable() {
+  if (state.entries.length === 0) {
+    el.fileTableBody.innerHTML = '<tr><td colspan="8" class="empty-state">This folder is empty.</td></tr>';
+    return;
+  }
+
+  const rows = [];
+  for (const entry of state.entries) {
+    const isDir = entry.type === "DIR";
+    const checked = state.selectedNames.has(entry.name) ? "checked" : "";
+    const nameClass = isDir ? "cell-name folder" : "cell-name";
+    const icon = isDir ? "folder" : "insert_drive_file";
+    const size = isDir ? "\u2014" : formatBytes(entry.size);
+    const flags = entry.meta ? formatFlagShort(entry.meta.flags) : "\u2014";
+    const amiibo = entry.meta ? formatAmiiboHex(entry.meta.amiiboHead, entry.meta.amiiboTail) : "\u2014";
+    const notes = entry.meta && entry.meta.notes ? escapeHtml(entry.meta.notes) : "\u2014";
+
+    rows.push(
+      `<tr data-name="${escapeHtml(entry.name)}">` +
+      `<td class="cell-check"><input type="checkbox" ${checked}></td>` +
+      `<td class="${nameClass}">${escapeHtml(entry.name)}</td>` +
+      `<td class="cell-kind"><span class="ms-sm">${icon}</span></td>` +
+      `<td class="cell-size">${size}</td>` +
+      `<td class="cell-flags">${flags}</td>` +
+      `<td class="cell-amiibo">${amiibo}</td>` +
+      `<td class="cell-notes">${notes}</td>` +
+      `<td class="cell-actions"><button class="ghost" title="Rename"><span class="ms-sm">edit</span></button></td>` +
+      `</tr>`
+    );
+  }
+  el.fileTableBody.innerHTML = rows.join("");
+
+  // Reapply drawer-active if drawer is open for a visible entry
+  if (state.drawerEntry) {
+    const activeRow = el.fileTableBody.querySelector(`tr[data-name="${CSS.escape(state.drawerEntry.name)}"]`);
+    if (activeRow) activeRow.classList.add("drawer-active");
+  }
+}
+
+// === Selection Bar ===
+
+function updateSelectionBar() {
+  const count = state.selectedNames.size;
+  el.selectionBar.classList.toggle("visible", state.entries.length > 0);
+  el.selectionCount.textContent = count > 0 ? `${count} selected` : "";
+  el.btnDelete.disabled = count === 0;
+  el.btnLowercase.disabled = false;
+  el.checkAll.checked = state.entries.length > 0 && count === state.entries.length;
+  el.checkAll.indeterminate = count > 0 && count < state.entries.length;
+}
+
+// === Helpers ===
+
+function applySelectionToRows(checked) {
+  for (const row of el.fileTableBody.querySelectorAll("tr[data-name]")) {
+    const cb = row.querySelector("input[type=checkbox]");
+    if (cb) cb.checked = checked;
+    row.classList.toggle("selected", checked);
+  }
+}
+
+// === File Table Event Delegation ===
+
+el.fileTableBody.addEventListener("click", (e) => {
+  const row = e.target.closest("tr");
+  if (!row || !row.dataset.name) return;
+  const name = row.dataset.name;
+  const entry = state.entries.find(en => en.name === name);
+  if (!entry) return;
+
+  // Checkbox click
+  const checkbox = e.target.closest("input[type=checkbox]");
+  if (checkbox) {
+    if (checkbox.checked) {
+      state.selectedNames.add(name);
+    } else {
+      state.selectedNames.delete(name);
+    }
+    row.classList.toggle("selected", checkbox.checked);
+    updateSelectionBar();
+    return;
+  }
+
+  // Rename button click
+  const renameBtn = e.target.closest(".cell-actions button");
+  if (renameBtn) {
+    renameTarget = entry.name;
+    el.renameInput.value = entry.name;
+    openModal(el.renameModal);
+    el.renameInput.focus();
+    el.renameInput.select();
+    return;
+  }
+
+  // Folder name click — navigate
+  const nameCell = e.target.closest(".cell-name");
+  if (nameCell) {
+    if (entry.type === "DIR") {
+      browseFolder(joinChildPath(state.currentPath, entry.name));
+    } else {
+      openDrawer(entry);
+    }
+    return;
+  }
+});
+
+// Check all
+el.checkAll.addEventListener("change", () => {
+  const checked = el.checkAll.checked;
+  state.selectedNames.clear();
+  if (checked) {
+    for (const entry of state.entries) state.selectedNames.add(entry.name);
+  }
+  applySelectionToRows(checked);
+  updateSelectionBar();
+});
+
+// Toolbar buttons
+el.btnUp.addEventListener("click", () => {
+  if (state.currentPath && state.currentPath !== "E:/") {
+    browseFolder(getParentPath(state.currentPath));
+  }
+});
+
+el.btnRefresh.addEventListener("click", () => {
+  if (state.currentPath) {
+    state.folderCache.delete(state.currentPath);
+    browseFolder(state.currentPath);
+  }
+});
+
+// New folder modal
+el.btnNewFolder.addEventListener("click", () => {
+  el.newFolderPath.textContent = state.currentPath || "E:/";
+  el.newFolderInput.value = "";
+  openModal(el.newFolderModal);
+  el.newFolderInput.focus();
+});
+
+el.btnNewFolderCancel.addEventListener("click", () => closeModal(el.newFolderModal));
+
+el.btnNewFolderConfirm.addEventListener("click", async () => {
+  const name = el.newFolderInput.value.trim();
+  if (!name) return;
+  closeModal(el.newFolderModal);
+  if (!state.client) return;
+  try {
+    const folderPath = joinChildPath(state.currentPath, name);
+    validateRemotePath(folderPath, "folder");
+    const res = await state.client.createFolder(folderPath);
+    if (res.ok) {
+      log(`Created folder: ${folderPath}`);
+      state.folderCache.delete(state.currentPath);
+      await browseFolder(state.currentPath);
+    } else {
+      log(`Failed to create folder: ${res.error}`, "err");
+    }
+  } catch (err) {
+    log(`Error creating folder: ${err.message}`, "err");
+  }
+});
+
+// Selection bar buttons
+el.btnSelectAll.addEventListener("click", () => {
+  state.selectedNames.clear();
+  for (const entry of state.entries) state.selectedNames.add(entry.name);
+  applySelectionToRows(true);
+  el.checkAll.checked = true;
+  updateSelectionBar();
+});
+
+el.btnClearSelection.addEventListener("click", () => {
+  state.selectedNames.clear();
+  for (const row of el.fileTableBody.querySelectorAll("tr[data-name]")) {
+    const cb = row.querySelector("input[type=checkbox]");
+    if (cb) cb.checked = false;
+    row.classList.remove("selected");
+  }
+  el.checkAll.checked = false;
+  updateSelectionBar();
+});
+
+// Delete modal (open only — actual delete is wired in a later task)
+el.btnDelete.addEventListener("click", () => {
+  const count = state.selectedNames.size;
+  if (count === 0) return;
+  el.deleteCount.textContent = String(count);
+  el.deleteModalMsg.textContent = `This will permanently delete ${itemCount(count, "item")}. This action cannot be undone.`;
+  openModal(el.deleteModal);
+});
+
+el.btnDeleteCancel.addEventListener("click", () => closeModal(el.deleteModal));
+el.btnRenameCancel.addEventListener("click", () => closeModal(el.renameModal));
+
+// Lowercase modal
+el.btnLowercase.addEventListener("click", () => {
+  const count = state.selectedNames.size;
+  if (count === 0) {
+    el.sanitizeNonePath.textContent = state.currentPath || "E:/";
+    openModal(el.sanitizeModalNone);
+    return;
+  }
+  const hasFolders = [...state.selectedNames].some(n => {
+    const entry = state.entries.find(e => e.name === n);
+    return entry && entry.type === "DIR";
+  });
+  if (hasFolders) {
+    openModal(el.sanitizeModalFolders);
   } else {
-    elements.selectionSummary.textContent = buildUploadPlanSummaryText();
+    el.sanitizeFilesCount.textContent = itemCount(count, "selected file");
+    const names = [...state.selectedNames].slice(0, 10).join(", ");
+    el.sanitizeFilesList.textContent = count > 10 ? `${names}, \u2026` : names;
+    openModal(el.sanitizeModalFiles);
   }
+});
 
-  updateOverallProgress();
-}
+el.btnSanitizeFilesCancel.addEventListener("click", () => closeModal(el.sanitizeModalFiles));
+el.btnSanitizeFoldersCancel.addEventListener("click", () => closeModal(el.sanitizeModalFolders));
+el.btnSanitizeNoneCancel.addEventListener("click", () => closeModal(el.sanitizeModalNone));
 
-function setMode(mode) {
-  state.mode = mode;
-  const uploaderActive = mode === "uploader";
+// === Metadata Drawer ===
 
-  elements.modeUploaderButton.classList.toggle("active", uploaderActive);
-  elements.modeUploaderButton.classList.toggle("secondary", !uploaderActive);
-  elements.modeManagerButton.classList.toggle("active", !uploaderActive);
-  elements.modeManagerButton.classList.toggle("secondary", uploaderActive);
-  elements.modeUploaderButton.setAttribute("aria-selected", uploaderActive ? "true" : "false");
-  elements.modeManagerButton.setAttribute("aria-selected", uploaderActive ? "false" : "true");
-  elements.modeDescription.textContent = uploaderActive ? "Tree uploader selected" : "File manager selected";
+function openDrawer(entry) {
+  state.drawerEntry = entry;
+  el.drawer.classList.add("open");
 
-  elements.uploaderBaseField.hidden = !uploaderActive;
-  elements.uploaderBaseActions.hidden = !uploaderActive;
-  elements.treeUploaderPanel.hidden = !uploaderActive;
-  elements.uploadPlanPanel.hidden = !uploaderActive;
-  elements.fileManagerPanel.hidden = uploaderActive;
-
-  if (!uploaderActive && state.connected && getSelectedDrive() && !state.manager.loaded) {
-    refreshManagerFolder(state.manager.currentPath || getDriveRoot(getSelectedDrive()));
+  // Highlight active row
+  for (const row of el.fileTableBody.querySelectorAll("tr[data-name]")) {
+    row.classList.remove("drawer-active");
   }
+  const activeRow = el.fileTableBody.querySelector(`tr[data-name="${CSS.escape(entry.name)}"]`);
+  if (activeRow) activeRow.classList.add("drawer-active");
 
-  updateControls();
-}
+  // Populate drawer
+  el.drawerFileName.textContent = entry.name;
+  el.drawerSize.textContent = formatBytes(entry.size);
 
-function updateOverallProgress() {
-  const totalBytes = state.plan
-    .filter((item) => item.kind === "file")
-    .reduce((sum, item) => sum + item.size, 0);
-  const uploadedBytes = state.plan
-    .filter((item) => item.kind === "file")
-    .reduce((sum, item) => sum + Math.min(item.transferred || 0, item.size), 0);
+  // Flags — always show all three, green check if active, dimmed if not
+  const flagDefs = [
+    { bit: 0x02, label: "Hidden" },
+    { bit: 0x04, label: "System" },
+    { bit: 0x01, label: "Readonly" },
+  ];
+  const flags = entry.meta ? entry.meta.flags : 0;
+  el.drawerFlags.innerHTML = flagDefs.map(f => {
+    const active = (flags & f.bit) !== 0;
+    const color = active ? "#3a8" : "#ccc";
+    return `<div><span class="ms-sm" style="color:${color}">check</span> ${escapeHtml(f.label)}</div>`;
+  }).join("");
 
-  const percent = totalBytes === 0 ? 0 : Math.round((uploadedBytes / totalBytes) * 100);
-  elements.overallProgressLabel.textContent = `${formatBytes(uploadedBytes)} of ${formatBytes(totalBytes)}`;
-  elements.overallProgressPercent.textContent = `${percent}%`;
-  elements.overallProgressBar.style.width = `${percent}%`;
-}
+  // Notes
+  el.drawerNotes.textContent = (entry.meta && entry.meta.notes) ? entry.meta.notes : "\u2014";
 
-function renderPlan() {
-  if (state.plan.length === 0) {
-    elements.planTableBody.innerHTML = '<tr><td colspan="6" class="empty-state">Choose a folder or files after connecting to build an upload plan.</td></tr>';
-    return;
-  }
-
-  elements.planTableBody.innerHTML = state.plan.map((item) => `
-    <tr data-item-id="${item.id}">
-      <td><span class="kind-pill ${item.kind}">${item.kind === "folder" ? "Folder" : "File"}</span></td>
-      <td class="path-cell">${escapeHtml(item.localPath || "-")}</td>
-      <td class="path-cell">${escapeHtml(item.remotePath)}</td>
-      <td>${item.kind === "file" ? escapeHtml(formatBytes(item.size)) : '<span class="muted">-</span>'}</td>
-      <td class="status-cell">${renderStatusPill(item.status, item.message)}</td>
-      <td>
-        ${item.kind === "file" ? `
-          <div class="row-progress-track"><div class="row-progress-bar" style="width: ${item.size === 0 ? (item.status === "done" ? 100 : 0) : Math.round(((item.transferred || 0) / item.size) * 100)}%"></div></div>
-        ` : '<span class="muted">-</span>'}
-      </td>
-    </tr>
-  `).join("");
-}
-
-function renderManager() {
-  const drive = getSelectedDrive();
-  const currentPath = state.manager.currentPath || (drive ? getDriveRoot(drive) : "-");
-  const selectedEntries = getSelectedManagerEntries();
-
-  elements.managerCurrentPath.textContent = currentPath;
-  elements.managerEntryCount.textContent = `${state.manager.entries.length}`;
-  elements.managerSelectionInfo.textContent = formatManagerSelectionInfo(selectedEntries);
-
-  renderManagerBusyState();
-  renderManagerOutcome();
-
-  if (!state.connected) {
-    elements.managerStatusLabel.textContent = "Connect to a device and choose a drive to browse.";
-    elements.managerBrowserShell.hidden = false;
-    elements.managerTableBody.innerHTML = '<tr><td colspan="5" class="empty-state">Connect to get started.</td></tr>';
-    return;
-  }
-
-  if (!drive) {
-    elements.managerStatusLabel.textContent = "Choose a writable drive to browse.";
-    elements.managerBrowserShell.hidden = false;
-    elements.managerTableBody.innerHTML = '<tr><td colspan="5" class="empty-state">No writable drive found.</td></tr>';
-    return;
-  }
-
-  if (state.manager.busy) {
-    elements.managerStatusLabel.textContent = state.manager.busyState.title;
-    return;
-  }
-
-  elements.managerStatusLabel.textContent = currentPath;
-  elements.managerBrowserShell.hidden = false;
-
-  if (!state.manager.loaded) {
-    elements.managerTableBody.innerHTML = '<tr><td colspan="5" class="empty-state">Open a folder to load its contents.</td></tr>';
-    return;
-  }
-
-  if (state.manager.entries.length === 0) {
-    elements.managerTableBody.innerHTML = '<tr><td colspan="5" class="empty-state">This folder is empty.</td></tr>';
-    return;
-  }
-
-  elements.managerTableBody.innerHTML = state.manager.entries.map((entry) => `
-    <tr class="row-selectable ${isManagerEntrySelected(entry.fullPath) ? "is-selected" : ""}" data-path="${escapeHtml(entry.fullPath)}">
-      <td class="selection-cell"><input type="checkbox" class="selection-toggle" data-action="toggle-selection" data-path="${escapeHtml(entry.fullPath)}" aria-label="Select ${escapeHtml(entry.name)}" ${isManagerEntrySelected(entry.fullPath) ? "checked" : ""}></td>
-      <td class="path-cell">${entry.type === "DIR" ? `<button type="button" class="table-link" data-action="open" data-path="${escapeHtml(entry.fullPath)}">${escapeHtml(entry.name)}</button>` : escapeHtml(entry.name)}</td>
-      <td><span class="kind-pill ${entry.type === "DIR" ? "folder" : "file"}">${entry.type === "DIR" ? "Folder" : "File"}</span></td>
-      <td>${entry.type === "DIR" ? '<span class="muted">-</span>' : escapeHtml(formatBytes(entry.size))}</td>
-      <td>${entry.type === "DIR" ? `<button type="button" class="secondary table-action" data-action="open" data-path="${escapeHtml(entry.fullPath)}">Open</button>` : '<span class="muted">-</span>'}</td>
-    </tr>
-  `).join("");
-}
-
-function renderStatusPill(status, message) {
-  const labelMap = {
-    pending: "Pending",
-    active: "Running",
-    done: "Done",
-    error: "Error",
-    aborted: "Aborted"
-  };
-  const label = labelMap[status] || status;
-  const title = message ? ` title="${escapeHtml(message)}"` : "";
-  return `<span class="status-pill ${status}"${title}>${label}</span>`;
-}
-
-function updatePlanItem(item) {
-  const row = elements.planTableBody.querySelector(`[data-item-id="${item.id}"]`);
-  if (!row) {
-    return;
-  }
-
-  const statusCell = row.querySelector(".status-cell");
-  statusCell.innerHTML = renderStatusPill(item.status, item.message);
-
-  if (item.kind === "file") {
-    const bar = row.querySelector(".row-progress-bar");
-    const percent = item.size === 0 ? (item.status === "done" ? 100 : 0) : Math.round(((item.transferred || 0) / item.size) * 100);
-    bar.style.width = `${percent}%`;
-  }
-
-  updateOverallProgress();
-}
-
-function sortByDepth(paths) {
-  return paths.sort((left, right) => {
-    const depthDifference = left.split("/").length - right.split("/").length;
-    return depthDifference !== 0 ? depthDifference : left.localeCompare(right);
-  });
-}
-
-function makePlanItem(kind, localPath, remotePath, size, file) {
-  state.itemSeed += 1;
-  return {
-    id: state.itemSeed,
-    kind,
-    localPath,
-    remotePath,
-    size,
-    file,
-    transferred: 0,
-    status: "pending",
-    message: ""
-  };
-}
-
-function queuePlan(folders, files) {
-  const drive = getSelectedDrive();
-  if (!drive) {
-    throw new Error("Select a writable remote drive before preparing an upload plan.");
-  }
-
-  const basePath = normalizeRemoteBasePath(elements.remoteBaseInput.value);
-  const folderItems = sortByDepth(Array.from(folders)).map((relativePath) => {
-    const remotePath = joinRemotePath(drive, basePath, relativePath);
-    validateRemotePath(remotePath, "folder");
-    return makePlanItem("folder", relativePath, remotePath, 0, null);
-  });
-
-  const fileItems = files.map((entry) => {
-    const remotePath = joinRemotePath(drive, basePath, entry.relativePath);
-    validateRemotePath(remotePath, "file");
-    return makePlanItem("file", entry.relativePath, remotePath, entry.file.size, entry.file);
-  });
-
-  state.queuedFolders = folderItems;
-  state.queuedFiles = fileItems;
-  state.plan = [...folderItems, ...fileItems];
-  renderPlan();
-  renderSummary();
-  updateControls();
-}
-
-function collectFoldersFromRelativePath(relativePath, set) {
-  const parts = relativePath.split("/").filter(Boolean);
-  for (let index = 1; index < parts.length; index += 1) {
-    set.add(parts.slice(0, index).join("/"));
-  }
-}
-
-async function countDirectoryEntries(handle) {
-  let total = 0;
-  for await (const [, child] of handle.entries()) {
-    total += 1;
-    if (child.kind === "directory") {
-      total += await countDirectoryEntries(child);
-    }
-  }
-  return total;
-}
-
-async function collectFromDirectoryHandle(handle, preserveRoot, onProgress) {
-  const folders = new Set();
-  const files = [];
-  const totalEntries = await countDirectoryEntries(handle);
-  const basePrefix = preserveRoot ? handle.name : "";
-  let processed = 0;
-
-  async function walk(dirHandle, prefix) {
-    if (prefix) {
-      folders.add(prefix);
-    }
-
-    for await (const [name, child] of dirHandle.entries()) {
-      const relativePath = prefix ? `${prefix}/${name}` : name;
-      processed += 1;
-      onProgress(processed, totalEntries, relativePath);
-      await yieldToBrowser(processed, 12);
-
-      if (child.kind === "directory") {
-        folders.add(relativePath);
-        await walk(child, relativePath);
+  // Amiibo — if VFS metadata has no ID, fall back to reading bytes 84-91 from .bin files.
+  // Those bytes map to tag[0x54..0x5B] = nfc3d internal[0x1DC..0x1E3] which is outside
+  // the cipher range (internal[0x02C..0x1B3]), so they are always plaintext.
+  const metaHead = entry.meta ? entry.meta.amiiboHead : null;
+  const metaTail = entry.meta ? entry.meta.amiiboTail : null;
+  if (metaHead != null) {
+    applyAmiiboDisplay(entry, metaHead, metaTail);
+  } else if (entry.type === "FILE" && entry.name.toLowerCase().endsWith(".bin") && state.client) {
+    el.drawerAmiibo.innerHTML = `<span class="drawer-amiibo-hex">\u2026</span>`;
+    const filePath = joinChildPath(state.currentPath, entry.name);
+    state.client.readFileData(filePath).then(res => {
+      if (state.drawerEntry !== entry) return;
+      if (res.ok && res.data.length >= 92) {
+        const dv = new DataView(res.data.buffer, res.data.byteOffset);
+        const head = dv.getUint32(84, false); // big-endian, matching firmware to_little_endian_int32
+        const tail = dv.getUint32(88, false);
+        applyAmiiboDisplay(entry, head, tail);
       } else {
-        const file = await child.getFile();
-        files.push({ relativePath, file });
-        collectFoldersFromRelativePath(relativePath, folders);
+        el.drawerAmiibo.innerHTML = `<span class="drawer-amiibo-hex">\u2014</span>`;
+      }
+    }).catch(() => {
+      if (state.drawerEntry === entry) el.drawerAmiibo.innerHTML = `<span class="drawer-amiibo-hex">\u2014</span>`;
+    });
+  } else {
+    el.drawerAmiibo.innerHTML = `<span class="drawer-amiibo-hex">\u2014</span>`;
+  }
+}
+
+function closeDrawer() {
+  el.drawer.classList.remove("open");
+  for (const row of el.fileTableBody.querySelectorAll("tr[data-name]")) {
+    row.classList.remove("drawer-active");
+  }
+  state.drawerEntry = null;
+}
+
+el.btnDrawerClose.addEventListener("click", closeDrawer);
+
+// === Connect button ===
+
+el.btnConnect.addEventListener("click", connectOrDisconnect);
+
+// === Keyboard: Enter in new-folder input ===
+
+el.newFolderInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    el.btnNewFolderConfirm.click();
+  }
+});
+
+el.renameInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    el.btnRenameConfirm.click();
+  }
+});
+
+// === Task 6: File Manager Operations ===
+
+let renameTarget = "";
+
+// --- Rename confirm ---
+
+el.btnRenameConfirm.addEventListener("click", async () => {
+  const newName = el.renameInput.value.trim();
+  closeModal(el.renameModal);
+  if (!newName || newName === renameTarget) return;
+  if (newName.includes("/")) {
+    log("Rename failed: name cannot contain /", "err");
+    return;
+  }
+  if (!state.client) return;
+  try {
+    const oldPath = joinChildPath(state.currentPath, renameTarget);
+    const newPath = joinChildPath(state.currentPath, newName);
+    const entry = state.entries.find(e => e.name === renameTarget);
+    const kind = entry && entry.type === "DIR" ? "folder" : "file";
+    validateRemotePath(newPath, kind);
+    const res = await state.client.renamePath(oldPath, newPath);
+    if (res.ok) {
+      log(`Renamed: ${renameTarget} \u2192 ${newName}`);
+    } else {
+      log(`Rename failed: ${res.error}`, "err");
+    }
+  } catch (err) {
+    log(`Rename error: ${err.message}`, "err");
+  } finally {
+    invalidateCache();
+    await browseFolder(state.currentPath);
+  }
+});
+
+// --- Delete confirm ---
+
+el.btnDeleteConfirm.addEventListener("click", async () => {
+  closeModal(el.deleteModal);
+  if (!state.client || state.selectedNames.size === 0) return;
+
+  const selected = state.entries.filter(e => state.selectedNames.has(e.name));
+  const paths = selected.map(e => ({
+    path: joinChildPath(state.currentPath, e.name),
+    type: e.type,
+    name: e.name,
+  }));
+
+  // Sort: deepest-first by "/" count, files before folders at same depth
+  paths.sort((a, b) => {
+    const depthA = (a.path.match(/\//g) || []).length;
+    const depthB = (b.path.match(/\//g) || []).length;
+    if (depthA !== depthB) return depthB - depthA;
+    if (a.type !== b.type) return a.type === "FILE" ? -1 : 1;
+    return 0;
+  });
+
+  el.browserLockOverlay.classList.add("active");
+  el.browserLockTitle.textContent = "Delete in progress";
+  updateControls();
+  let deleted = 0;
+  const total = paths.length;
+  try {
+    for (const item of paths) {
+      try {
+        const res = await state.client.removePath(item.path);
+        if (res.ok) {
+          deleted++;
+        } else {
+          log(`Delete failed: ${item.name} \u2014 ${res.error}`, "err");
+        }
+      } catch (err) {
+        log(`Delete error: ${item.name} \u2014 ${err.message}`, "err");
       }
     }
+    log(`Deleted ${deleted} of ${total} ${total === 1 ? "item" : "items"}.`);
+  } finally {
+    el.browserLockOverlay.classList.remove("active");
+    updateControls();
+    invalidateCache();
+    await browseFolder(state.currentPath);
   }
+});
 
-  await walk(handle, basePrefix);
-  return { folders, files, totalEntries };
-}
+// --- Sanitize helpers ---
 
-async function collectFromWebkitDirectory(fileList, preserveRoot, onProgress) {
-  const folders = new Set();
-  const collectedFiles = [];
-  const files = Array.from(fileList);
-
-  for (let index = 0; index < files.length; index += 1) {
-    const file = files[index];
-    const rawPath = file.webkitRelativePath || file.name;
-    const segments = rawPath.split("/").filter(Boolean);
-    const relativeSegments = preserveRoot ? segments : segments.slice(1);
-    const relativePath = relativeSegments.length > 0 ? relativeSegments.join("/") : file.name;
-    collectedFiles.push({ relativePath, file });
-    collectFoldersFromRelativePath(relativePath, folders);
-    onProgress(index + 1, files.length, relativePath);
-    await yieldToBrowser(index + 1, 48);
+function buildSanitizeOps(entries, parentPath) {
+  const ops = [];
+  const skipped = [];
+  const existing = new Set(entries.map(e => e.name));
+  const groups = new Map();
+  for (const e of entries) {
+    const lower = e.name.toLowerCase();
+    if (lower === e.name) continue;
+    if (!groups.has(lower)) groups.set(lower, []);
+    groups.get(lower).push(e);
   }
-
-  return {
-    folders,
-    files: collectedFiles,
-    totalEntries: files.length
-  };
-}
-
-async function collectFromFileList(fileList, onProgress) {
-  const files = Array.from(fileList);
-  const collectedFiles = [];
-
-  for (let index = 0; index < files.length; index += 1) {
-    const file = files[index];
-    collectedFiles.push({ relativePath: file.name, file });
-    onProgress(index + 1, files.length, file.name);
-    await yieldToBrowser(index + 1, 48);
-  }
-
-  return {
-    folders: new Set(),
-    files: collectedFiles,
-    totalEntries: files.length
-  };
-}
-
-async function finalizeCollectedSelection(collected, sourceLabel) {
-  try {
-    queuePlan(collected.folders, collected.files);
-    const totalItems = state.plan.length;
-    const detail = `${buildUploadPlanSummaryText()} Review the plan, then start the upload.`;
-    log(sourceLabel);
-    setActivityStatus({
-      status: "success",
-      phaseLabel: "Plan ready",
-      title: "Upload plan ready",
-      detail,
-      progressLabel: "Ready to upload",
-      current: totalItems,
-      total: totalItems
-    });
-    showActivityOutcome("Upload plan ready", detail, "success");
-  } catch (error) {
-    log(error.message);
-    setActivityStatus({
-      status: "error",
-      phaseLabel: "Plan blocked",
-      title: "Cannot build the upload plan",
-      detail: error.message,
-      progressLabel: "Validation failed",
-      current: 0,
-      total: 1
-    });
-    showActivityOutcome("Upload plan blocked", error.message, "error");
-  }
-}
-
-function handleDriveChange() {
-  invalidateClientFolderCache();
-  clearManagerOutcome();
-  renderSummary();
-  syncManagerPathWithDrive(true);
-  renderManager();
-
-  if (state.mode === "manager" && state.connected && getSelectedDrive()) {
-    refreshManagerFolder(state.manager.currentPath);
-  }
-}
-
-async function loadManagerFolderData(normalizedPath) {
-  const entries = await state.client.readFolder(normalizedPath);
-  state.manager.currentPath = normalizedPath;
-  state.manager.entries = sortRemoteEntries(entries).map((entry) => ({
-    ...entry,
-    fullPath: joinRemoteChildPath(normalizedPath, entry.name)
-  }));
-  state.manager.selectedPaths = [];
-  state.manager.loaded = true;
-  elements.managerPathInput.value = normalizedPath;
-  return entries;
-}
-
-async function loadManagerEntriesForPath(folderPath) {
-  if (state.manager.loaded && state.manager.currentPath === folderPath) {
-    return state.manager.entries;
-  }
-
-  const entries = await state.client.readFolder(folderPath);
-  return sortRemoteEntries(entries).map((entry) => ({
-    ...entry,
-    fullPath: joinRemoteChildPath(folderPath, entry.name)
-  }));
-}
-
-async function collectRemoteFolderSnapshots(rootPath, recursive, onProgress) {
-  const snapshots = [];
-  const queue = [rootPath];
-  let processed = 0;
-
-  while (queue.length > 0) {
-    const folderPath = queue.shift();
-    const entries = await loadManagerEntriesForPath(folderPath);
-    snapshots.push({ path: folderPath, entries });
-    processed += 1;
-
-    if (recursive) {
-      entries
-        .filter((entry) => entry.type === "DIR")
-        .forEach((entry) => {
-          queue.push(entry.fullPath);
-        });
+  for (const [lower, group] of groups) {
+    if (group.length > 1) {
+      for (const e of group) skipped.push({ name: e.name, reason: `collision: multiple \u2192 ${lower}` });
+      continue;
     }
-
-    onProgress(processed, Math.max(processed, processed + queue.length), folderPath);
-    await yieldToBrowser(processed, 6);
+    const [e] = group;
+    if (existing.has(lower)) {
+      skipped.push({ name: e.name, reason: `${lower} already exists` });
+      continue;
+    }
+    const from = joinChildPath(parentPath, e.name);
+    const to = joinChildPath(parentPath, lower);
+    const kind = e.type === "DIR" ? "folder" : "file";
+    try {
+      validateRemotePath(to, kind);
+    } catch (err) {
+      skipped.push({ name: e.name, reason: err.message });
+      continue;
+    }
+    ops.push({ from, to, type: e.type, name: e.name });
   }
+  return { ops, skipped };
+}
 
+async function collectEntriesRecursive(path) {
+  const snapshots = [];
+  const queue = [path];
+  while (queue.length > 0) {
+    const folder = queue.shift();
+    const res = await state.client.readFolder(folder);
+    if (!res.ok) { log(`Scan failed: ${folder} \u2014 ${res.error}`, "err"); continue; }
+    const entries = sortEntries(res.data);
+    snapshots.push({ parentPath: folder, entries });
+    for (const e of entries) {
+      if (e.type === "DIR") queue.push(joinChildPath(folder, e.name));
+    }
+  }
   return snapshots;
 }
 
-function buildSanitizePlanFromSnapshots(snapshots) {
-  const fileOperations = [];
-  const directoryOperations = [];
-  const skipped = [];
+async function executeSanitize(allOps, allSkipped) {
+  // Sort: files first, then folder renames deepest-first
+  allOps.sort((a, b) => {
+    if (a.type !== b.type) return a.type === "FILE" ? -1 : 1;
+    // For folders, deepest first
+    const depthA = (a.from.match(/\//g) || []).length;
+    const depthB = (b.from.match(/\//g) || []).length;
+    return depthB - depthA;
+  });
 
-  snapshots.forEach((snapshot) => {
-    const result = buildSanitizeOperations(snapshot.entries, snapshot.path);
-    skipped.push(...result.skipped);
-    result.operations.forEach((operation) => {
-      if (operation.type === "FILE") {
-        fileOperations.push(operation);
+  let renamed = 0;
+  for (const op of allOps) {
+    try {
+      const res = await state.client.renamePath(op.from, op.to);
+      if (res.ok) {
+        renamed++;
       } else {
-        directoryOperations.push(operation);
+        log(`Lowercase failed: ${op.name} \u2014 ${res.error}`, "err");
       }
-    });
-  });
-
-  directoryOperations.sort((left, right) => {
-    const depthDifference = right.from.split("/").length - left.from.split("/").length;
-    if (depthDifference !== 0) {
-      return depthDifference;
+    } catch (err) {
+      log(`Lowercase error: ${op.name} \u2014 ${err.message}`, "err");
     }
-    return left.from.localeCompare(right.from, undefined, { numeric: true, sensitivity: "base" });
-  });
+  }
 
+  const parts = [`${renamed} renamed`];
+  if (allSkipped.length > 0) {
+    parts.push(`${allSkipped.length} skipped`);
+    for (const s of allSkipped) {
+      log(`Skipped: ${s.name} \u2014 ${s.reason}`, "err");
+    }
+  }
+  log(`Lowercase: ${parts.join(", ")}.`);
+}
+
+async function withBrowserLock(title, fn) {
+  el.browserLockOverlay.classList.add("active");
+  el.browserLockTitle.textContent = title;
+  updateControls();
+  try {
+    await fn();
+  } catch (err) {
+    log(err.message, "err");
+  } finally {
+    el.browserLockOverlay.classList.remove("active");
+    updateControls();
+    invalidateCache();
+    await browseFolder(state.currentPath);
+  }
+}
+
+// --- Sanitize: files confirm ---
+
+el.btnSanitizeFilesConfirm.addEventListener("click", async () => {
+  closeModal(el.sanitizeModalFiles);
+  if (!state.client) return;
+  await withBrowserLock("Lowercase rename in progress", async () => {
+    const selected = state.entries.filter(e => state.selectedNames.has(e.name) && e.type === "FILE");
+    const { ops, skipped } = buildSanitizeOps(selected, state.currentPath);
+    await executeSanitize(ops, skipped);
+  });
+});
+
+// --- Sanitize: folders confirm ---
+
+el.btnSanitizeFoldersConfirm.addEventListener("click", async () => {
+  closeModal(el.sanitizeModalFolders);
+  if (!state.client) return;
+
+  const scope = document.querySelector('input[name="sanitizeFolderScope"]:checked').value;
+
+  await withBrowserLock("Lowercase rename in progress", async () => {
+    const allOps = [];
+    const allSkipped = [];
+
+    if (scope === "selected") {
+      const selected = state.entries.filter(e => state.selectedNames.has(e.name));
+      const { ops, skipped } = buildSanitizeOps(selected, state.currentPath);
+      allOps.push(...ops);
+      allSkipped.push(...skipped);
+    } else {
+      const selectedEntries = state.entries.filter(e => state.selectedNames.has(e.name));
+      const selectedFolders = selectedEntries.filter(e => e.type === "DIR");
+      for (const folder of selectedFolders) {
+        const folderPath = joinChildPath(state.currentPath, folder.name);
+        const snapshots = await collectEntriesRecursive(folderPath);
+        for (const snap of snapshots) {
+          const { ops, skipped } = buildSanitizeOps(snap.entries, snap.parentPath);
+          allOps.push(...ops);
+          allSkipped.push(...skipped);
+        }
+      }
+      // Also rename the selected items themselves (shallower than contents, renamed last by executeSanitize sort)
+      const { ops, skipped } = buildSanitizeOps(selectedEntries, state.currentPath);
+      allOps.push(...ops);
+      allSkipped.push(...skipped);
+    }
+
+    await executeSanitize(allOps, allSkipped);
+  });
+});
+
+// --- Sanitize: none confirm ---
+
+el.btnSanitizeNoneConfirm.addEventListener("click", async () => {
+  closeModal(el.sanitizeModalNone);
+  if (!state.client) return;
+
+  const scope = document.querySelector('input[name="sanitizeNoneScope"]:checked').value;
+
+  await withBrowserLock("Lowercase rename in progress", async () => {
+    const allOps = [];
+    const allSkipped = [];
+
+    if (scope === "files") {
+      const files = state.entries.filter(e => e.type === "FILE");
+      const { ops, skipped } = buildSanitizeOps(files, state.currentPath);
+      allOps.push(...ops);
+      allSkipped.push(...skipped);
+    } else if (scope === "filesAndFolders") {
+      const { ops, skipped } = buildSanitizeOps(state.entries, state.currentPath);
+      allOps.push(...ops);
+      allSkipped.push(...skipped);
+    } else {
+      const snapshots = await collectEntriesRecursive(state.currentPath);
+      for (const snap of snapshots) {
+        const { ops, skipped } = buildSanitizeOps(snap.entries, snap.parentPath);
+        allOps.push(...ops);
+        allSkipped.push(...skipped);
+      }
+    }
+
+    await executeSanitize(allOps, allSkipped);
+  });
+});
+
+// === Task 7: Tree Upload ===
+
+// --- File/folder collection helpers ---
+
+function collectFoldersFromPath(relPath, set) {
+  const parts = relPath.split("/").filter(Boolean);
+  for (let i = 1; i < parts.length; i++) set.add(parts.slice(0, i).join("/"));
+}
+
+async function collectFromDirHandle(handle) {
+  const folders = new Set();
+  const files = [];
+  async function walk(dir, pfx) {
+    if (pfx) folders.add(pfx);
+    for await (const [name, child] of dir.entries()) {
+      const rel = pfx ? `${pfx}/${name}` : name;
+      if (child.kind === "directory") {
+        await walk(child, rel);
+      } else {
+        const f = await child.getFile();
+        files.push({ relativePath: rel, file: f });
+        collectFoldersFromPath(rel, folders);
+      }
+    }
+  }
+  await walk(handle, "");
+  return { folders, files };
+}
+
+async function collectFromWebkitDir(fileList) {
+  const folders = new Set();
+  const files = [];
+  for (const f of Array.from(fileList)) {
+    const raw = f.webkitRelativePath || f.name;
+    const segs = raw.split("/").filter(Boolean);
+    const rel = segs.slice(1).join("/") || f.name;
+    files.push({ relativePath: rel, file: f });
+    collectFoldersFromPath(rel, folders);
+  }
+  return { folders, files };
+}
+
+function collectFromFiles(fileList) {
   return {
-    operations: [...fileOperations, ...directoryOperations],
-    skipped
+    folders: new Set(),
+    files: Array.from(fileList).map(f => ({ relativePath: f.name, file: f })),
   };
 }
 
-async function refreshManagerFolder(targetPath = state.manager.currentPath || getDriveRoot(getSelectedDrive())) {
-  if (!state.client || !state.connected) {
-    return;
-  }
+// --- Upload queue rendering ---
 
-  const drive = getSelectedDrive();
-  if (!drive) {
-    const message = "Choose a drive before browsing device storage.";
-    log(message);
-    setActivityStatus({
-      status: "error",
-      phaseLabel: "Browse unavailable",
-      title: "No drive selected",
-      detail: message,
-      progressLabel: "Cannot browse",
-      current: 0,
-      total: 1
-    });
-    showActivityOutcome("Browse unavailable", message, "error");
-    return;
-  }
-
-  let normalizedPath;
-  try {
-    normalizedPath = normalizeAbsoluteRemoteFolderPath(targetPath, drive);
-    if (normalizedPath !== getDriveRoot(drive)) {
-      validateRemotePath(normalizedPath, "folder");
-    }
-  } catch (error) {
-    log(error.message);
-    showManagerOutcome("Cannot open folder", error.message);
-    setActivityStatus({
-      status: "error",
-      phaseLabel: "Browse failed",
-      title: "That device folder cannot be opened",
-      detail: `${error.message} Check the selected drive and folder path, then try again.`,
-      progressLabel: "Path validation failed",
-      current: 0,
-      total: 1
-    });
-    showActivityOutcome("Browse failed", error.message, "error");
-    return;
-  }
-
-  beginManagerBusy({
-    eyebrow: "Loading device folder",
-    title: `Loading ${normalizedPath}`,
-    phase: "Reading folder contents",
-    label: normalizedPath,
-    current: 0,
-    total: 1
-  });
-
-  try {
-    const entries = await loadManagerFolderData(normalizedPath);
-    updateManagerBusy({
-      title: `Loaded ${normalizedPath}`,
-      phase: "Folder loaded",
-      label: `${formatItemCount(entries.length, "entry")} available`,
-      current: 1,
-      total: 1
-    });
-    log(`Loaded ${normalizedPath} (${entries.length} entries).`);
-    endManagerBusy();
-    setActivityStatus({
-      status: "success",
-      phaseLabel: "Folder loaded",
-      title: `Loaded ${normalizedPath}`,
-      detail: `${formatItemCount(entries.length, "entry")} loaded for the current folder.`,
-      progressLabel: "Device folder ready",
-      current: 1,
-      total: 1
-    });
-  } catch (error) {
-    endManagerBusy();
-    log(error.message);
-    showManagerOutcome("Cannot open folder", error.message);
-    setActivityStatus({
-      status: "error",
-      phaseLabel: "Browse failed",
-      title: `Could not load ${normalizedPath}`,
-      detail: error.message,
-      progressLabel: "Browse failed",
-      current: 0,
-      total: 1
-    });
-    showActivityOutcome("Browse failed", error.message, "error");
+function getQueueStatusIcon(status) {
+  switch (status) {
+    case "done": return '<span class="ms-sm" style="color:#3a8">check_circle</span>';
+    case "active": return '<span class="ms-sm spin" style="color:#7878cc">sync</span>';
+    case "pending": return '<span class="ms-sm" style="color:#888">schedule</span>';
+    case "error": return '<span class="ms-sm" style="color:#c33">error</span>';
+    case "aborted": return '<span class="ms-sm" style="color:#b80">block</span>';
+    default: return '';
   }
 }
 
-async function openManagerFolder(targetPath) {
-  await refreshManagerFolder(targetPath);
-}
-
-async function goManagerUp() {
-  if (!canManagerGoUp()) {
+function renderUploadQueue() {
+  if (state.uploadPlan.length === 0) {
+    el.uploadQueue.innerHTML = '<div class="queue-empty">No uploads queued</div>';
     return;
   }
 
-  await refreshManagerFolder(getParentRemotePath(state.manager.currentPath));
-}
+  const items = [];
+  let totalBytes = 0;
+  let doneBytes = 0;
+  let doneCount = 0;
 
-async function createManagerFolder() {
-  if (!state.client || !state.connected) {
-    return;
-  }
+  for (const item of state.uploadPlan) {
+    totalBytes += item.size;
+    if (item.status === "done") { doneBytes += item.size; doneCount++; }
+    else { doneBytes += item.transferred; }
 
-  const folderName = elements.managerFolderNameInput.value.trim().replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
-  if (!folderName) {
-    const message = "Enter a folder name.";
-    log(message);
-    showManagerOutcome("Cannot create folder", message);
-    setActivityStatus({
-      status: "warning",
-      phaseLabel: "Folder name required",
-      title: "Cannot create a folder yet",
-      detail: message,
-      progressLabel: "Waiting for folder name",
-      current: 0,
-      total: 1
-    });
-    showActivityOutcome("Folder name required", message, "warning");
-    return;
-  }
+    const icon = getQueueStatusIcon(item.status);
+    const baseName = escapeHtml(getBaseName(item.remotePath));
+    const title = escapeHtml(item.remotePath);
 
-  if (folderName.includes("/")) {
-    const message = "Folder name must be a single path segment.";
-    log(message);
-    showManagerOutcome("Cannot create folder", message);
-    setActivityStatus({
-      status: "error",
-      phaseLabel: "Folder name invalid",
-      title: "Cannot create that folder",
-      detail: message,
-      progressLabel: "Validation failed",
-      current: 0,
-      total: 1
-    });
-    showActivityOutcome("Folder creation failed", message, "error");
-    return;
-  }
-
-  const currentPath = state.manager.currentPath || getDriveRoot(getSelectedDrive());
-  const remotePath = joinRemoteChildPath(currentPath, folderName);
-
-  try {
-    validateRemotePath(remotePath, "folder");
-  } catch (error) {
-    log(error.message);
-    showManagerOutcome("Cannot create folder", error.message);
-    setActivityStatus({
-      status: "error",
-      phaseLabel: "Folder creation blocked",
-      title: "This folder path is too long",
-      detail: `${error.message} Shorten the folder name or create it higher in the drive.`,
-      progressLabel: "Validation failed",
-      current: 0,
-      total: 1
-    });
-    showActivityOutcome("Folder creation blocked", error.message, "error");
-    return;
-  }
-
-  beginManagerBusy({
-    eyebrow: "Creating folder",
-    title: `Creating ${remotePath}`,
-    phase: "Sending create request",
-    label: remotePath,
-    current: 0,
-    total: 2
-  });
-
-  try {
-    await state.client.createFolder(remotePath);
-    invalidateClientFolderCache();
-    elements.managerFolderNameInput.value = "";
-    log(`Created ${remotePath}`);
-
-    updateManagerBusy({
-      title: `Refreshing ${currentPath}`,
-      phase: "Refreshing folder contents",
-      label: currentPath,
-      current: 1,
-      total: 2
-    });
-
-    const entries = await loadManagerFolderData(currentPath);
-    updateManagerBusy({
-      title: `Created ${remotePath}`,
-      phase: "Folder ready",
-      label: `${formatItemCount(entries.length, "entry")} available`,
-      current: 2,
-      total: 2
-    });
-
-    endManagerBusy();
-    const summaryText = `Created ${remotePath}. Refreshed ${currentPath}.`;
-    showManagerOutcome("Folder created", summaryText);
-    setActivityStatus({
-      status: "success",
-      phaseLabel: "Folder created",
-      title: `Created ${remotePath}`,
-      detail: summaryText,
-      progressLabel: "Folder ready",
-      current: 2,
-      total: 2
-    });
-    showActivityOutcome("Folder created", summaryText, "success");
-  } catch (error) {
-    endManagerBusy();
-    log(error.message);
-    showManagerOutcome("Folder creation failed", error.message);
-    setActivityStatus({
-      status: "error",
-      phaseLabel: "Folder creation failed",
-      title: `Could not create ${remotePath}`,
-      detail: error.message,
-      progressLabel: "Folder creation failed",
-      current: 0,
-      total: 2
-    });
-    showActivityOutcome("Folder creation failed", error.message, "error");
-  }
-}
-
-async function sanitizeManagerNames() {
-  if (!state.client || !state.connected || !state.manager.loaded) {
-    return;
-  }
-
-  const currentPath = state.manager.currentPath || getDriveRoot(getSelectedDrive());
-  const recursive = window.confirm("Also scan subfolders?\n\nPress OK to include the current folder and all subfolders.\nPress Cancel to scan only the current folder.");
-
-  beginManagerBusy({
-    eyebrow: recursive ? "Planning name cleanup" : "Scanning current folder",
-    title: `Scanning ${currentPath}`,
-    phase: recursive ? "Scanning folders" : "Checking names",
-    label: currentPath,
-    current: 0,
-    total: 1
-  });
-
-  let plan;
-  try {
-    const snapshots = await collectRemoteFolderSnapshots(currentPath, recursive, (current, total, folderPath) => {
-      updateManagerBusy({
-        eyebrow: recursive ? "Planning name cleanup" : "Scanning current folder",
-        title: `Scanning ${currentPath}`,
-        phase: recursive ? "Scanning folders" : "Checking names",
-        label: folderPath,
-        current,
-        total
-      });
-    });
-    plan = buildSanitizePlanFromSnapshots(snapshots);
-  } catch (error) {
-    endManagerBusy();
-    log(error.message);
-    showManagerOutcome("Name cleanup planning failed", error.message);
-    setActivityStatus({
-      status: "error",
-      phaseLabel: "Name cleanup failed",
-      title: `Could not scan ${currentPath}`,
-      detail: error.message,
-      progressLabel: "Planning failed",
-      current: 0,
-      total: 1
-    });
-    showActivityOutcome("Name cleanup failed", error.message, "error");
-    return;
-  }
-
-  if (plan.operations.length === 0) {
-    endManagerBusy();
-    if (plan.skipped.length > 0) {
-      logSanitizeSkips(plan.skipped);
-    }
-    const summaryText = plan.skipped.length > 0
-      ? `No safe name changes were found in ${currentPath}. ${buildSanitizeOutcomeText(0, plan.skipped)}`
-      : `No uppercase names were found in ${currentPath}.`;
-    log(summaryText);
-    showManagerOutcome("Name cleanup complete", summaryText);
-    setActivityStatus({
-      status: plan.skipped.length > 0 ? "warning" : "success",
-      phaseLabel: "Name cleanup complete",
-      title: `Finished checking ${currentPath}`,
-      detail: summaryText,
-      progressLabel: "Nothing to change",
-      current: 0,
-      total: 0
-    });
-    showActivityOutcome("Name cleanup complete", summaryText, plan.skipped.length > 0 ? "warning" : "success");
-    return;
-  }
-
-  const confirmed = window.confirm(`Lowercase names for ${formatItemCount(plan.operations.length, "item")} ${recursive ? `across ${currentPath} and its subfolders` : `in ${currentPath}`}?`);
-  if (!confirmed) {
-    endManagerBusy();
-    const summaryText = `Name cleanup was cancelled before any changes were made in ${currentPath}.`;
-    log("Name cleanup cancelled.");
-    showManagerOutcome("Name cleanup cancelled", summaryText);
-    setActivityStatus({
-      status: "warning",
-      phaseLabel: "Name cleanup cancelled",
-      title: "Rename pass cancelled",
-      detail: summaryText,
-      progressLabel: "Cancelled before execution",
-      current: 0,
-      total: plan.operations.length
-    });
-    showActivityOutcome("Name cleanup cancelled", summaryText, "warning");
-    return;
-  }
-
-  const totalSteps = plan.operations.length + 1;
-  updateManagerBusy({
-    eyebrow: "Applying name cleanup",
-    title: `Updating names under ${currentPath}`,
-    phase: "Renaming remote entries",
-    label: `${formatItemCount(plan.operations.length, "rename")} queued`,
-    current: 0,
-    total: totalSteps
-  });
-
-  let renamedCount = 0;
-  let renameError = null;
-
-  for (let index = 0; index < plan.operations.length; index += 1) {
-    const operation = plan.operations[index];
-
-    updateManagerBusy({
-      eyebrow: "Applying name cleanup",
-      title: `Updating names under ${currentPath}`,
-      phase: "Renaming remote entries",
-      label: `${getBaseName(operation.from)} -> ${getBaseName(operation.to)}`,
-      current: index + 1,
-      total: totalSteps
-    });
-
-    try {
-      await state.client.renamePath(operation.from, operation.to);
-      renamedCount += 1;
-      log(`Renamed ${operation.from} -> ${operation.to}`);
-      await yieldToBrowser(index + 1, 8);
-    } catch (error) {
-      renameError = error;
-      break;
+    if (item.kind === "folder") {
+      items.push(
+        `<div class="queue-item">` +
+        `${icon}` +
+        `<span class="queue-name" title="${title}">${baseName}/</span>` +
+        `<span class="queue-status ${item.status}">${item.status}</span>` +
+        `</div>`
+      );
+    } else {
+      const pct = item.size > 0 ? Math.round((item.transferred / item.size) * 100) : (item.status === "done" ? 100 : 0);
+      const pctStr = item.status === "done" ? "done" : item.status === "pending" ? "pending" : item.status === "aborted" ? "aborted" : item.status === "error" ? "error" : `${pct}%`;
+      items.push(
+        `<div class="queue-item">` +
+        `${icon}` +
+        `<span class="queue-name" title="${title}">${baseName}</span>` +
+        `<div class="queue-bar"><div class="queue-bar-fill" style="width:${pct}%"></div></div>` +
+        `<span class="queue-status ${item.status}">${pctStr}</span>` +
+        `</div>`
+      );
     }
   }
 
-  invalidateClientFolderCache();
-
-  let refreshError = null;
-  try {
-    updateManagerBusy({
-      eyebrow: "Refreshing manager",
-      title: `Refreshing ${currentPath}`,
-      phase: "Reloading current folder",
-      label: currentPath,
-      current: totalSteps,
-      total: totalSteps
-    });
-    await loadManagerFolderData(currentPath);
-  } catch (error) {
-    refreshError = error;
-  }
-
-  endManagerBusy();
-  if (plan.skipped.length > 0) {
-    logSanitizeSkips(plan.skipped);
-  }
-
-  const summaryText = buildSanitizeOutcomeText(renamedCount, plan.skipped);
-  const finalText = renameError
-    ? `${summaryText} The device stopped during the rename pass: ${renameError.message}`
-    : refreshError
-      ? `${summaryText} The rename pass finished, but the final folder refresh failed: ${refreshError.message}`
-      : summaryText;
-
-  if (renameError || refreshError) {
-    log(finalText);
-    showManagerOutcome("Name cleanup finished with issues", finalText);
-    setActivityStatus({
-      status: renamedCount > 0 || plan.skipped.length > 0 ? "warning" : "error",
-      phaseLabel: "Name cleanup finished with issues",
-      title: `Name cleanup incomplete for ${currentPath}`,
-      detail: finalText,
-      progressLabel: "Review the summary",
-      current: renamedCount,
-      total: plan.operations.length
-    });
-    showActivityOutcome("Name cleanup finished with issues", finalText, renamedCount > 0 || plan.skipped.length > 0 ? "warning" : "error");
-    return;
-  }
-
-  log(`Updated ${formatItemCount(renamedCount, "name")} ${recursive ? `across ${currentPath} and its subfolders` : `in ${currentPath}`}.`);
-  showManagerOutcome("Name cleanup complete", finalText);
-  setActivityStatus({
-    status: plan.skipped.length > 0 ? "warning" : "success",
-    phaseLabel: "Name cleanup complete",
-    title: `Finished updating names in ${currentPath}`,
-    detail: finalText,
-    progressLabel: "Rename pass finished",
-    current: totalSteps,
-    total: totalSteps
-  });
-  showActivityOutcome("Name cleanup complete", finalText, plan.skipped.length > 0 ? "warning" : "success");
-}
-
-async function deleteManagerSelection() {
-  const selectedEntries = getSelectedManagerEntries();
-  if (selectedEntries.length === 0 || !state.client || !state.connected) {
-    return;
-  }
-
-  const confirmed = window.confirm(
-    selectedEntries.length === 1
-      ? `Delete ${selectedEntries[0].type === "DIR" ? "folder" : "file"} ${selectedEntries[0].fullPath}?\n\nThis changes the device immediately and cannot be undone in MochiNest.`
-      : `Delete ${formatItemCount(selectedEntries.length, "selected item")} from ${state.manager.currentPath}?\n\nThis changes the device immediately and cannot be undone in MochiNest.`
+  const totalPct = totalBytes > 0 ? Math.round((doneBytes / totalBytes) * 100) : (doneCount === state.uploadPlan.length ? 100 : 0);
+  const speedStr = state.transferSpeed
+    ? ` \u00b7 <span class="ms-sm">upload</span> <span style="color:#7878cc;font-weight:700">${state.transferSpeed}</span>`
+    : "";
+  items.push(
+    `<div class="queue-summary">${doneCount} / ${state.uploadPlan.length} items \u2014 ${totalPct}% (${formatBytes(doneBytes)} / ${formatBytes(totalBytes)})${speedStr}</div>`
   );
-  if (!confirmed) {
-    return;
-  }
 
-  const currentPath = state.manager.currentPath;
-  const sortedEntries = sortManagerEntriesForDelete(selectedEntries);
-  const totalSteps = sortedEntries.length + 1;
+  el.uploadQueue.innerHTML = items.join("");
+}
 
-  beginManagerBusy({
-    eyebrow: "Deleting selected items",
-    title: `Deleting from ${currentPath}`,
-    phase: "Removing selected entries",
-    label: `${formatItemCount(sortedEntries.length, "delete")} queued`,
-    current: 0,
-    total: totalSteps
+// --- Upload plan building ---
+
+let planSeed = 0;
+
+function buildUploadPlan(folders, files) {
+  const base = state.currentPath || "E:/";
+  const sortedFolders = [...folders].sort((a, b) => {
+    const d = a.split("/").length - b.split("/").length;
+    return d !== 0 ? d : a.localeCompare(b);
   });
-
-  let deletedCount = 0;
-  let deleteError = null;
-
-  for (let index = 0; index < sortedEntries.length; index += 1) {
-    const entry = sortedEntries[index];
-    updateManagerBusy({
-      eyebrow: "Deleting selected items",
-      title: `Deleting from ${currentPath}`,
-      phase: "Removing selected entries",
-      label: entry.fullPath,
-      current: index + 1,
-      total: totalSteps
-    });
-
+  const plan = [];
+  for (const rel of sortedFolders) {
+    const remote = joinChildPath(base, rel);
     try {
-      await state.client.removePath(entry.fullPath);
-      deletedCount += 1;
-      log(`Deleted ${entry.fullPath}`);
-      await yieldToBrowser(index + 1, 8);
-    } catch (error) {
-      deleteError = error;
-      break;
+      validateRemotePath(remote, "folder");
+    } catch (err) {
+      log(`Skipping folder ${rel}: ${err.message}`, "err");
+      continue;
     }
+    plan.push({ id: ++planSeed, kind: "folder", localPath: rel, remotePath: remote, size: 0, file: null, transferred: 0, status: "pending" });
   }
-
-  invalidateClientFolderCache();
-
-  let refreshError = null;
-  try {
-    updateManagerBusy({
-      eyebrow: "Refreshing manager",
-      title: `Refreshing ${currentPath}`,
-      phase: "Reloading current folder",
-      label: currentPath,
-      current: totalSteps,
-      total: totalSteps
-    });
-    await loadManagerFolderData(currentPath);
-  } catch (error) {
-    refreshError = error;
+  for (const entry of files) {
+    const remote = joinChildPath(base, entry.relativePath);
+    try {
+      validateRemotePath(remote, "file");
+    } catch (err) {
+      log(`Skipping file ${entry.relativePath}: ${err.message}`, "err");
+      continue;
+    }
+    plan.push({ id: ++planSeed, kind: "file", localPath: entry.relativePath, remotePath: remote, size: entry.file.size, file: entry.file, transferred: 0, status: "pending" });
   }
-
-  endManagerBusy();
-
-  const summaryText = deleteError
-    ? `Deleted ${deletedCount} of ${selectedEntries.length} selected items before the device returned an error. ${deleteError.message}`
-    : refreshError
-      ? `Deleted ${deletedCount} selected items, but the folder refresh failed. ${refreshError.message}`
-      : `Deleted ${deletedCount} selected items from ${currentPath}.`;
-
-  if (deleteError || refreshError) {
-    log(summaryText);
-    showManagerOutcome("Delete finished with issues", summaryText);
-    setActivityStatus({
-      status: deletedCount > 0 ? "warning" : "error",
-      phaseLabel: "Delete finished with issues",
-      title: `Delete incomplete for ${currentPath}`,
-      detail: summaryText,
-      progressLabel: "Review the summary",
-      current: deletedCount,
-      total: selectedEntries.length
-    });
-    showActivityOutcome("Delete finished with issues", summaryText, deletedCount > 0 ? "warning" : "error");
-    return;
-  }
-
-  showManagerOutcome("Delete complete", summaryText);
-  setActivityStatus({
-    status: "success",
-    phaseLabel: "Delete complete",
-    title: `Finished deleting from ${currentPath}`,
-    detail: summaryText,
-    progressLabel: "Delete batch finished",
-    current: totalSteps,
-    total: totalSteps
-  });
-  showActivityOutcome("Delete complete", summaryText, "success");
-}
-
-function useManagerPathForUploader() {
-  const drive = getSelectedDrive();
-  if (!drive || !state.manager.currentPath) {
-    return;
-  }
-
-  const basePath = state.manager.currentPath.slice(2) || "/";
-  elements.remoteBaseInput.value = basePath;
-  renderSummary();
-  log(`Uploader target set to ${state.manager.currentPath}`);
-  setActivityStatus({
-    status: "success",
-    phaseLabel: "Uploader target updated",
-    title: "Uploader target updated",
-    detail: `New uploads will go to ${state.manager.currentPath}.`,
-    progressLabel: "Ready to switch workspaces",
-    current: 1,
-    total: 1
-  });
-  showActivityOutcome("Uploader target updated", `New uploads will go to ${state.manager.currentPath}.`, "success");
-  setMode("uploader");
-}
-
-function handleManagerTableClick(event) {
-  const openButton = event.target.closest("[data-action='open']");
-  if (openButton) {
-    openManagerFolder(openButton.dataset.path);
-    return;
-  }
-
-  const selectionToggle = event.target.closest("[data-action='toggle-selection']");
-  if (selectionToggle) {
-    toggleManagerSelection(selectionToggle.dataset.path, selectionToggle.checked);
-    renderManager();
-    updateControls();
-    return;
-  }
-
-  const row = event.target.closest("tr[data-path]");
-  if (!row) {
-    return;
-  }
-
-  toggleManagerSelection(row.dataset.path);
-  renderManager();
+  state.uploadPlan = plan;
+  renderUploadQueue();
   updateControls();
 }
 
-async function connectOrDisconnect() {
-  if (!state.client) {
-    state.client = new PixlBleClient(log);
-  }
-
-  if (state.connected) {
-    state.client.disconnect();
-    return;
-  }
-
-  clearActivityOutcome();
-  setActivityStatus({
-    status: "running",
-    phaseLabel: "Connecting",
-    title: "Waiting for Bluetooth permission",
-    detail: "Choose your Pixl.js device in the browser prompt. If it does not appear, check BLE File Transfer mode.",
-    progressLabel: "Opening Web Bluetooth",
-    current: 0,
-    total: 1
-  });
-
-  try {
-    elements.connectButton.disabled = true;
-    await state.client.connect();
-    setConnected(true);
-
-    const version = await state.client.getVersion();
-    elements.firmwareVersion.textContent = version.version || "-";
-    elements.bleAddress.textContent = version.bleAddress || "-";
-    log(`Firmware ${version.version || "unknown"}${version.bleAddress ? `, ${version.bleAddress}` : ""}`);
-
-    setActivityStatus({
-      status: "success",
-      phaseLabel: "Connected",
-      title: "Device connected",
-      detail: version.bleAddress ? `Connected to ${version.version}, ${version.bleAddress}.` : `Connected to firmware ${version.version || "unknown"}.`,
-      progressLabel: "Refreshing drive list",
-      current: 1,
-      total: 1
-    });
-
-    await refreshDrives();
-  } catch (error) {
-    log(error.message);
-    setConnected(false);
-    setActivityStatus({
-      status: "error",
-      phaseLabel: "Connection failed",
-      title: "Could not connect to the device",
-      detail: `${error.message} Make sure the device is in BLE File Transfer mode, then try again.`,
-      progressLabel: "Connection failed",
-      current: 0,
-      total: 1
-    });
-    showActivityOutcome("Connection failed", `${error.message} Make sure the device is in BLE File Transfer mode, then try again.`, "error");
-  } finally {
-    elements.connectButton.disabled = false;
-  }
-}
-
-async function refreshDrives() {
-  if (!state.client || !state.connected) {
-    return;
-  }
-
-  clearActivityOutcome();
-  setActivityStatus({
-    status: "running",
-    phaseLabel: "Refreshing drives",
-    title: "Reading drive list",
-    detail: "Checking which writable drives are available on the device.",
-    progressLabel: "Drive list",
-    current: 0,
-    total: 1
-  });
-
-  try {
-    const drives = await state.client.listDrives();
-    state.drives = drives.filter((drive) => drive.status === 0);
-    invalidateClientFolderCache();
-    renderDriveOptions();
-    renderSummary();
-    renderManager();
-    log(`Found ${state.drives.length} writable drive${state.drives.length === 1 ? "" : "s"}.`);
-
-    setActivityStatus({
-      status: "success",
-      phaseLabel: "Drives ready",
-      title: "Drive list ready",
-      detail: `${formatItemCount(state.drives.length, "writable drive")} available.`,
-      progressLabel: "Drive list ready",
-      current: 1,
-      total: 1
-    });
-
-    if (state.mode === "manager" && state.drives.length > 0) {
-      await refreshManagerFolder(state.manager.currentPath || getDriveRoot(getSelectedDrive()));
-      return;
-    }
-
-    showActivityOutcome("Drive list ready", `${formatItemCount(state.drives.length, "writable drive")} available.`, "success");
-  } catch (error) {
-    log(error.message);
-    setActivityStatus({
-      status: "error",
-      phaseLabel: "Drive refresh failed",
-      title: "Could not read the drive list",
-      detail: `${error.message} Reconnect the device or try refreshing again.`,
-      progressLabel: "Drive list failed",
-      current: 0,
-      total: 1
-    });
-    showActivityOutcome("Drive list failed", `${error.message} Reconnect the device or try refreshing again.`, "error");
-  }
-}
-
-async function createRemotePath() {
-  if (!state.client || !state.connected) {
-    return;
-  }
-
-  const drive = getSelectedDrive();
-  if (!drive) {
-    const message = "Choose a drive before creating the base path.";
-    log(message);
-    setActivityStatus({
-      status: "warning",
-      phaseLabel: "Base path blocked",
-      title: "No drive selected",
-      detail: message,
-      progressLabel: "Select a drive first",
-      current: 0,
-      total: 1
-    });
-    showActivityOutcome("Destination folder blocked", message, "warning");
-    return;
-  }
-
-  const remoteBase = normalizeRemoteBasePath(elements.remoteBaseInput.value);
-  const fullPath = joinRemotePath(drive, remoteBase, "");
-  if (fullPath === `${drive}:/`) {
-    const message = "The drive root already exists.";
-    log(message);
-    setActivityStatus({
-      status: "success",
-      phaseLabel: "Base path ready",
-      title: "Nothing to create",
-      detail: message,
-      progressLabel: "Root path already exists",
-      current: 1,
-      total: 1
-    });
-    showActivityOutcome("Destination folder ready", message, "success");
-    return;
-  }
-
-  clearActivityOutcome();
-  setActivityStatus({
-    status: "running",
-    phaseLabel: "Preparing destination folder",
-    title: `Preparing ${fullPath}`,
-    detail: "Creating any missing folders under the chosen destination folder.",
-    progressLabel: "Creating missing folders",
-    current: 0,
-    total: 1
-  });
-
-  try {
-    await state.client.ensureFolder(fullPath);
-    invalidateClientFolderCache();
-    log(`Destination folder ready: ${fullPath}`);
-    setActivityStatus({
-      status: "success",
-      phaseLabel: "Destination folder ready",
-      title: "Destination folder ready",
-      detail: `All required folders now exist under ${fullPath}.`,
-      progressLabel: "Destination folder prepared",
-      current: 1,
-      total: 1
-    });
-    showActivityOutcome("Destination folder ready", `All required folders now exist under ${fullPath}.`, "success");
-  } catch (error) {
-    log(error.message);
-    setActivityStatus({
-      status: "error",
-      phaseLabel: "Destination folder failed",
-      title: `Could not prepare ${fullPath}`,
-      detail: `${error.message} Check the drive, shorten the path if needed, then try again.`,
-      progressLabel: "Path preparation failed",
-      current: 0,
-      total: 1
-    });
-    showActivityOutcome("Destination folder failed", `${error.message} Check the drive, shorten the path if needed, then try again.`, "error");
-  }
-}
-
-async function prepareFolderSelection() {
-  if (!state.connected) {
-    return;
-  }
-
-  const preserveRoot = elements.preserveRootToggle.checked;
-  try {
-    if (typeof window.showDirectoryPicker !== "function") {
-      elements.folderInput.click();
-      return;
-    }
-
-    const handle = await window.showDirectoryPicker({ mode: "read" });
-    clearActivityOutcome();
-    setActivityStatus({
-      status: "running",
-      phaseLabel: "Scanning local folder",
-      title: `Scanning ${handle.name}`,
-      detail: "Building the upload plan from your local folder.",
-      progressLabel: "Scanning local files",
-      current: 0,
-      total: 1
-    });
-
-    const collected = await collectFromDirectoryHandle(handle, preserveRoot, (current, total, relativePath) => {
-      setActivityStatus({
-        status: "running",
-        phaseLabel: "Scanning local folder",
-        title: `Scanning ${handle.name}`,
-        detail: relativePath,
-        progressLabel: "Scanning local entries",
-        current,
-        total
-      });
-    });
-
-    await finalizeCollectedSelection(collected, `Built an upload plan from folder ${handle.name}.`);
-  } catch (error) {
-    if (error && error.name !== "AbortError") {
-      log(error.message);
-      setActivityStatus({
-        status: "error",
-        phaseLabel: "Folder scan failed",
-        title: "Could not scan the selected folder",
-        detail: error.message,
-        progressLabel: "Folder scan failed",
-        current: 0,
-        total: 1
-      });
-      showActivityOutcome("Folder scan failed", error.message, "error");
-    }
-  }
-}
-
-async function handleDirectoryFallbackSelection(event) {
-  const preserveRoot = elements.preserveRootToggle.checked;
-  if (!event.target.files || event.target.files.length === 0) {
-    return;
-  }
-
-  clearActivityOutcome();
-  setActivityStatus({
-    status: "running",
-    phaseLabel: "Scanning selected files",
-    title: "Scanning selected folder",
-    detail: "Building the upload plan from the chosen folder.",
-    progressLabel: "Scanning selected entries",
-    current: 0,
-    total: event.target.files.length
-  });
-
-  const collected = await collectFromWebkitDirectory(event.target.files, preserveRoot, (current, total, relativePath) => {
-    setActivityStatus({
-      status: "running",
-      phaseLabel: "Scanning selected files",
-      title: "Scanning selected folder",
-      detail: relativePath,
-      progressLabel: "Scanning selected entries",
-      current,
-      total
-    });
-  });
-
-  await finalizeCollectedSelection(collected, `Built an upload plan from ${formatItemCount(collected.files.length, "file")} in the chosen folder.`);
-  event.target.value = "";
-}
-
-async function handleFileSelection(event) {
-  if (!event.target.files || event.target.files.length === 0) {
-    return;
-  }
-
-  clearActivityOutcome();
-  setActivityStatus({
-    status: "running",
-    phaseLabel: "Scanning selected files",
-    title: "Scanning file selection",
-    detail: "Building the upload plan from the selected files.",
-    progressLabel: "Scanning selected files",
-    current: 0,
-    total: event.target.files.length
-  });
-
-  const collected = await collectFromFileList(event.target.files, (current, total, relativePath) => {
-    setActivityStatus({
-      status: "running",
-      phaseLabel: "Scanning selected files",
-      title: "Scanning file selection",
-      detail: relativePath,
-      progressLabel: "Scanning selected files",
-      current,
-      total
-    });
-  });
-
-  await finalizeCollectedSelection(collected, `Built an upload plan from ${formatItemCount(collected.files.length, "file")}.`);
-  event.target.value = "";
-}
-
-function updateUploadActivity(item, currentIndex, totalItems, detail, progressLabel) {
-  setActivityStatus({
-    status: "running",
-    phaseLabel: "Uploading",
-    title: `Uploading to ${getSelectedDrive() || "?"}:${normalizeRemoteBasePath(elements.remoteBaseInput.value)}`,
-    detail,
-    progressLabel,
-    current: currentIndex,
-    total: totalItems
-  });
-}
+// --- Upload execution ---
 
 async function runUpload() {
-  if (!state.client || !state.connected || state.uploadActive || state.plan.length === 0) {
-    return;
-  }
-
+  if (!state.client || state.connState !== "connected" || state.uploadActive || state.uploadPlan.length === 0) return;
   state.uploadActive = true;
-  state.abortRequested = false;
+  state.abortController = new AbortController();
+  el.browserLockOverlay.classList.add("active");
+  el.browserLockTitle.textContent = "Upload in progress";
+
   updateControls();
 
-  const drive = getSelectedDrive();
-  const basePath = normalizeRemoteBasePath(elements.remoteBaseInput.value);
-  const remoteBase = joinRemotePath(drive, basePath, "");
-  const totalItems = state.queuedFolders.length + state.queuedFiles.length;
-  let completedItems = 0;
-
-  clearActivityOutcome();
-  setActivityStatus({
-    status: "running",
-    phaseLabel: "Uploading",
-    title: `Uploading to ${remoteBase}`,
-    detail: `Preparing ${formatItemCount(totalItems, "queued item")} for transfer to the destination folder.`,
-    progressLabel: "Preparing upload queue",
-    current: 0,
-    total: totalItems
-  });
-
-  state.plan.forEach((item) => {
-    item.transferred = 0;
-    item.status = "pending";
-    item.message = "";
-  });
-  renderPlan();
-  updateOverallProgress();
+  // Reset statuses
+  for (const item of state.uploadPlan) { item.transferred = 0; item.status = "pending"; }
+  renderUploadQueue();
 
   try {
-    if (remoteBase !== `${drive}:/`) {
-      await state.client.ensureFolder(remoteBase);
-    }
-
-    for (const item of state.queuedFolders) {
-      if (state.abortRequested) {
-        markPendingItemsAsAborted();
-        throw new Error("Upload aborted by user.");
-      }
-
+    // Create folders (shallow-first)
+    for (const item of state.uploadPlan.filter(i => i.kind === "folder")) {
+      if (state.abortController.signal.aborted) throw new Error("Aborted.");
       item.status = "active";
-      item.message = "Preparing folder";
-      updatePlanItem(item);
-      updateUploadActivity(item, Math.min(completedItems + 1, totalItems), totalItems, item.remotePath, "Preparing folders");
-
+      renderUploadQueue();
       await state.client.ensureFolder(item.remotePath);
-
       item.status = "done";
-      item.message = "Folder ready";
-      updatePlanItem(item);
-      completedItems += 1;
+      renderUploadQueue();
     }
 
-    for (const item of state.queuedFiles) {
-      if (state.abortRequested) {
-        markPendingItemsAsAborted();
-        throw new Error("Upload aborted by user.");
-      }
-
+    // Upload files
+    for (const item of state.uploadPlan.filter(i => i.kind === "file")) {
+      if (state.abortController.signal.aborted) throw new Error("Aborted.");
       item.status = "active";
-      item.message = "Uploading";
-      updatePlanItem(item);
-      updateUploadActivity(item, Math.min(completedItems + 1, totalItems), totalItems, item.remotePath, "Uploading file");
-
-      const parent = getParentRemotePath(item.remotePath);
+      renderUploadQueue();
+      const parent = getParentPath(item.remotePath);
       await state.client.ensureFolder(parent);
-      await state.client.uploadFile(item.remotePath, item.file, (writtenBytes, totalBytes) => {
-        item.transferred = writtenBytes;
-        updatePlanItem(item);
-        setActivityStatus({
-          status: "running",
-          phaseLabel: "Uploading",
-          title: `Uploading to ${remoteBase}`,
-          detail: `${item.remotePath} • ${formatBytes(writtenBytes)} of ${formatBytes(totalBytes)}`,
-          progressLabel: "Uploading file",
-          current: Math.min(completedItems + 1, totalItems),
-          total: totalItems
-        });
-      });
-
+      const fileStartTime = performance.now();
+      let lastSpeedUpdate = 0;
+      await state.client.uploadFile(item.remotePath, item.file, (written, total) => {
+        item.transferred = written;
+        const now = performance.now();
+        if (now - lastSpeedUpdate >= 150 || written === total) {
+          lastSpeedUpdate = now;
+          const elapsed = (now - fileStartTime) / 1000;
+          if (elapsed > 0 && written > 0) {
+            const bps = written / elapsed;
+            state.transferSpeed = bps < 1000
+              ? `${Math.round(bps)} B/s`
+              : `${(bps / 1024).toFixed(1)} KB/s`;
+          }
+        }
+        renderUploadQueue();
+      }, state.abortController.signal);
       item.transferred = item.size;
       item.status = "done";
-      item.message = "Uploaded";
-      updatePlanItem(item);
-      completedItems += 1;
-      log(`Uploaded ${item.remotePath}`);
+      renderUploadQueue();
     }
-
-    const summaryText = `Uploaded ${formatItemCount(state.queuedFiles.length, "file")} and prepared ${formatItemCount(state.queuedFolders.length, "folder")} under ${remoteBase}.`;
-    log("Upload finished.");
-    setActivityStatus({
-      status: "success",
-      phaseLabel: "Upload complete",
-      title: "Upload complete",
-      detail: summaryText,
-      progressLabel: "Transfer complete",
-      current: totalItems,
-      total: totalItems
-    });
-    showActivityOutcome("Upload complete", summaryText, "success");
-  } catch (error) {
-    log(error.message);
-    const activeItem = state.plan.find((item) => item.status === "active");
-    if (activeItem) {
-      activeItem.status = state.abortRequested ? "aborted" : "error";
-      activeItem.message = error.message;
-      updatePlanItem(activeItem);
-    }
-
-    const status = state.abortRequested ? "warning" : "error";
-    const title = state.abortRequested ? "Upload stopped" : "Upload failed";
-    const summaryText = state.abortRequested
-      ? `Upload stopped after completing ${completedItems} of ${totalItems} queued items.`
-      : `Upload failed after completing ${completedItems} of ${totalItems} queued items. ${error.message} Check the destination folder and connection, then try again.`;
-    setActivityStatus({
-      status,
-      phaseLabel: title,
-      title,
-      detail: summaryText,
-      progressLabel: state.abortRequested ? "Upload cancelled" : "Upload failed",
-      current: completedItems,
-      total: totalItems
-    });
-    showActivityOutcome(title, summaryText, status);
+    log("Upload complete.");
+  } catch (err) {
+    log(`Upload error: ${err.message}`, "err");
+    const active = state.uploadPlan.find(i => i.status === "active");
+    if (active) { active.status = state.abortController.signal.aborted ? "aborted" : "error"; }
+    for (const item of state.uploadPlan) { if (item.status === "pending") item.status = "aborted"; }
+    renderUploadQueue();
   } finally {
     state.uploadActive = false;
+    state.abortController = null;
+    state.transferSpeed = "";
+    el.browserLockOverlay.classList.remove("active");
     updateControls();
+    invalidateCache();
+    if (state.currentPath) await browseFolder(state.currentPath);
   }
 }
 
-function markPendingItemsAsAborted() {
-  state.plan.forEach((item) => {
-    if (item.status === "pending") {
-      item.status = "aborted";
-      item.message = "Skipped after abort";
-      updatePlanItem(item);
-    }
-  });
-}
+// --- Upload event handlers ---
 
-function abortUpload() {
-  if (!state.uploadActive) {
-    return;
-  }
-
-  state.abortRequested = true;
-  log("Stop requested. The current BLE write will finish before the queue stops.");
-  setActivityStatus({
-    status: "warning",
-    phaseLabel: "Stop requested",
-    title: "Upload stop requested",
-    detail: "The current BLE write will finish before the queue stops.",
-    progressLabel: "Waiting for the current step to finish",
-    current: state.plan.filter((item) => item.status === "done").length,
-    total: state.plan.length
-  });
-  showActivityOutcome("Stop requested", "The current BLE write will finish before the queue stops.", "warning");
-}
-
-elements.connectButton.addEventListener("click", connectOrDisconnect);
-elements.modeUploaderButton.addEventListener("click", () => setMode("uploader"));
-elements.modeManagerButton.addEventListener("click", () => setMode("manager"));
-elements.refreshButton.addEventListener("click", refreshDrives);
-elements.createPathButton.addEventListener("click", createRemotePath);
-elements.pickFolderButton.addEventListener("click", prepareFolderSelection);
-elements.pickFilesButton.addEventListener("click", () => elements.filesInput.click());
-elements.folderInput.addEventListener("change", handleDirectoryFallbackSelection);
-elements.filesInput.addEventListener("change", handleFileSelection);
-elements.startUploadButton.addEventListener("click", runUpload);
-elements.abortButton.addEventListener("click", abortUpload);
-elements.clearPlanButton.addEventListener("click", resetPlan);
-
-elements.managerOpenButton.addEventListener("click", () => refreshManagerFolder(elements.managerPathInput.value));
-elements.managerUpButton.addEventListener("click", goManagerUp);
-elements.managerRefreshButton.addEventListener("click", () => refreshManagerFolder(elements.managerPathInput.value));
-elements.managerUsePathButton.addEventListener("click", useManagerPathForUploader);
-elements.managerCreateFolderButton.addEventListener("click", createManagerFolder);
-elements.managerSanitizeButton.addEventListener("click", sanitizeManagerNames);
-elements.managerSelectAllButton.addEventListener("click", selectAllManagerEntries);
-elements.managerClearSelectionButton.addEventListener("click", clearManagerSelection);
-elements.managerDeleteButton.addEventListener("click", deleteManagerSelection);
-elements.managerTableBody.addEventListener("click", handleManagerTableClick);
-
-elements.clearLogButton.addEventListener("click", clearLog);
-elements.driveSelect.addEventListener("change", handleDriveChange);
-elements.remoteBaseInput.addEventListener("change", renderSummary);
-elements.remoteBaseInput.addEventListener("blur", () => {
-  elements.remoteBaseInput.value = normalizeRemoteBasePath(elements.remoteBaseInput.value);
-  renderSummary();
-});
-elements.managerPathInput.addEventListener("keydown", (event) => {
-  if (event.key === "Enter") {
-    event.preventDefault();
-    refreshManagerFolder(elements.managerPathInput.value);
-  }
-});
-elements.managerPathInput.addEventListener("blur", () => {
-  if (!getSelectedDrive()) {
-    return;
-  }
-
+el.btnPickFolder.addEventListener("click", async () => {
   try {
-    elements.managerPathInput.value = normalizeAbsoluteRemoteFolderPath(elements.managerPathInput.value, getSelectedDrive());
-  } catch (error) {
-    log(error.message);
-    const detail = `${error.message} Use the selected drive and a valid device folder path.`;
-    showManagerOutcome("Invalid device folder", detail);
-    showActivityOutcome("Invalid device folder", detail, "error");
-  }
-});
-elements.managerFolderNameInput.addEventListener("input", updateControls);
-elements.managerFolderNameInput.addEventListener("keydown", (event) => {
-  if (event.key === "Enter") {
-    event.preventDefault();
-    createManagerFolder();
+    if (typeof window.showDirectoryPicker === "function") {
+      const handle = await window.showDirectoryPicker({ mode: "read" });
+      const collected = await collectFromDirHandle(handle);
+      buildUploadPlan(collected.folders, collected.files);
+    } else {
+      el.folderInput.click();
+    }
+  } catch (err) {
+    if (err.name !== "AbortError") log(`Picker error: ${err.message}`, "err");
   }
 });
 
-setConnected(false);
-renderPlan();
-renderSummary();
-renderManager();
-renderActivityStatus();
+el.folderInput.addEventListener("change", async (e) => {
+  if (!e.target.files || e.target.files.length === 0) return;
+  const collected = await collectFromWebkitDir(e.target.files);
+  buildUploadPlan(collected.folders, collected.files);
+  e.target.value = "";
+});
+
+el.btnPickFiles.addEventListener("click", () => el.filesInput.click());
+
+el.filesInput.addEventListener("change", (e) => {
+  if (!e.target.files || e.target.files.length === 0) return;
+  const collected = collectFromFiles(e.target.files);
+  buildUploadPlan(collected.folders, collected.files);
+  e.target.value = "";
+});
+
+el.btnUploadStart.addEventListener("click", runUpload);
+
+el.btnUploadAbort.addEventListener("click", () => {
+  if (state.abortController) {
+    state.abortController.abort();
+    log("Upload abort requested.");
+  }
+});
+
+el.btnUploadClear.addEventListener("click", () => {
+  state.uploadPlan = [];
+  renderUploadQueue();
+  updateControls();
+});
+
+// === Initial state ===
+
+setConnState("disconnected");
+el.logSection.classList.add("section-disabled"); // no session yet — nothing to browse
+updateControls();
