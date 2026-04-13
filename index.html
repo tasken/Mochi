@@ -33,6 +33,7 @@
   <!-- Top bar -->
   <header class="topbar" id="topbar">
     <span class="topbar-brand">MochiNest</span>
+    <button id="btnDev" hidden>Dev</button>
     <button class="danger" id="btnConnect" hidden>
       <span class="ms">bluetooth_disabled</span> Disconnect
     </button>
@@ -139,6 +140,7 @@
         <button class="ghost" id="btnNavUp" title="Up one level"><span class="ms">arrow_upward</span></button>
         <nav class="nav-breadcrumb" id="navBreadcrumb"></nav>
         <span id="selectionCount" hidden></span>
+        <button class="ghost" id="btnDownloadSelected" hidden><span class="ms">download</span> Download</button>
         <button class="danger" id="btnDeleteSelected" hidden><span class="ms">delete</span> Delete</button>
         <button class="ghost" id="btnNewFolder" title="New folder" hidden><span class="ms">create_new_folder</span> New folder</button>
         <button class="ghost" id="btnRefresh" title="Refresh" aria-label="Refresh folder" hidden><span class="ms">refresh</span></button>
@@ -282,6 +284,8 @@
     </div>
   </div>
 </div>
+
+<div id="toast" class="toast" aria-live="polite"></div>
 
 <script type="module" src="./app.js"></script>
 </body>
