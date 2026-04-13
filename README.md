@@ -13,10 +13,12 @@ Web Bluetooth workspace for Pixl.js. Browse and manage device storage, upload fo
 
 - **File browser** — navigate folders with a clickable breadcrumb bar, create folders, refresh
 - **File operations** — rename or delete individual files inline; bulk-delete via checkbox selection
+- **Download** — single-file download per row, or bulk-download selected files (folders are skipped with a toast)
 - **Tree uploader** — pick a local folder or files, queue them, and upload in one shot with real-time speed readout
 - **Normalize** — rename files to lowercase on the device, with recursive and scoped options
 - **Amiibo recognition** — `.bin` files show their amiibo character name when known
 - **Protocol log** — toggle a live BLE command log for debugging
+- **Dev mode** — mock BLE client with a static file tree for UI development without a device
 
 ## Run Locally
 
@@ -26,12 +28,11 @@ No build step. Requires a secure context for Web Bluetooth.
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements-dev.txt
 
-inv serve           # localhost:8443
-inv serve-lan       # bind 0.0.0.0
-inv serve-https --host <your-ip> --bind 0.0.0.0 --port 8443
+inv serve                          # HTTPS on 0.0.0.0:8443 (LAN + localhost)
+inv serve --bind 127.0.0.1        # localhost only
 ```
 
-LAN devices need HTTPS. `serve-https` reads `.cert/cert.pem` and `.cert/key.pem`.
+Reads `.cert/cert.pem` and `.cert/key.pem` for HTTPS.
 
 ## Files
 
@@ -40,7 +41,7 @@ LAN devices need HTTPS. `serve-https` reads `.cert/cert.pem` and `.cert/key.pem`
 | `index.html` | App shell and all modals |
 | `styles.css` | Layout, components, responsive styles |
 | `app.js` | BLE client, file browser, uploader, all UI logic |
-| `server.py` | Dev HTTPS server (used by `inv serve*`) |
+| `server.py` | Dev HTTPS server (used by `inv serve`) |
 
 ## Upstream
 
