@@ -962,7 +962,7 @@ function applyAmiiboDisplay(entry, head, tail) {
 
 function renderFileTable() {
   if (state.entries.length === 0) {
-    el.fileTableBody.innerHTML = '<tr><td colspan="8" class="empty-state">This folder is empty.</td></tr>';
+    el.fileTableBody.innerHTML = '<tr><td colspan="4" class="empty-state">This folder is empty.</td></tr>';
     return;
   }
 
@@ -970,33 +970,35 @@ function renderFileTable() {
   for (const entry of state.entries) {
     const isDir = entry.type === "DIR";
     const checked = state.selectedNames.has(entry.name) ? "checked" : "";
-    const nameClass = isDir ? "cell-name folder" : "cell-name";
-    const icon = isDir ? "folder" : "insert_drive_file";
     const size = isDir ? "\u2014" : formatBytes(entry.size);
-    const flags = entry.meta ? formatFlagShort(entry.meta.flags) : "\u2014";
-    const amiibo = entry.meta ? formatAmiiboHex(entry.meta.amiiboHead, entry.meta.amiiboTail) : "\u2014";
-    const notes = entry.meta && entry.meta.notes ? escapeHtml(entry.meta.notes) : "\u2014";
+    const isPanelActive = state.drawerEntry && state.drawerEntry.name === entry.name;
+
+    // Subtitle: amiibo name (if known) → flags abbreviation → empty
+    let sub = "";
+    if (!isDir && entry.meta) {
+      const cachedAmiibo = _amiiboCache.get(`${entry.meta.amiiboHead >>> 0}:${entry.meta.amiiboTail >>> 0}`);
+      if (cachedAmiibo) {
+        sub = escapeHtml(cachedAmiibo.name);
+      } else {
+        const flagStr = formatFlagShort(entry.meta.flags);
+        if (flagStr !== "\u2014") sub = escapeHtml(flagStr);
+      }
+    }
+
+    const nameCell = isDir
+      ? `<td class="cell-name folder"><span class="ms-sm">folder</span> ${escapeHtml(entry.name)}</td>`
+      : `<td class="cell-name"><span class="ms-sm">insert_drive_file</span> ${escapeHtml(entry.name)}${sub ? `<span class="cell-name-sub">${sub}</span>` : ""}</td>`;
 
     rows.push(
-      `<tr data-name="${escapeHtml(entry.name)}">` +
+      `<tr data-name="${escapeHtml(entry.name)}"${isPanelActive ? ' class="panel-active"' : ''}>` +
       `<td class="cell-check"><input type="checkbox" ${checked}></td>` +
-      `<td class="${nameClass}">${escapeHtml(entry.name)}</td>` +
-      `<td class="cell-kind"><span class="ms-sm">${icon}</span></td>` +
+      nameCell +
       `<td class="cell-size">${size}</td>` +
-      `<td class="cell-flags">${flags}</td>` +
-      `<td class="cell-amiibo">${amiibo}</td>` +
-      `<td class="cell-notes">${notes}</td>` +
       `<td class="cell-actions"><button class="ghost" title="Rename"><span class="ms-sm">edit</span></button></td>` +
       `</tr>`
     );
   }
   el.fileTableBody.innerHTML = rows.join("");
-
-  // Reapply panel-active if drawer is open for a visible entry
-  if (state.drawerEntry) {
-    const activeRow = el.fileTableBody.querySelector(`tr[data-name="${CSS.escape(state.drawerEntry.name)}"]`);
-    if (activeRow) activeRow.classList.add("panel-active");
-  }
 }
 
 // === Selection Bar ===
