@@ -887,7 +887,7 @@ async function browseFolder(path) {
   state.currentPath = path;
   state.entries = entries;
   state.selectedNames.clear();
-  closeDrawer();
+  setPanelState("folder");
   el.pathDisplay.textContent = path;
   el.checkAll.checked = false;
   renderFileTable();
@@ -946,19 +946,17 @@ function renderAmiiboField(head, tail, info) {
 function applyAmiiboDisplay(entry, head, tail) {
   const key = `${head >>> 0}:${tail >>> 0}`;
   if (_amiiboCache.has(key)) {
-    // Already cached — render immediately, no spinner
-    el.drawerAmiibo.innerHTML = renderAmiiboField(head, tail, _amiiboCache.get(key));
+    el.panelAmiiboContent.innerHTML = renderAmiiboField(head, tail, _amiiboCache.get(key));
     return;
   }
-  // Show hex + spinner while API fetches
-  el.drawerAmiibo.innerHTML =
+  el.panelAmiiboContent.innerHTML =
     `<div class="drawer-amiibo-info">` +
     `<span class="drawer-amiibo-hex">${escapeHtml(formatAmiiboHex(head, tail))}</span>` +
     `</div>` +
     `<div class="drawer-amiibo-loading"><md-circular-progress indeterminate style="--md-circular-progress-size:28px"></md-circular-progress></div>`;
   lookupAmiibo(head, tail).then(info => {
     if (state.drawerEntry !== entry) return;
-    el.drawerAmiibo.innerHTML = renderAmiiboField(head, tail, info);
+    el.panelAmiiboContent.innerHTML = renderAmiiboField(head, tail, info);
   });
 }
 
@@ -1062,7 +1060,7 @@ el.fileTableBody.addEventListener("click", (e) => {
     if (entry.type === "DIR") {
       browseFolder(joinChildPath(state.currentPath, entry.name));
     } else {
-      openDrawer(entry);
+      setPanelState("file", entry);
     }
     return;
   }
@@ -1182,76 +1180,126 @@ el.btnSanitizeFilesCancel.addEventListener("click", () => closeModal(el.sanitize
 el.btnSanitizeFoldersCancel.addEventListener("click", () => closeModal(el.sanitizeModalFolders));
 el.btnSanitizeNoneCancel.addEventListener("click", () => closeModal(el.sanitizeModalNone));
 
-// === Metadata Drawer ===
+// === Context Panel ===
 
-function openDrawer(entry) {
-  state.drawerEntry = entry;
-  el.drawer.classList.add("open");
+function setPanelState(mode, entry) {
+  // Hide all states
+  el.panelFolder.hidden = true;
+  el.panelFile.hidden = true;
+  el.panelUpload.hidden = true;
 
-  // Highlight active row
-  for (const row of el.fileTableBody.querySelectorAll("tr[data-name]")) {
-    row.classList.remove("drawer-active");
+  if (mode === "upload") {
+    state.panelPrevMode = state.panelMode === "upload" ? state.panelPrevMode : state.panelMode;
+    state.panelMode = "upload";
+    el.panelUpload.hidden = false;
+    return;
   }
-  const activeRow = el.fileTableBody.querySelector(`tr[data-name="${CSS.escape(entry.name)}"]`);
-  if (activeRow) activeRow.classList.add("drawer-active");
 
-  // Populate drawer
-  el.drawerFileName.textContent = entry.name;
-  el.drawerSize.textContent = formatBytes(entry.size);
+  if (mode === "file" && entry) {
+    state.drawerEntry = entry;
+    state.panelMode = "file";
+    el.panelFile.hidden = false;
 
-  // Flags — always show all three, green check if active, dimmed if not
-  const flagDefs = [
-    { bit: 0x02, label: "Hidden" },
-    { bit: 0x04, label: "System" },
-    { bit: 0x01, label: "Readonly" },
-  ];
-  const flags = entry.meta ? entry.meta.flags : 0;
-  el.drawerFlags.innerHTML = flagDefs.map(f => {
-    const active = (flags & f.bit) !== 0;
-    const color = active ? "#3a8" : "#ccc";
-    return `<div><span class="ms-sm" style="color:${color}">check</span> ${escapeHtml(f.label)}</div>`;
-  }).join("");
+    // Populate file fields
+    el.panelFileName.textContent = entry.name;
+    el.panelFileSize.textContent = formatBytes(entry.size);
 
-  // Notes
-  el.drawerNotes.textContent = (entry.meta && entry.meta.notes) ? entry.meta.notes : "\u2014";
+    // Flags
+    const flagDefs = [
+      { bit: 0x02, label: "Hidden" },
+      { bit: 0x04, label: "System" },
+      { bit: 0x01, label: "Readonly" },
+    ];
+    const flags = entry.meta ? entry.meta.flags : 0;
+    el.panelFileFlags.innerHTML = flagDefs.map(f => {
+      const active = (flags & f.bit) !== 0;
+      const color = active ? "#3a8" : "#ccc";
+      return `<div style="font-size:0.78rem"><span class="ms-sm" style="color:${color}">check</span> ${escapeHtml(f.label)}</div>`;
+    }).join("");
 
-  // Amiibo — if VFS metadata has no ID, fall back to reading bytes 84-91 from .bin files.
-  // Those bytes map to tag[0x54..0x5B] = nfc3d internal[0x1DC..0x1E3] which is outside
-  // the cipher range (internal[0x02C..0x1B3]), so they are always plaintext.
-  const metaHead = entry.meta ? entry.meta.amiiboHead : null;
-  const metaTail = entry.meta ? entry.meta.amiiboTail : null;
-  if (metaHead != null) {
-    applyAmiiboDisplay(entry, metaHead, metaTail);
-  } else if (entry.type === "FILE" && entry.name.toLowerCase().endsWith(".bin") && state.client) {
-    el.drawerAmiibo.innerHTML = `<span class="drawer-amiibo-hex">\u2026</span>`;
-    const filePath = joinChildPath(state.currentPath, entry.name);
-    state.client.readFileData(filePath).then(res => {
-      if (state.drawerEntry !== entry) return;
-      if (res.ok && res.data.length >= 92) {
-        const dv = new DataView(res.data.buffer, res.data.byteOffset);
-        const head = dv.getUint32(84, false); // big-endian, matching firmware to_little_endian_int32
-        const tail = dv.getUint32(88, false);
-        applyAmiiboDisplay(entry, head, tail);
+    // Notes
+    el.panelFileNotes.textContent = (entry.meta && entry.meta.notes) ? entry.meta.notes : "\u2014";
+
+    // Amiibo section — only for .bin files
+    const isBin = entry.type === "FILE" && entry.name.toLowerCase().endsWith(".bin");
+    el.panelAmiibo.hidden = !isBin;
+    if (isBin) {
+      const metaHead = entry.meta ? entry.meta.amiiboHead : null;
+      const metaTail = entry.meta ? entry.meta.amiiboTail : null;
+      if (metaHead != null) {
+        applyAmiiboDisplay(entry, metaHead, metaTail);
+      } else if (state.client) {
+        el.panelAmiiboContent.innerHTML = `<span class="drawer-amiibo-hex">\u2026</span>`;
+        const filePath = joinChildPath(state.currentPath, entry.name);
+        state.client.readFileData(filePath).then(res => {
+          if (state.drawerEntry !== entry) return;
+          if (res.ok && res.data.length >= 92) {
+            const dv = new DataView(res.data.buffer, res.data.byteOffset);
+            const head = dv.getUint32(84, false);
+            const tail = dv.getUint32(88, false);
+            applyAmiiboDisplay(entry, head, tail);
+          } else {
+            el.panelAmiiboContent.innerHTML = `<span class="drawer-amiibo-hex">\u2014</span>`;
+          }
+        }).catch(() => {
+          if (state.drawerEntry === entry) el.panelAmiiboContent.innerHTML = `<span class="drawer-amiibo-hex">\u2014</span>`;
+        });
       } else {
-        el.drawerAmiibo.innerHTML = `<span class="drawer-amiibo-hex">\u2014</span>`;
+        el.panelAmiiboContent.innerHTML = `<span class="drawer-amiibo-hex">\u2014</span>`;
       }
-    }).catch(() => {
-      if (state.drawerEntry === entry) el.drawerAmiibo.innerHTML = `<span class="drawer-amiibo-hex">\u2014</span>`;
-    });
-  } else {
-    el.drawerAmiibo.innerHTML = `<span class="drawer-amiibo-hex">\u2014</span>`;
-  }
-}
+    }
 
-function closeDrawer() {
-  el.drawer.classList.remove("open");
-  for (const row of el.fileTableBody.querySelectorAll("tr[data-name]")) {
-    row.classList.remove("drawer-active");
+    // Highlight active row
+    for (const row of el.fileTableBody.querySelectorAll("tr[data-name]")) {
+      row.classList.toggle("panel-active", row.dataset.name === entry.name);
+    }
+    return;
   }
+
+  // Default: folder state
   state.drawerEntry = null;
+  state.panelMode = "folder";
+  el.panelFolder.hidden = false;
+
+  // Clear row highlight
+  for (const row of el.fileTableBody.querySelectorAll("tr[data-name]")) {
+    row.classList.remove("panel-active");
+  }
+
+  // Populate folder info
+  if (state.currentPath) {
+    const name = getBaseName(state.currentPath) || state.currentPath;
+    el.panelFolderName.textContent = name;
+    el.panelFolderPath.textContent = state.currentPath;
+    el.panelFolderCount.textContent = `${state.entries.length} item${state.entries.length !== 1 ? "s" : ""}`;
+  } else {
+    el.panelFolderName.textContent = "";
+    el.panelFolderPath.textContent = "";
+    el.panelFolderCount.textContent = "";
+  }
+  // Drive bar updated by renderDrive
 }
 
-el.btnDrawerClose.addEventListener("click", closeDrawer);
+// Panel rename button — renames the currently displayed file
+el.panelBtnRename.addEventListener("click", () => {
+  if (!state.drawerEntry) return;
+  renameTarget = state.drawerEntry.name;
+  el.renameInput.value = state.drawerEntry.name;
+  openModal(el.renameModal);
+  el.renameInput.focus();
+  el.renameInput.select();
+});
+
+// Panel delete button — deletes the currently displayed file
+el.panelBtnDelete.addEventListener("click", () => {
+  if (!state.drawerEntry) return;
+  el.deleteCount.textContent = "1";
+  el.deleteModalMsg.textContent = `This will permanently delete "${state.drawerEntry.name}". This action cannot be undone.`;
+  // Pre-select the entry so the existing delete confirm handler works
+  state.selectedNames.clear();
+  state.selectedNames.add(state.drawerEntry.name);
+  openModal(el.deleteModal);
+});
 
 // === Connect button ===
 
