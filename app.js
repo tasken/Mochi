@@ -14,6 +14,7 @@ const decoder = new TextDecoder();
 
 const VFS_ERRORS = {
   0: "OK",
+  1: "Command failed",
   [-1]: "Device error",
   [-2]: "Out of memory",
   [-3]: "End of file",
@@ -317,10 +318,13 @@ class PixlToolsClient {
     const openRes = await this.openFile(path, "r");
     if (!openRes.ok) return { ok: false, error: openRes.error, data: null };
     const fileId = openRes.data;
-    const r = await this._sendCommand(0x14, Uint8Array.of(fileId));
-    await this.closeFile(fileId);
-    if (r.status !== 0) return { ok: false, error: this._vfsError(r.status), data: null };
-    return { ok: true, error: null, data: r.payload };
+    try {
+      const r = await this._sendCommand(0x14, Uint8Array.of(fileId));
+      if (r.status !== 0) return { ok: false, error: this._vfsError(r.status), data: null };
+      return { ok: true, error: null, data: r.payload };
+    } finally {
+      await this.closeFile(fileId).catch(() => {});
+    }
   }
 
   // --- Higher-level helpers ---
@@ -367,7 +371,7 @@ class PixlToolsClient {
         onProgress(offset, bytes.length);
       }
     } finally {
-      await this.closeFile(fileId);
+      await this.closeFile(fileId).catch(() => {});
     }
   }
 
@@ -873,8 +877,9 @@ function renderDrive(driveData) {
   el.panelDriveBarFill.classList.toggle("high", pct >= 85);
   const used = formatBytes(driveData.usedBytes);
   const total = formatBytes(driveData.totalBytes);
-  el.panelDriveUsage.textContent = `${used} / ${total}`;
-  el.topbarDriveInfo.textContent = `${used} / ${total}`;
+  const free = formatBytes(driveData.totalBytes - driveData.usedBytes);
+  el.panelDriveUsage.textContent = `${used} / ${total} (${free} free)`;
+  el.topbarDriveInfo.textContent = `${free} free`;
 }
 
 // === Format Modal ===
