@@ -239,12 +239,12 @@ class PixlToolsClient {
       const size = c.u32();
       const type = c.u8() === 1 ? "DIR" : "FILE";
       const metaSize = c.u8();
-      const meta = { flags: 0, amiiboHead: null, amiiboTail: null };
+      const meta = { flags: 0, nfcTagHead: null, nfcTagTail: null };
       if (metaSize > 0) {
         const metaStart = c.offset;
         const metaEnd = metaStart + metaSize;
         let pos = metaStart;
-        // Firmware TLV format (vfs_meta.c): type 1 (NOTES) skipped, types 2 (FLAGS) and 3 (AMIIBO_ID) have no length prefix.
+        // Firmware TLV format (vfs_meta.c): type 1 (NOTES) skipped, types 2 (FLAGS) and 3 (NFC_TAG_ID) have no length prefix.
         while (pos < metaEnd) {
           const tlvType = c.bytes[pos];
           pos += 1;
@@ -258,11 +258,11 @@ class PixlToolsClient {
             if (pos >= metaEnd) break;
             meta.flags = c.bytes[pos]; pos += 1;
           } else if (tlvType === 3) {
-            // Amiibo ID: [head u32 LE][tail u32 LE] — no length prefix
+            // NFC Tag ID: [head u32 LE][tail u32 LE] — no length prefix
             if (pos + 8 > metaEnd) break;
             const mv = new DataView(c.bytes.buffer, c.bytes.byteOffset + pos, 8);
-            meta.amiiboHead = mv.getUint32(0, true);
-            meta.amiiboTail = mv.getUint32(4, true);
+            meta.nfcTagHead = mv.getUint32(0, true);
+            meta.nfcTagTail = mv.getUint32(4, true);
             pos += 8;
           } else {
             break; // unknown type, length unknown — cannot continue
@@ -477,19 +477,19 @@ class DevMockClient {
       "E:/": [
         { name: "nfc",        type: "DIR" },
         { name: "save",       type: "DIR" },
-        { name: "README.txt", type: "FILE", size: 312, meta: { amiiboHead: null, amiiboTail: null } },
+        { name: "README.txt", type: "FILE", size: 312, meta: { nfcTagHead: null, nfcTagTail: null } },
       ],
       "E:/nfc": [
         { name: "figures",    type: "DIR" },
-        { name: "alpha.bin", type: "FILE", size: 540, meta: { amiiboHead: 0x00000000, amiiboTail: 0x00000002 } },
-        { name: "bravo.bin", type: "FILE", size: 540, meta: { amiiboHead: 0x05C00000, amiiboTail: 0x04121302 } },
+        { name: "alpha.bin", type: "FILE", size: 540, meta: { nfcTagHead: 0x00000000, nfcTagTail: 0x00000002 } },
+        { name: "bravo.bin", type: "FILE", size: 540, meta: { nfcTagHead: 0x05C00000, nfcTagTail: 0x04121302 } },
       ],
       "E:/nfc/figures": [
-        { name: "charlie.bin", type: "FILE", size: 540, meta: { amiiboHead: 0x01000000, amiiboTail: 0x03530902 } },
-        { name: "delta.bin",   type: "FILE", size: 540, meta: { amiiboHead: 0x01000000, amiiboTail: 0x03540902 } },
+        { name: "charlie.bin", type: "FILE", size: 540, meta: { nfcTagHead: 0x01000000, nfcTagTail: 0x03530902 } },
+        { name: "delta.bin",   type: "FILE", size: 540, meta: { nfcTagHead: 0x01000000, nfcTagTail: 0x03540902 } },
       ],
       "E:/save": [
-        { name: "backup.bin", type: "FILE", size: 1229, meta: { amiiboHead: null, amiiboTail: null } },
+        { name: "backup.bin", type: "FILE", size: 1229, meta: { nfcTagHead: null, nfcTagTail: null } },
       ],
     };
     return { ok: true, data: fs[path] ?? [] };
@@ -505,20 +505,20 @@ class DevMockClient {
   async closeFile()       { return { ok: true, data: null }; }
   async readFileData(path) {
     const mockFiles = {
-      "E:/README.txt":                    { size: 312,  amiiboHead: null,       amiiboTail: null },
-      "E:/nfc/alpha.bin":                  { size: 540,  amiiboHead: 0x00000000, amiiboTail: 0x00000002 },
-      "E:/nfc/bravo.bin":                  { size: 540,  amiiboHead: 0x05C00000, amiiboTail: 0x04121302 },
-      "E:/nfc/figures/charlie.bin":         { size: 540,  amiiboHead: 0x01000000, amiiboTail: 0x03530902 },
-      "E:/nfc/figures/delta.bin":           { size: 540,  amiiboHead: 0x01000000, amiiboTail: 0x03540902 },
-      "E:/save/backup.bin":                { size: 1229, amiiboHead: null,       amiiboTail: null },
+      "E:/README.txt":                    { size: 312,  nfcTagHead: null,       nfcTagTail: null },
+      "E:/nfc/alpha.bin":                  { size: 540,  nfcTagHead: 0x00000000, nfcTagTail: 0x00000002 },
+      "E:/nfc/bravo.bin":                  { size: 540,  nfcTagHead: 0x05C00000, nfcTagTail: 0x04121302 },
+      "E:/nfc/figures/charlie.bin":         { size: 540,  nfcTagHead: 0x01000000, nfcTagTail: 0x03530902 },
+      "E:/nfc/figures/delta.bin":           { size: 540,  nfcTagHead: 0x01000000, nfcTagTail: 0x03540902 },
+      "E:/save/backup.bin":                { size: 1229, nfcTagHead: null,       nfcTagTail: null },
     };
     const meta = mockFiles[path];
     const size = meta?.size ?? 32;
     const data = new Uint8Array(size);
-    if (meta?.amiiboHead != null && size >= 92) {
+    if (meta?.nfcTagHead != null && size >= 92) {
       const dv = new DataView(data.buffer);
-      dv.setUint32(84, meta.amiiboHead, false);
-      dv.setUint32(88, meta.amiiboTail, false);
+      dv.setUint32(84, meta.nfcTagHead, false);
+      dv.setUint32(88, meta.nfcTagTail, false);
     }
     return { ok: true, data };
   }
@@ -563,14 +563,14 @@ const el = {
   panelDriveBarFill: document.getElementById("panelDriveBarFill"),
   panelDriveUsage: document.getElementById("panelDriveUsage"),
 
-  // Context panel — file/amiibo state
+  // Context panel — file/NFC tag state
   panelFile: document.getElementById("panelFile"),
   panelFileLabel: document.getElementById("panelFileLabel"),
   panelFileName: document.getElementById("panelFileName"),
   panelFileSize: document.getElementById("panelFileSize"),
   panelFileFlags: document.getElementById("panelFileFlags"),
-  panelAmiibo: document.getElementById("panelAmiibo"),
-  panelAmiiboContent: document.getElementById("panelAmiiboContent"),
+  panelNfcTag: document.getElementById("panelNfcTag"),
+  panelNfcTagContent: document.getElementById("panelNfcTagContent"),
   panelBtnRename: document.getElementById("panelBtnRename"),
   panelBtnDelete: document.getElementById("panelBtnDelete"),
 
@@ -942,19 +942,19 @@ async function browseFolder(path) {
 
 // === Render File Table ===
 
-function formatAmiiboHex(head, tail) {
+function formatNfcTagHex(head, tail) {
   if (head == null || tail == null) return "\u2014";
   const h = (head >>> 0).toString(16).toUpperCase().padStart(8, "0");
   const t = (tail >>> 0).toString(16).toUpperCase().padStart(8, "0");
   return `${h}:${t}`;
 }
 
-// AmiiboAPI lookup — session cache to avoid re-fetching the same ID
-const _amiiboCache = new Map();
+// NFC tag API lookup — session cache to avoid re-fetching the same ID
+const _nfcTagCache = new Map();
 
-async function lookupAmiibo(head, tail) {
+async function lookupNfcTag(head, tail) {
   const key = `${head >>> 0}:${tail >>> 0}`;
-  if (_amiiboCache.has(key)) return _amiiboCache.get(key);
+  if (_nfcTagCache.has(key)) return _nfcTagCache.get(key);
   const headHex = (head >>> 0).toString(16).toUpperCase().padStart(8, "0");
   const tailHex = (tail >>> 0).toString(16).toUpperCase().padStart(8, "0");
   let info = null;
@@ -962,38 +962,38 @@ async function lookupAmiibo(head, tail) {
     const res = await fetch(`https://amiiboapi.org/api/amiibo/?head=${headHex}&tail=${tailHex}`);
     if (res.ok) info = (await res.json()).amiibo?.[0] ?? null;
   } catch { /* network unavailable — leave null */ }
-  _amiiboCache.set(key, info);
+  _nfcTagCache.set(key, info);
   return info;
 }
 
-function renderAmiiboField(head, tail, info) {
-  const hex = `<span class="drawer-amiibo-hex">${escapeHtml(formatAmiiboHex(head, tail))}</span>`;
+function renderNfcTagField(head, tail, info) {
+  const hex = `<span class="drawer-nfc-tag-hex">${escapeHtml(formatNfcTagHex(head, tail))}</span>`;
   if (!info) return hex;
   const seriesLine = info.amiiboSeries && info.amiiboSeries !== info.gameSeries
     ? `${escapeHtml(info.gameSeries)} · ${escapeHtml(info.amiiboSeries)}`
     : escapeHtml(info.gameSeries);
-  return `<div class="drawer-amiibo-info">` +
-    `<span class="drawer-amiibo-name">${escapeHtml(info.name)}</span>` +
-    `<span class="drawer-amiibo-series">${seriesLine}</span>` +
+  return `<div class="drawer-nfc-tag-info">` +
+    `<span class="drawer-nfc-tag-name">${escapeHtml(info.name)}</span>` +
+    `<span class="drawer-nfc-tag-series">${seriesLine}</span>` +
     hex +
     `</div>` +
     `<img src="${escapeHtml(info.image)}" alt="${escapeHtml(info.name)}" loading="lazy">`;
 }
 
-function applyAmiiboDisplay(entry, head, tail) {
+function applyNfcTagDisplay(entry, head, tail) {
   const key = `${head >>> 0}:${tail >>> 0}`;
-  if (_amiiboCache.has(key)) {
-    el.panelAmiiboContent.innerHTML = renderAmiiboField(head, tail, _amiiboCache.get(key));
+  if (_nfcTagCache.has(key)) {
+    el.panelNfcTagContent.innerHTML = renderNfcTagField(head, tail, _nfcTagCache.get(key));
     return;
   }
-  el.panelAmiiboContent.innerHTML =
-    `<div class="drawer-amiibo-info">` +
-    `<span class="drawer-amiibo-hex">${escapeHtml(formatAmiiboHex(head, tail))}</span>` +
+  el.panelNfcTagContent.innerHTML =
+    `<div class="drawer-nfc-tag-info">` +
+    `<span class="drawer-nfc-tag-hex">${escapeHtml(formatNfcTagHex(head, tail))}</span>` +
     `</div>` +
-    `<div class="drawer-amiibo-loading"><md-circular-progress indeterminate style="--md-circular-progress-size:28px"></md-circular-progress></div>`;
-  lookupAmiibo(head, tail).then(info => {
+    `<div class="drawer-nfc-tag-loading"><md-circular-progress indeterminate style="--md-circular-progress-size:28px"></md-circular-progress></div>`;
+  lookupNfcTag(head, tail).then(info => {
     if (state.drawerEntry !== entry) return;
-    el.panelAmiiboContent.innerHTML = renderAmiiboField(head, tail, info);
+    el.panelNfcTagContent.innerHTML = renderNfcTagField(head, tail, info);
   });
 }
 
@@ -1263,17 +1263,17 @@ function setPanelState(mode, entry) {
       return `<div style="font-size:0.78rem"><span class="ms-sm" style="color:${color}">check</span> ${escapeHtml(f.label)}</div>`;
     }).join("");
 
-    // Amiibo section — only for .bin files
-    el.panelFileLabel.textContent = entry.name.toLowerCase().endsWith(".bin") ? "Amiibo" : "File";
+    // NFC tag section — only for .bin files
+    el.panelFileLabel.textContent = entry.name.toLowerCase().endsWith(".bin") ? "NFC Tag" : "File";
     const isBin = entry.type === "FILE" && entry.name.toLowerCase().endsWith(".bin");
-    el.panelAmiibo.hidden = !isBin;
+    el.panelNfcTag.hidden = !isBin;
     if (isBin) {
-      const metaHead = entry.meta ? entry.meta.amiiboHead : null;
-      const metaTail = entry.meta ? entry.meta.amiiboTail : null;
+      const metaHead = entry.meta ? entry.meta.nfcTagHead : null;
+      const metaTail = entry.meta ? entry.meta.nfcTagTail : null;
       if (metaHead != null) {
-        applyAmiiboDisplay(entry, metaHead, metaTail);
+        applyNfcTagDisplay(entry, metaHead, metaTail);
       } else if (state.client) {
-        el.panelAmiiboContent.innerHTML = `<span class="drawer-amiibo-hex">\u2026</span>`;
+        el.panelNfcTagContent.innerHTML = `<span class="drawer-nfc-tag-hex">\u2026</span>`;
         const filePath = joinChildPath(state.currentPath, entry.name);
         state.client.readFileData(filePath).then(res => {
           if (state.drawerEntry !== entry) return;
@@ -1281,15 +1281,15 @@ function setPanelState(mode, entry) {
             const dv = new DataView(res.data.buffer, res.data.byteOffset);
             const head = dv.getUint32(84, false);
             const tail = dv.getUint32(88, false);
-            applyAmiiboDisplay(entry, head, tail);
+            applyNfcTagDisplay(entry, head, tail);
           } else {
-            el.panelAmiiboContent.innerHTML = `<span class="drawer-amiibo-hex">\u2014</span>`;
+            el.panelNfcTagContent.innerHTML = `<span class="drawer-nfc-tag-hex">\u2014</span>`;
           }
         }).catch(() => {
-          if (state.drawerEntry === entry) el.panelAmiiboContent.innerHTML = `<span class="drawer-amiibo-hex">\u2014</span>`;
+          if (state.drawerEntry === entry) el.panelNfcTagContent.innerHTML = `<span class="drawer-nfc-tag-hex">\u2014</span>`;
         });
       } else {
-        el.panelAmiiboContent.innerHTML = `<span class="drawer-amiibo-hex">\u2014</span>`;
+        el.panelNfcTagContent.innerHTML = `<span class="drawer-nfc-tag-hex">\u2014</span>`;
       }
     }
 

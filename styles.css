@@ -259,7 +259,7 @@
   color: #bbb;
 }
 
-.panel-amiibo-content {
+.panel-nfc-tag-content {
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -270,7 +270,7 @@
   margin-top: 4px;
 }
 
-.panel-amiibo-content img {
+.panel-nfc-tag-content img {
   width: 100%;
   height: auto;
   object-fit: contain;
@@ -278,31 +278,31 @@
   display: block;
 }
 
-.drawer-amiibo-info {
+.drawer-nfc-tag-info {
   display: flex;
   flex-direction: column;
   gap: 2px;
 }
 
-.drawer-amiibo-name {
+.drawer-nfc-tag-name {
   font-weight: 700;
   font-size: var(--fs-md);
   color: #1a1a2e;
 }
 
-.drawer-amiibo-series {
+.drawer-nfc-tag-series {
   font-size: var(--fs-s);
   color: #888;
 }
 
-.drawer-amiibo-hex {
+.drawer-nfc-tag-hex {
   font-family: "IBM Plex Mono", monospace;
   font-size: var(--fs-s);
   color: #aaa;
   word-break: break-all;
 }
 
-.drawer-amiibo-loading {
+.drawer-nfc-tag-loading {
   display: flex;
   justify-content: center;
   padding: 6px 0;
