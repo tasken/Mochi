@@ -190,6 +190,15 @@
   gap: 10px;
 }
 
+.panel-commit {
+  margin-top: auto;
+  font-family: var(--mono);
+  font-size: var(--fs-xs);
+  color: #bbb;
+  user-select: none;
+  padding-top: 8px;
+}
+
 .panel-state[hidden] { display: none; }
 .panel-state {
   display: flex;
@@ -620,7 +629,7 @@
     background: rgba(0,0,0,0.08);
   }
   #selectionCount { font-weight: 700; font-size: var(--fs-s); color: #666; }
-  .nav-commit { font-family: var(--mono); font-size: var(--fs-xs); color: #999; margin-left: auto; padding: 0 4px; user-select: none; }
+
 
   .nav-breadcrumb {
     display: flex;
@@ -844,11 +853,18 @@
   }
 
 /* Toast */
-.toast {
+.toast-container {
   position: fixed;
   bottom: 24px;
   left: 50%;
   transform: translateX(-50%);
+  z-index: 200;
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 8px;
+  pointer-events: none;
+}
+.toast {
   background: #2a2a3e;
   color: #e0e0f0;
   font-size: var(--fs-s);
@@ -858,6 +874,27 @@
   pointer-events: none;
   opacity: 0;
   transition: opacity 0.2s;
-  z-index: 200;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
 }
 .toast.visible { opacity: 1; }
+.toast.error { background: oklch(0.45 0.15 25); color: #fff; pointer-events: auto; }
+.toast-close {
+  background: none;
+  border: none;
+  color: inherit;
+  font-size: 1rem;
+  cursor: pointer;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  line-height: 1;
+  opacity: 0.8;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  transition: background 0.15s, opacity 0.15s;
+}
+.toast-close:hover { opacity: 1; color: oklch(0.45 0.15 25); }

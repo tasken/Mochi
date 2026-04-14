@@ -121,6 +121,7 @@
         <input id="filesInput" type="file" hidden multiple>
       </div>
 
+      <span class="panel-commit" id="navCommit"></span>
     </aside>
 
     <!-- File browser -->
@@ -144,7 +145,6 @@
         <button class="danger" id="btnDeleteSelected" hidden><span class="ms">delete</span> Delete</button>
         <button class="ghost" id="btnNewFolder" title="New folder" hidden><span class="ms">create_new_folder</span> New folder</button>
         <button class="ghost" id="btnRefresh" title="Refresh" aria-label="Refresh folder" hidden><span class="ms">refresh</span></button>
-        <span class="nav-commit" id="navCommit"></span>
       </div>
 
       <!-- File table -->
@@ -285,7 +285,7 @@
   </div>
 </div>
 
-<div id="toast" class="toast" aria-live="polite"></div>
+<div id="toastContainer" class="toast-container" aria-live="polite"></div>
 
 <script type="module" src="./app.js"></script>
 </body>

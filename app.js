@@ -497,7 +497,12 @@ class DevMockClient {
 
   // Mutations always succeed but are not reflected in readFolder (static mock).
   async createFolder()    { return { ok: true, data: null }; }
-  async removePath()      { return { ok: true, data: null }; }
+  async removePath(path)  {
+    if (path && path.toLowerCase().endsWith("readme.txt")) {
+      return { ok: false, error: "Permission denied (mock)" };
+    }
+    return { ok: true, data: null };
+  }
   async renamePath()      { return { ok: true, data: null }; }
   async formatDrive()     { return { ok: true, data: null }; }
   async openFile()        { return { ok: true, data: 0 }; }
@@ -608,7 +613,7 @@ const el = {
   selectionCount: document.getElementById("selectionCount"),
   btnDownloadSelected: document.getElementById("btnDownloadSelected"),
   btnDeleteSelected: document.getElementById("btnDeleteSelected"),
-  toast: document.getElementById("toast"),
+  toastContainer: document.getElementById("toastContainer"),
 
   // Modals
   formatModal: document.getElementById("formatModal"),
@@ -739,12 +744,41 @@ function showConnError(msg) {
   el.connError.hidden = false;
 }
 
-let _toastTimer;
+const MAX_TOASTS = 3;
 function showToast(msg) {
-  el.toast.textContent = msg;
-  el.toast.classList.add("visible");
-  clearTimeout(_toastTimer);
-  _toastTimer = setTimeout(() => el.toast.classList.remove("visible"), 2500);
+  const isError = msg.startsWith("ERROR:");
+  const text = isError ? msg.slice(7) : msg;
+
+  const toast = document.createElement("div");
+  toast.className = "toast visible" + (isError ? " error" : "");
+
+  const span = document.createElement("span");
+  span.textContent = text;
+  toast.appendChild(span);
+
+  if (isError) {
+    const btn = document.createElement("button");
+    btn.className = "toast-close";
+    btn.setAttribute("aria-label", "Dismiss");
+    btn.textContent = "\u00d7";
+    btn.addEventListener("click", () => removeToast(toast));
+    toast.appendChild(btn);
+  }
+
+  el.toastContainer.appendChild(toast);
+
+  // Evict oldest if over limit
+  const toasts = el.toastContainer.querySelectorAll(".toast");
+  if (toasts.length > MAX_TOASTS) removeToast(toasts[0]);
+
+  if (!isError) {
+    setTimeout(() => removeToast(toast), 2500);
+  }
+}
+function removeToast(toast) {
+  if (!toast || !toast.parentNode) return;
+  toast.classList.remove("visible");
+  setTimeout(() => toast.remove(), 200);
 }
 
 // === Connection ===
@@ -758,14 +792,13 @@ async function connectOrDisconnect() {
 
   setConnState("connecting");
 
-  if (!state.client) {
-    state.client = new PixlToolsClient(log);
-    state.client.onDisconnect = () => setConnState("disconnected");
-  }
+  state.client = new PixlToolsClient(log);
+  state.client.onDisconnect = () => setConnState("disconnected");
 
   try {
     await state.client.connect();
     setConnState("connected");
+    showToast("Connected.");
 
     // Get version info
     const ver = await state.client.getVersion();
@@ -791,6 +824,7 @@ async function connectOrDisconnect() {
   } catch (err) {
     log(`Connection failed: ${err.message}`);
     showConnError(err.message);
+    showToast("ERROR: Could not connect to device.");
     setConnState("disconnected");
   }
 }
@@ -801,18 +835,25 @@ async function devConnect() {
   state.client = new DevMockClient();
   state.client.onDisconnect = () => setConnState("disconnected");
   setConnState("connected");
+  showToast("Connected.");
 
+  log("\u2192 getVersion()", "cmd");
   await state.client.getVersion();
+  log("\u2190 version=mock-1.0 ble=DE:V0:00:00:00:00", "ok");
   el.topbarBadge.textContent = "DEV";
   el.topbarBadge.classList.add("dev");
 
+  log("\u2192 listDrives()", "cmd");
   const dr = await state.client.listDrives();
+  log("\u2190 drives=[E: 8.0 MB, 2.0 MB used]", "ok");
   if (dr.ok && dr.data.length > 0) {
     state.drive = dr.data[0];
     renderDrive(state.drive);
   }
 
+  log("\u2192 readFolder(E:/)", "cmd");
   await browseFolder("E:/");
+  log("\u2190 3 entries (2 dirs, 1 file)", "ok");
 }
 
 // === Drive Panel ===
@@ -852,6 +893,7 @@ el.btnFormatConfirm.addEventListener("click", async () => {
     const res = await state.client.formatDrive("E");
     if (res.ok) {
       log("Drive E: formatted successfully.");
+      showToast("Drive formatted.");
       invalidateCache();
       // Refresh drive info
       const dr = await state.client.listDrives();
@@ -862,9 +904,11 @@ el.btnFormatConfirm.addEventListener("click", async () => {
       await browseFolder("E:/");
     } else {
       log(`Format failed: ${res.error}`, "err");
+      showToast("ERROR: Drive format failed.");
     }
   } catch (err) {
     log(`Format error: ${err.message}`, "err");
+    showToast("ERROR: Drive format failed.");
   } finally {
     el.btnFormatConfirm.disabled = false;
   }
@@ -1203,13 +1247,16 @@ el.btnNewFolderConfirm.addEventListener("click", async () => {
     const res = await state.client.createFolder(folderPath);
     if (res.ok) {
       log(`Created folder: ${folderPath}`);
+      showToast("Folder created.");
       state.folderCache.delete(state.currentPath);
       await browseFolder(state.currentPath);
     } else {
       log(`Failed to create folder: ${res.error}`, "err");
+      showToast("ERROR: Could not create folder.");
     }
   } catch (err) {
     log(`Failed to create folder: ${err.message}`, "err");
+    showToast("ERROR: Could not create folder.");
   }
 });
 
@@ -1419,11 +1466,14 @@ el.btnRenameConfirm.addEventListener("click", async () => {
     const res = await state.client.renamePath(oldPath, newPath);
     if (res.ok) {
       log(`Renamed: ${renameTarget} \u2192 ${newName}`);
+      showToast("Renamed successfully.");
     } else {
       log(`Rename failed: ${res.error}`, "err");
+      showToast("ERROR: Rename failed.");
     }
   } catch (err) {
     log(`Failed to rename: ${err.message}`, "err");
+    showToast("ERROR: Rename failed.");
   } finally {
     invalidateCache();
     await browseFolder(state.currentPath);
@@ -1471,6 +1521,13 @@ el.btnDeleteConfirm.addEventListener("click", async () => {
       }
     }
     log(`Deleted ${deleted} of ${total} ${total === 1 ? "item" : "items"}.`);
+    if (deleted === total) {
+      showToast(`Deleted ${deleted} ${deleted === 1 ? "item" : "items"}.`);
+    } else if (deleted > 0) {
+      showToast(`ERROR: Only ${deleted} of ${total} items deleted.`);
+    } else {
+      showToast("ERROR: Could not delete selected items.");
+    }
   } finally {
     el.browserLockOverlay.classList.remove("active");
     updateControls();
@@ -1564,6 +1621,15 @@ async function executeSanitize(allOps, allSkipped) {
     }
   }
   log(`Normalized: ${parts.join(", ")}.`);
+  if (renamed === allOps.length) {
+    showToast(`Normalized: ${parts.join(", ")}.`);
+  } else if (renamed > 0) {
+    showToast(`ERROR: Only ${renamed} of ${allOps.length} items normalized.`);
+  } else if (allOps.length > 0) {
+    showToast("ERROR: Normalize failed.");
+  } else {
+    showToast(`Normalized: ${parts.join(", ")}.`);
+  }
 }
 
 async function withBrowserLock(title, fn) {
@@ -1574,6 +1640,7 @@ async function withBrowserLock(title, fn) {
     await fn();
   } catch (err) {
     log(err.message, "err");
+    showToast(`ERROR: ${err.message}`);
   } finally {
     el.browserLockOverlay.classList.remove("active");
     updateControls();
@@ -1871,8 +1938,14 @@ async function runUpload() {
       renderUploadQueue();
     }
     log("Upload complete.");
+    showToast("Upload complete.");
   } catch (err) {
     log(`Upload error: ${err.message}`, "err");
+    if (state.abortController && state.abortController.signal.aborted) {
+      showToast("ERROR: Upload was cancelled.");
+    } else {
+      showToast("ERROR: Upload failed.");
+    }
     const active = state.uploadPlan.find(i => i.status === "active");
     if (active) { active.status = state.abortController.signal.aborted ? "aborted" : "error"; }
     for (const item of state.uploadPlan) { if (item.status === "pending") item.status = "aborted"; }
@@ -1944,6 +2017,7 @@ const isDevMode = _buildCommit === "dev";
 if (isDevMode) {
   el.btnDev.hidden = false;
   el.btnDev.addEventListener("click", devConnect);
+  el.navCommit.textContent = "dev";
 }
 
 setConnState("disconnected");
