@@ -802,7 +802,7 @@ async function connectOrDisconnect() {
   try {
     await state.client.connect();
     setConnState("connected");
-    showToast("Connected.");
+    showToast("Connected");
 
     // Get version info
     const ver = await state.client.getVersion();
@@ -828,7 +828,7 @@ async function connectOrDisconnect() {
   } catch (err) {
     log(`Connection failed: ${err.message}`);
     showConnError(err.message);
-    showToast("ERROR: Could not connect to device.");
+    showToast("ERROR: Could not connect to device");
     setConnState("disconnected");
   }
 }
@@ -839,7 +839,7 @@ async function devConnect() {
   state.client = new DevMockClient();
   state.client.onDisconnect = () => setConnState("disconnected");
   setConnState("connected");
-  showToast("Connected.");
+  showToast("Connected");
 
   log("\u2192 getVersion()", "cmd");
   await state.client.getVersion();
@@ -887,8 +887,32 @@ function renderDrive(driveData) {
 function openModal(modalEl) { modalEl.classList.add("open"); }
 function closeModal(modalEl) { modalEl.classList.remove("open"); }
 
-el.btnFormat.addEventListener("click", () => openModal(el.formatModal));
-el.btnFormatCancel.addEventListener("click", () => closeModal(el.formatModal));
+let _formatCountdown = null;
+
+el.btnFormat.addEventListener("click", () => {
+  el.btnFormatConfirm.disabled = true;
+  el.btnFormatConfirm.textContent = "Wait (5s)";
+  let sec = 5;
+  clearInterval(_formatCountdown);
+  _formatCountdown = setInterval(() => {
+    sec--;
+    if (sec > 0) {
+      el.btnFormatConfirm.textContent = `Wait (${sec}s)`;
+    } else {
+      clearInterval(_formatCountdown);
+      _formatCountdown = null;
+      el.btnFormatConfirm.textContent = "Format drive";
+      el.btnFormatConfirm.disabled = false;
+    }
+  }, 1000);
+  openModal(el.formatModal);
+});
+el.btnFormatCancel.addEventListener("click", () => {
+  clearInterval(_formatCountdown);
+  _formatCountdown = null;
+  el.btnFormatConfirm.textContent = "Format drive";
+  closeModal(el.formatModal);
+});
 
 el.btnFormatConfirm.addEventListener("click", async () => {
   closeModal(el.formatModal);
@@ -898,7 +922,7 @@ el.btnFormatConfirm.addEventListener("click", async () => {
     const res = await state.client.formatDrive("E");
     if (res.ok) {
       log("Drive E: formatted successfully.");
-      showToast("Drive formatted.");
+      showToast("Drive formatted");
       invalidateCache();
       // Refresh drive info
       const dr = await state.client.listDrives();
@@ -909,11 +933,11 @@ el.btnFormatConfirm.addEventListener("click", async () => {
       await browseFolder("E:/");
     } else {
       log(`Format failed: ${res.error}`, "err");
-      showToast("ERROR: Drive format failed.");
+      showToast("ERROR: Could not format drive");
     }
   } catch (err) {
     log(`Format error: ${err.message}`, "err");
-    showToast("ERROR: Drive format failed.");
+    showToast("ERROR: Could not format drive");
   } finally {
     el.btnFormatConfirm.disabled = false;
   }
@@ -923,7 +947,14 @@ el.btnFormatConfirm.addEventListener("click", async () => {
 for (const modal of [el.formatModal, el.newFolderModal, el.renameModal, el.deleteModal,
     el.sanitizeModalFiles, el.sanitizeModalFolders, el.sanitizeModalNone]) {
   modal.addEventListener("click", (e) => {
-    if (e.target === modal) closeModal(modal);
+    if (e.target === modal) {
+      if (modal === el.formatModal) {
+        clearInterval(_formatCountdown);
+        _formatCountdown = null;
+        el.btnFormatConfirm.textContent = "Format drive";
+      }
+      closeModal(modal);
+    }
   });
 }
 
@@ -1200,7 +1231,7 @@ el.btnDeleteSelected.addEventListener("click", () => {
 el.btnDownloadSelected.addEventListener("click", async () => {
   const selected = state.entries.filter(e => state.selectedNames.has(e.name));
   const files = selected.filter(e => e.type === "FILE");
-  if (selected.some(e => e.type === "DIR")) showToast("Folders are skipped — only files can be downloaded.");
+  if (selected.some(e => e.type === "DIR")) showToast("Folders are skipped, only files can be downloaded");
   if (files.length === 0) return;
   for (const entry of files) {
     const filePath = joinChildPath(state.currentPath, entry.name);
@@ -1252,16 +1283,16 @@ el.btnNewFolderConfirm.addEventListener("click", async () => {
     const res = await state.client.createFolder(folderPath);
     if (res.ok) {
       log(`Created folder: ${folderPath}`);
-      showToast("Folder created.");
+      showToast("Folder created");
       state.folderCache.delete(state.currentPath);
       await browseFolder(state.currentPath);
     } else {
       log(`Failed to create folder: ${res.error}`, "err");
-      showToast("ERROR: Could not create folder.");
+      showToast("ERROR: Could not create folder");
     }
   } catch (err) {
     log(`Failed to create folder: ${err.message}`, "err");
-    showToast("ERROR: Could not create folder.");
+    showToast("ERROR: Could not create folder");
   }
 });
 
@@ -1471,14 +1502,14 @@ el.btnRenameConfirm.addEventListener("click", async () => {
     const res = await state.client.renamePath(oldPath, newPath);
     if (res.ok) {
       log(`Renamed: ${renameTarget} \u2192 ${newName}`);
-      showToast("Renamed successfully.");
+      showToast("Renamed");
     } else {
       log(`Rename failed: ${res.error}`, "err");
-      showToast("ERROR: Rename failed.");
+      showToast("ERROR: Could not rename");
     }
   } catch (err) {
     log(`Failed to rename: ${err.message}`, "err");
-    showToast("ERROR: Rename failed.");
+    showToast("ERROR: Could not rename");
   } finally {
     invalidateCache();
     await browseFolder(state.currentPath);
@@ -1519,19 +1550,19 @@ el.btnDeleteConfirm.addEventListener("click", async () => {
         if (res.ok) {
           deleted++;
         } else {
-          log(`Delete failed: ${item.name} \u2014 ${res.error}`, "err");
+          log(`Delete failed: ${item.name}: ${res.error}`, "err");
         }
       } catch (err) {
-        log(`Failed to delete: ${item.name} \u2014 ${err.message}`, "err");
+        log(`Failed to delete: ${item.name}: ${err.message}`, "err");
       }
     }
     log(`Deleted ${deleted} of ${total} ${total === 1 ? "item" : "items"}.`);
     if (deleted === total) {
-      showToast(`Deleted ${deleted} ${deleted === 1 ? "item" : "items"}.`);
+      showToast(`Deleted ${deleted} ${deleted === 1 ? "item" : "items"}`);
     } else if (deleted > 0) {
-      showToast(`ERROR: Only ${deleted} of ${total} items deleted.`);
+      showToast(`ERROR: Deleted ${deleted} of ${total} items`);
     } else {
-      showToast("ERROR: Could not delete selected items.");
+      showToast("ERROR: Could not delete items");
     }
   } finally {
     el.browserLockOverlay.classList.remove("active");
@@ -1584,7 +1615,7 @@ async function collectEntriesRecursive(path) {
   while (queue.length > 0) {
     const folder = queue.shift();
     const res = await state.client.readFolder(folder);
-    if (!res.ok) { log(`Scan failed: ${folder} \u2014 ${res.error}`, "err"); continue; }
+    if (!res.ok) { log(`Scan failed: ${folder}: ${res.error}`, "err"); continue; }
     const entries = sortEntries(res.data);
     snapshots.push({ parentPath: folder, entries });
     for (const e of entries) {
@@ -1611,10 +1642,10 @@ async function executeSanitize(allOps, allSkipped) {
       if (res.ok) {
         renamed++;
       } else {
-        log(`Failed to rename: ${op.name} \u2014 ${res.error}`, "err");
+        log(`Failed to rename: ${op.name}: ${res.error}`, "err");
       }
     } catch (err) {
-      log(`Failed to rename: ${op.name} \u2014 ${err.message}`, "err");
+      log(`Failed to rename: ${op.name}: ${err.message}`, "err");
     }
   }
 
@@ -1625,15 +1656,15 @@ async function executeSanitize(allOps, allSkipped) {
       log(`Skipped ${s.name}: ${s.reason}`, "err");
     }
   }
-  log(`Normalized: ${parts.join(", ")}.`);
+  log(`Normalized: ${parts.join(", ")}`);
   if (renamed === allOps.length) {
-    showToast(`Normalized: ${parts.join(", ")}.`);
+    showToast(`Normalized: ${parts.join(", ")}`);
   } else if (renamed > 0) {
-    showToast(`ERROR: Only ${renamed} of ${allOps.length} items normalized.`);
+    showToast(`ERROR: Normalized ${renamed} of ${allOps.length} items`);
   } else if (allOps.length > 0) {
-    showToast("ERROR: Normalize failed.");
+    showToast("ERROR: Could not normalize names");
   } else {
-    showToast(`Normalized: ${parts.join(", ")}.`);
+    showToast(`Normalized: ${parts.join(", ")}`);
   }
 }
 
@@ -1846,7 +1877,7 @@ function renderUploadQueue() {
     ? ` \u00b7 <span class="ms-sm">upload</span> <span style="color:#7878cc;font-weight:700">${state.transferSpeed}</span>`
     : "";
   items.push(
-    `<div class="queue-summary">${doneCount} / ${state.uploadPlan.length} items \u2014 ${totalPct}% (${formatBytes(doneBytes)} / ${formatBytes(totalBytes)})${speedStr}</div>`
+    `<div class="queue-summary">${doneCount} / ${state.uploadPlan.length} items \u00b7 ${totalPct}% (${formatBytes(doneBytes)} / ${formatBytes(totalBytes)})${speedStr}</div>`
   );
 
   el.uploadQueue.innerHTML = items.join("");
@@ -1943,13 +1974,13 @@ async function runUpload() {
       renderUploadQueue();
     }
     log("Upload complete.");
-    showToast("Upload complete.");
+    showToast("Upload complete");
   } catch (err) {
     log(`Upload error: ${err.message}`, "err");
     if (state.abortController && state.abortController.signal.aborted) {
-      showToast("ERROR: Upload was cancelled.");
+      showToast("ERROR: Upload cancelled");
     } else {
-      showToast("ERROR: Upload failed.");
+      showToast("ERROR: Upload failed");
     }
     const active = state.uploadPlan.find(i => i.status === "active");
     if (active) { active.status = state.abortController.signal.aborted ? "aborted" : "error"; }

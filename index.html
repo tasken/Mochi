@@ -111,7 +111,7 @@
           <button style="flex:1" id="btnPickFolder"><span class="ms">folder</span> Folder</button>
           <button style="flex:1" id="btnPickFiles"><span class="ms">upload_file</span> Files</button>
         </div>
-        <div id="uploadQueue"><div class="queue-empty">Queue is empty</div></div>
+        <div id="uploadQueue"><div class="queue-empty">No uploads queued</div></div>
         <div style="display:flex;gap:6px;margin-top:6px">
           <button class="primary" style="flex:1" id="btnUploadStart" disabled><span class="ms">play_arrow</span> Start</button>
           <button class="danger" style="flex:1" id="btnUploadAbort" disabled><span class="ms">stop</span> Stop</button>
@@ -252,7 +252,7 @@
         <input type="radio" name="sanitizeFolderScope" value="selected" checked> Only the selected items
       </label>
       <label style="display:flex;align-items:center;gap:8px;font-size:var(--fs-md);cursor:pointer">
-        <input type="radio" name="sanitizeFolderScope" value="recursive"> Recursive — include all contents
+        <input type="radio" name="sanitizeFolderScope" value="recursive"> Recursive, includes all contents
       </label>
     </div>
     <div class="modal-actions">
