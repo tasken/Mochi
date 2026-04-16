@@ -8,6 +8,10 @@ const FRAME_HEADER_SIZE = 4;
 const MAX_FILE_NAME_BYTES = 47;
 const MAX_FILE_PATH_BYTES = 65;
 const MAX_FOLDER_PATH_BYTES = 57;
+const LARGE_DIR_THRESHOLD = 80;
+const LARGE_BATCH_THRESHOLD = 200;
+const PIXL_RELEASES_URL = "https://github.com/solosky/pixl.js/releases";
+const PIXL_LATEST_API = "https://api.github.com/repos/solosky/pixl.js/releases/latest";
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
@@ -275,7 +279,8 @@ class PixlToolsClient {
       }
       entries.push({ name, size, type, meta });
     }
-    return { ok: true, error: null, data: entries };
+    const truncated = c.remaining() > 0;
+    return { ok: true, error: null, data: entries, truncated };
   }
 
   async createFolder(path) {
@@ -471,7 +476,7 @@ class DevMockClient {
   }
 
   async getVersion() {
-    return { ok: true, data: { version: "mock-1.0", bleAddress: "DE:V0:00:00:00:00" } };
+    return { ok: true, data: { version: "2.14.0", bleAddress: "DE:V0:00:00:00:00" } };
   }
 
   async listDrives() {
@@ -487,6 +492,7 @@ class DevMockClient {
       ],
       "E:/nfc": [
         { name: "figures",    type: "DIR" },
+        { name: "large-set", type: "DIR" },
         { name: "alpha.bin", type: "FILE", size: 540, meta: { nfcTagHead: 0x00000000, nfcTagTail: 0x00000002 } },
         { name: "bravo.bin", type: "FILE", size: 540, meta: { nfcTagHead: 0x05C00000, nfcTagTail: 0x04121302 } },
       ],
@@ -497,6 +503,12 @@ class DevMockClient {
       "E:/save": [
         { name: "backup.bin", type: "FILE", size: 1229, meta: { nfcTagHead: null, nfcTagTail: null } },
       ],
+      "E:/nfc/large-set": Array.from({ length: 95 }, (_, i) => ({
+        name: `amiibo_${String(i + 1).padStart(3, "0")}.bin`,
+        type: "FILE",
+        size: 540,
+        meta: { nfcTagHead: 0x01000000 + i, nfcTagTail: 0x03530902 },
+      })),
     };
     return { ok: true, data: fs[path] ?? [] };
   }
@@ -523,6 +535,16 @@ class DevMockClient {
       "E:/nfc/figures/delta.bin":           { size: 540,  nfcTagHead: 0x01000000, nfcTagTail: 0x03540902 },
       "E:/save/backup.bin":                { size: 1229, nfcTagHead: null,       nfcTagTail: null },
     };
+    // Generate mock entries for large-set files
+    const largeMatch = path.match(/^E:\/nfc\/large-set\/amiibo_(\d+)\.bin$/);
+    if (largeMatch) {
+      const idx = parseInt(largeMatch[1], 10) - 1;
+      const data = new Uint8Array(540);
+      const dv = new DataView(data.buffer);
+      dv.setUint32(84, 0x01000000 + idx, false);
+      dv.setUint32(88, 0x03530902, false);
+      return { ok: true, data };
+    }
     const meta = mockFiles[path];
     const size = meta?.size ?? 32;
     const data = new Uint8Array(size);
@@ -554,7 +576,6 @@ const el = {
   btnNewFolder: document.getElementById("btnNewFolder"),
   navCommit: document.getElementById("navCommit"),
   btnNormalize: document.getElementById("btnNormalize"),
-  btnUploadToggle: document.getElementById("btnUploadToggle"),
   btnLogToggle: document.getElementById("btnLogToggle"),
   connError: document.getElementById("connError"),
 
@@ -568,6 +589,7 @@ const el = {
 
   // Context panel — folder state
   panelFolder: document.getElementById("panelFolder"),
+  btnFolderUpload: document.getElementById("btnFolderUpload"),
   panelFolderName: document.getElementById("panelFolderName"),
   panelFolderPath: document.getElementById("panelFolderPath"),
   panelFolderCount: document.getElementById("panelFolderCount"),
@@ -643,6 +665,11 @@ const el = {
   btnDeleteCancel: document.getElementById("btnDeleteCancel"),
   btnDeleteConfirm: document.getElementById("btnDeleteConfirm"),
 
+  uploadWarnModal: document.getElementById("uploadWarnModal"),
+  uploadWarnMsg: document.getElementById("uploadWarnMsg"),
+  btnUploadWarnCancel: document.getElementById("btnUploadWarnCancel"),
+  btnUploadWarnConfirm: document.getElementById("btnUploadWarnConfirm"),
+
   sanitizeModalFiles: document.getElementById("sanitizeModalFiles"),
   btnSanitizeFilesCancel: document.getElementById("btnSanitizeFilesCancel"),
   btnSanitizeFilesConfirm: document.getElementById("btnSanitizeFilesConfirm"),
@@ -670,6 +697,7 @@ const state = {
   panelMode: "folder",     // "folder" | "file" | "upload"
   panelPrevMode: "folder", // restored when upload panel closes
   uploadPlan: [],
+  uploadWarnings: [],
   uploadActive: false,
   abortController: null,
   transferSpeed: "",
@@ -722,7 +750,6 @@ function setConnState(newState) {
   el.btnRefresh.hidden = !connected;
   el.btnNewFolder.hidden = !connected;
   el.btnNormalize.hidden = !connected;
-  el.btnUploadToggle.hidden = !connected;
   el.btnLogToggle.hidden = !connected;
 
   // Error cleared on state change
@@ -753,16 +780,18 @@ function showConnError(msg) {
 const MAX_TOASTS = 3;
 function showToast(msg) {
   const isError = msg.startsWith("ERROR:");
-  const text = isError ? msg.slice(7) : msg;
+  const isWarning = msg.startsWith("WARN:");
+  const text = isError ? msg.slice(6) : isWarning ? msg.slice(5) : msg;
+  const sticky = isError || isWarning;
 
   const toast = document.createElement("div");
-  toast.className = "toast visible" + (isError ? " error" : "");
+  toast.className = "toast visible" + (isError ? " error" : isWarning ? " warning" : "");
 
   const span = document.createElement("span");
   span.textContent = text;
   toast.appendChild(span);
 
-  if (isError) {
+  if (sticky) {
     const btn = document.createElement("button");
     btn.className = "toast-close";
     btn.setAttribute("aria-label", "Dismiss");
@@ -777,7 +806,7 @@ function showToast(msg) {
   const toasts = el.toastContainer.querySelectorAll(".toast");
   if (toasts.length > MAX_TOASTS) removeToast(toasts[0]);
 
-  if (!isError) {
+  if (!sticky) {
     setTimeout(() => removeToast(toast), 2500);
   }
 }
@@ -788,6 +817,40 @@ function removeToast(toast) {
 }
 
 // === Connection ===
+
+function compareSemver(a, b) {
+  const pa = a.split(".").map(Number);
+  const pb = b.split(".").map(Number);
+  for (let i = 0; i < 3; i++) {
+    if ((pa[i] || 0) < (pb[i] || 0)) return -1;
+    if ((pa[i] || 0) > (pb[i] || 0)) return 1;
+  }
+  return 0;
+}
+
+async function checkFirmwareVersion(deviceVersion) {
+  try {
+    const resp = await fetch(PIXL_LATEST_API);
+    if (!resp.ok) return;
+    const data = await resp.json();
+    const latest = data.tag_name;
+    if (!latest) return;
+    if (compareSemver(deviceVersion, latest) < 0) {
+      const toast = document.createElement("div");
+      toast.className = "toast visible warning";
+      const span = document.createElement("span");
+      span.innerHTML = `Firmware ${escapeHtml(deviceVersion)} is outdated, latest is ${escapeHtml(latest)}. <a href="${PIXL_RELEASES_URL}" target="_blank" rel="noopener">Download update</a>`;
+      toast.appendChild(span);
+      const btn = document.createElement("button");
+      btn.className = "toast-close";
+      btn.setAttribute("aria-label", "Dismiss");
+      btn.textContent = "\u00d7";
+      btn.addEventListener("click", () => removeToast(toast));
+      toast.appendChild(btn);
+      el.toastContainer.appendChild(toast);
+    }
+  } catch (_) { /* network error, skip silently */ }
+}
 
 async function connectOrDisconnect() {
   if (state.connState === "connected") {
@@ -813,6 +876,7 @@ async function connectOrDisconnect() {
       if (ver.data.version) parts.push(ver.data.version);
       if (ver.data.bleAddress) parts.push(ver.data.bleAddress);
       el.topbarBadge.textContent = `Pixl.js${parts.length ? " · " + parts.join(" · ") : ""}`;
+      checkFirmwareVersion(ver.data.version);
     } else {
       el.topbarBadge.textContent = "Pixl.js";
     }
@@ -844,10 +908,11 @@ async function devConnect() {
   showToast("Connected");
 
   log("\u2192 getVersion()", "cmd");
-  await state.client.getVersion();
-  log("\u2190 version=mock-1.0 ble=DE:V0:00:00:00:00", "ok");
-  el.topbarBadge.textContent = "DEV";
+  const ver = await state.client.getVersion();
+  log(`\u2190 version=${ver.data.version} ble=${ver.data.bleAddress}`, "ok");
+  el.topbarBadge.textContent = "Mock device";
   el.topbarBadge.classList.add("dev");
+  checkFirmwareVersion(ver.data.version);
 
   log("\u2192 listDrives()", "cmd");
   const dr = await state.client.listDrives();
@@ -977,7 +1042,6 @@ function updateControls() {
   el.btnUploadStart.disabled = !connected || uploading || state.uploadPlan.length === 0;
   el.btnUploadAbort.disabled = !uploading;
   el.btnUploadClear.disabled = uploading || state.uploadPlan.length === 0;
-  el.btnUploadToggle.disabled = uploading;
   el.btnUploadClose.disabled = uploading;
 }
 
@@ -1006,6 +1070,13 @@ async function browseFolder(path) {
       state.folderCache.set(path, entries);
       for (const e of entries) {
         if (e.type === "DIR") state.client.createdFolders.add(joinChildPath(path, e.name));
+      }
+      if (res.truncated) {
+        showToast("WARN:Directory listing may be incomplete, some entries could not be received over BLE");
+        log(`Warning: directory listing for ${path} was truncated (${entries.length} entries received)`, "err");
+      } else if (entries.length >= LARGE_DIR_THRESHOLD) {
+        showToast(`WARN:This folder has ${entries.length} items, browsing and uploads may be slow or unreliable over BLE`);
+        log(`Warning: ${path} has ${entries.length} entries, above the ${LARGE_DIR_THRESHOLD}-item threshold`, "err");
       }
     } catch (err) {
       log(`Error reading ${path}: ${err.message}`, "err");
@@ -1104,9 +1175,9 @@ function renderFileTable() {
       nameCell +
       `<td class="cell-size">${size}</td>` +
       `<td class="cell-actions">` +
-      (!isDir ? `<button class="ghost" data-action="download" title="Download"><span class="ms-sm">download</span></button>` : "") +
-      `<button class="ghost" data-action="rename" title="Rename"><span class="ms-sm">edit</span></button>` +
-      `<button class="ghost" data-action="delete" title="Delete"><span class="ms-sm">delete</span></button>` +
+      (!isDir ? `<button class="ghost btn-circle" data-action="download" title="Download"><span class="ms-sm">download</span></button>` : "") +
+      `<button class="ghost btn-circle" data-action="rename" title="Rename"><span class="ms-sm">edit</span></button>` +
+      `<button class="ghost btn-circle" data-action="delete" title="Delete"><span class="ms-sm">delete</span></button>` +
       `</td>` +
       `</tr>`
     );
@@ -1448,7 +1519,7 @@ document.addEventListener("keydown", (e) => {
 
 // === Upload panel toggle ===
 
-el.btnUploadToggle.addEventListener("click", () => {
+el.btnFolderUpload.addEventListener("click", () => {
   setPanelState("upload");
 });
 
@@ -1883,6 +1954,19 @@ function renderUploadQueue() {
   );
 
   el.uploadQueue.innerHTML = items.join("");
+
+  // Render upload warnings banner (from checkUploadPlanWarnings)
+  if (state.uploadWarnings && state.uploadWarnings.length > 0 && !state.uploadActive) {
+    const bannerLines = state.uploadWarnings.map(w => `<li>${escapeHtml(w)}</li>`).join("");
+    const banner = document.createElement("div");
+    banner.className = "queue-warning";
+    banner.innerHTML =
+      `<div class="queue-warning-header">` +
+      `<span class="ms-sm">warning</span> Upload warnings` +
+      `</div>` +
+      `<ul>${bannerLines}</ul>`;
+    el.uploadQueue.prepend(banner);
+  }
 }
 
 // --- Upload plan building ---
@@ -1917,14 +2001,65 @@ function buildUploadPlan(folders, files) {
     plan.push({ id: ++planSeed, kind: "file", localPath: entry.relativePath, remotePath: remote, size: entry.file.size, file: entry.file, transferred: 0, status: "pending" });
   }
   state.uploadPlan = plan;
+  state.uploadWarnings = checkUploadPlanWarnings(plan);
   renderUploadQueue();
   updateControls();
+}
+
+function checkUploadPlanWarnings(plan) {
+  const warnings = [];
+  // Per-directory density check
+  const perDir = new Map();
+  for (const item of plan) {
+    const parent = getParentPath(item.remotePath);
+    perDir.set(parent, (perDir.get(parent) || 0) + 1);
+  }
+  // Add cached entry counts for existing items
+  for (const [dir, planned] of perDir) {
+    const cached = state.folderCache.get(dir);
+    const existing = cached ? cached.length : 0;
+    const total = planned + existing;
+    if (total >= LARGE_DIR_THRESHOLD) {
+      warnings.push(`${dir} will have ${total} items (${existing} existing + ${planned} new), which may cause slow or unreliable BLE directory reads`);
+    }
+  }
+  // Total batch size check
+  if (plan.length >= LARGE_BATCH_THRESHOLD) {
+    const mins = Math.ceil(plan.length * 0.75 / 60);
+    warnings.push(`This upload has ${plan.length} items. Protocol overhead alone may take ${mins}+ minutes, and long transfers risk connection drops`);
+  }
+  return warnings;
+}
+
+function showUploadWarningModal(warnings) {
+  return new Promise(resolve => {
+    const lines = warnings.map(w => `<li>${escapeHtml(w)}</li>`).join("");
+    el.uploadWarnMsg.innerHTML =
+      `<ul style="margin:0;padding-left:18px;line-height:1.5">${lines}</ul>` +
+      `<p style="margin:8px 0 0;font-size:var(--fs-s);color:#666">You can still proceed, but the upload may be slow or fail partway through.</p>`;
+    openModal(el.uploadWarnModal);
+    const onConfirm = () => { cleanup(); resolve(true); };
+    const onCancel = () => { cleanup(); resolve(false); };
+    const cleanup = () => {
+      el.btnUploadWarnConfirm.removeEventListener("click", onConfirm);
+      el.btnUploadWarnCancel.removeEventListener("click", onCancel);
+      closeModal(el.uploadWarnModal);
+    };
+    el.btnUploadWarnConfirm.addEventListener("click", onConfirm);
+    el.btnUploadWarnCancel.addEventListener("click", onCancel);
+  });
 }
 
 // --- Upload execution ---
 
 async function runUpload() {
   if (!state.client || state.connState !== "connected" || state.uploadActive || state.uploadPlan.length === 0) return;
+
+  if (state.uploadWarnings && state.uploadWarnings.length > 0) {
+    const confirmed = await showUploadWarningModal(state.uploadWarnings);
+    if (!confirmed) return;
+  }
+
   state.uploadActive = true;
   state.abortController = new AbortController();
   el.browserLockOverlay.classList.add("active");

@@ -33,7 +33,7 @@
   <!-- Top bar -->
   <header class="topbar" id="topbar">
     <span class="topbar-brand">MochiNest</span>
-    <button id="btnDev" hidden>Dev</button>
+    <button id="btnDev" hidden>Mock device</button>
     <button class="danger" id="btnConnect" hidden>
       <span class="ms">bluetooth_disabled</span> Disconnect
     </button>
@@ -41,14 +41,13 @@
     <span class="topbar-badge" id="topbarBadge" hidden></span>
     <span class="topbar-drive" id="topbarDrive" hidden>
       <span id="topbarDriveInfo">—</span>
-      <button class="ghost" id="btnFormat" title="Format drive E:" style="padding:2px 6px;font-size:var(--fs-xs)">
+      <button class="ghost btn-circle" id="btnFormat" title="Format drive E:">
         <span class="ms-sm">delete_forever</span>
       </button>
     </span>
     <span class="topbar-spacer"></span>
     <button class="ghost" id="btnNormalize" hidden><span class="ms">match_case</span> Normalize</button>
-    <button class="primary" id="btnUploadToggle" hidden><span class="ms">upload</span> Upload</button>
-    <button class="ghost" id="btnLogToggle" title="Protocol log" aria-label="Toggle protocol log" hidden><span class="ms">terminal</span></button>
+    <button class="ghost btn-circle" id="btnLogToggle" title="Protocol log" aria-label="Toggle protocol log" hidden><span class="ms">terminal</span></button>
     <span class="topbar-error" id="connError" hidden></span>
   </header>
 
@@ -70,7 +69,10 @@
 
       <!-- State 1: Folder -->
       <div class="panel-state" id="panelFolder">
-        <span class="panel-label">Folder</span>
+        <div class="panel-header">
+          <span class="panel-label">Folder</span>
+          <button class="primary btn-pill" id="btnFolderUpload" title="Upload to this folder"><span class="ms-sm">upload</span> Upload</button>
+        </div>
         <span class="panel-title" id="panelFolderName"></span>
         <span class="panel-sub" id="panelFolderPath"></span>
         <span class="panel-meta" id="panelFolderCount"></span>
@@ -103,9 +105,9 @@
 
       <!-- State 4: Upload -->
       <div class="panel-state" id="panelUpload" hidden>
-        <div class="panel-upload-header">
+        <div class="panel-header">
           <span class="panel-label">Upload</span>
-          <button class="ghost" id="btnUploadClose" style="padding:2px 4px" title="Close"><span class="ms-sm">close</span></button>
+          <button class="ghost btn-circle" id="btnUploadClose" title="Close"><span class="ms-sm">close</span></button>
         </div>
         <div style="display:flex;gap:6px;margin-bottom:6px">
           <button style="flex:1" id="btnPickFolder"><span class="ms">folder</span> Folder</button>
@@ -137,14 +139,14 @@
 
       <!-- Navigation / selection bar -->
       <div id="selectionBar" class="selection-bar">
-        <button class="ghost" id="btnNavHome" title="Home"><span class="ms">home</span></button>
-        <button class="ghost" id="btnNavUp" title="Up one level"><span class="ms">arrow_upward</span></button>
+        <button class="ghost btn-circle" id="btnNavHome" title="Home"><span class="ms">home</span></button>
+        <button class="ghost btn-circle" id="btnNavUp" title="Up one level"><span class="ms">arrow_upward</span></button>
         <nav class="nav-breadcrumb" id="navBreadcrumb"></nav>
         <span id="selectionCount" hidden></span>
         <button class="ghost" id="btnDownloadSelected" hidden><span class="ms">download</span> Download</button>
         <button class="danger" id="btnDeleteSelected" hidden><span class="ms">delete</span> Delete</button>
         <button class="ghost" id="btnNewFolder" title="New folder" hidden><span class="ms">create_new_folder</span> New folder</button>
-        <button class="ghost" id="btnRefresh" title="Refresh" aria-label="Refresh folder" hidden><span class="ms">refresh</span></button>
+        <button class="ghost btn-circle" id="btnRefresh" title="Refresh" aria-label="Refresh folder" hidden><span class="ms">refresh</span></button>
       </div>
 
       <!-- File table -->
@@ -173,7 +175,7 @@
   <div class="log-overlay-panel">
     <div class="log-overlay-header">
       <span style="font-size:var(--fs-s);font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:#aaa">Protocol Log</span>
-      <button class="ghost" id="btnLogClose" style="padding:2px 4px;color:#aaa" title="Close"><span class="ms-sm">close</span></button>
+      <button class="ghost btn-circle" id="btnLogClose" title="Close"><span class="ms-sm">close</span></button>
     </div>
     <pre class="log" id="protocolLog"></pre>
   </div>
@@ -225,6 +227,18 @@
     <div class="modal-actions">
       <button class="ghost" id="btnDeleteCancel">Cancel</button>
       <button class="danger" id="btnDeleteConfirm">Delete</button>
+    </div>
+  </div>
+</div>
+
+<!-- Upload warning modal -->
+<div id="uploadWarnModal" class="modal-overlay">
+  <div class="modal-box">
+    <h3 style="color:oklch(0.55 0.15 70)"><span class="ms" style="vertical-align:-4px">warning</span> Upload warnings</h3>
+    <div id="uploadWarnMsg"></div>
+    <div class="modal-actions">
+      <button class="ghost" id="btnUploadWarnCancel">Cancel</button>
+      <button class="primary" id="btnUploadWarnConfirm">Upload anyway</button>
     </div>
   </div>
 </div>
