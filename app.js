@@ -235,7 +235,9 @@ class PixlToolsClient {
     if (r.status !== 0) return { ok: false, error: this._vfsError(r.status), data: null };
     const c = new Cursor(r.payload);
     const entries = [];
-    while (c.remaining() > 0) {
+    while (c.remaining() >= 8) { // 8 = 2 (name_len u16) + 4 (size u32) + 1 (type) + 1 (meta_size)
+      const nameLen = c.bytes[c.offset] | (c.bytes[c.offset + 1] << 8);
+      if (c.remaining() < 2 + nameLen + 4 + 1 + 1) break;
       const name = c.string();
       const size = c.u32();
       const type = c.u8() === 1 ? "DIR" : "FILE";
@@ -251,16 +253,16 @@ class PixlToolsClient {
           pos += 1;
           if (tlvType === 1) {
             // Notes: [len][...utf8...] — skip
-            if (pos >= metaEnd) break;
+            if (pos >= metaEnd || pos >= c.bytes.length) break;
             const len = c.bytes[pos]; pos += 1;
             pos += len;
           } else if (tlvType === 2) {
             // Flags: [flags_byte] — no length prefix
-            if (pos >= metaEnd) break;
+            if (pos >= metaEnd || pos >= c.bytes.length) break;
             meta.flags = c.bytes[pos]; pos += 1;
           } else if (tlvType === 3) {
             // NFC Tag ID: [head u32 LE][tail u32 LE] — no length prefix
-            if (pos + 8 > metaEnd) break;
+            if (pos + 8 > metaEnd || pos + 8 > c.bytes.length) break;
             const mv = new DataView(c.bytes.buffer, c.bytes.byteOffset + pos, 8);
             meta.nfcTagHead = mv.getUint32(0, true);
             meta.nfcTagTail = mv.getUint32(4, true);
@@ -269,7 +271,7 @@ class PixlToolsClient {
             break; // unknown type, length unknown — cannot continue
           }
         }
-        c.offset = metaEnd;
+        c.offset = Math.min(metaEnd, c.bytes.length);
       }
       entries.push({ name, size, type, meta });
     }
