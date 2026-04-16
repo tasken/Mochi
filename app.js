@@ -236,6 +236,8 @@ class PixlToolsClient {
     const c = new Cursor(r.payload);
     const entries = [];
     while (c.remaining() >= 8) {
+      const nameLen = c.bytes[c.offset] | (c.bytes[c.offset + 1] << 8);
+      if (c.remaining() < 2 + nameLen + 4 + 1 + 1) break;
       const name = c.string();
       const size = c.u32();
       const type = c.u8() === 1 ? "DIR" : "FILE";
@@ -251,12 +253,12 @@ class PixlToolsClient {
           pos += 1;
           if (tlvType === 1) {
             // Notes: [len][...utf8...] — skip
-            if (pos >= metaEnd) break;
+            if (pos >= metaEnd || pos >= c.bytes.length) break;
             const len = c.bytes[pos]; pos += 1;
             pos += len;
           } else if (tlvType === 2) {
             // Flags: [flags_byte] — no length prefix
-            if (pos >= metaEnd) break;
+            if (pos >= metaEnd || pos >= c.bytes.length) break;
             meta.flags = c.bytes[pos]; pos += 1;
           } else if (tlvType === 3) {
             // NFC Tag ID: [head u32 LE][tail u32 LE] — no length prefix
