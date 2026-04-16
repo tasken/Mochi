@@ -622,6 +622,7 @@
 
   .cell-name.folder { color: #7878cc; }
   .cell-name.folder:hover { text-decoration: underline; }
+  .warn-icon { color: oklch(0.62 0.16 70); }
 
   .cell-size {
     font-family: "IBM Plex Mono", monospace;
