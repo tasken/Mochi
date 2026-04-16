@@ -9,6 +9,7 @@ const MAX_FILE_NAME_BYTES = 47;
 const MAX_FILE_PATH_BYTES = 65;
 const MAX_FOLDER_PATH_BYTES = 57;
 const LARGE_DIR_THRESHOLD = 80;
+const LONG_FILENAME_THRESHOLD = 15;
 const LARGE_BATCH_THRESHOLD = 200;
 const PIXL_RELEASES_URL = "https://github.com/solosky/pixl.js/releases";
 const PIXL_LATEST_API = "https://api.github.com/repos/solosky/pixl.js/releases/latest";
@@ -246,6 +247,7 @@ class PixlToolsClient {
       const size = c.u32();
       const type = c.u8() === 1 ? "DIR" : "FILE";
       const metaSize = c.u8();
+      if (c.remaining() < metaSize) break;
       const meta = { flags: 0, nfcTagHead: null, nfcTagTail: null };
       if (metaSize > 0) {
         const metaStart = c.offset;
@@ -702,6 +704,7 @@ const state = {
   abortController: null,
   transferSpeed: "",
   folderCache: new Map(),
+  truncated: false,
 };
 
 // === Protocol Log ===
@@ -1058,8 +1061,12 @@ async function browseFolder(path) {
   if (!state.client || state.connState !== "connected") return;
 
   // Check cache first
-  let entries = state.folderCache.get(path);
-  if (!entries) {
+  let entries, truncated = false;
+  const cached = state.folderCache.get(path);
+  if (cached) {
+    entries = cached.entries;
+    truncated = cached.truncated;
+  } else {
     try {
       const res = await state.client.readFolder(path);
       if (!res.ok) {
@@ -1067,11 +1074,12 @@ async function browseFolder(path) {
         return;
       }
       entries = sortEntries(res.data);
-      state.folderCache.set(path, entries);
+      truncated = res.truncated || false;
+      state.folderCache.set(path, { entries, truncated });
       for (const e of entries) {
         if (e.type === "DIR") state.client.createdFolders.add(joinChildPath(path, e.name));
       }
-      if (res.truncated) {
+      if (truncated) {
         showToast("WARN:Directory listing may be incomplete, some entries could not be received over BLE");
         log(`Warning: directory listing for ${path} was truncated (${entries.length} entries received)`, "err");
       } else if (entries.length >= LARGE_DIR_THRESHOLD) {
@@ -1086,6 +1094,7 @@ async function browseFolder(path) {
 
   state.currentPath = path;
   state.entries = entries;
+  state.truncated = truncated;
   state.selectedNames.clear();
   renderBreadcrumb(path);
   renderFileTable();
@@ -1164,9 +1173,12 @@ function renderFileTable() {
     const isPanelActive = state.drawerEntry && state.drawerEntry.name === entry.name;
     const isSelected = state.selectedNames.has(entry.name);
 
+    const warnIcon = state.truncated && entry.name.length > LONG_FILENAME_THRESHOLD
+      ? `<span class="ms-sm warn-icon" title="Long filename contributes to BLE transfer limit">warning</span> `
+      : "";
     const nameCell = isDir
-      ? `<td class="cell-name folder"><span class="ms-sm">folder</span> ${escapeHtml(entry.name)}</td>`
-      : `<td class="cell-name"><span class="ms-sm">insert_drive_file</span> ${escapeHtml(entry.name)}</td>`;
+      ? `<td class="cell-name folder">${warnIcon}<span class="ms-sm">folder</span> ${escapeHtml(entry.name)}</td>`
+      : `<td class="cell-name">${warnIcon}<span class="ms-sm">insert_drive_file</span> ${escapeHtml(entry.name)}</td>`;
 
     const classes = [isPanelActive ? "panel-active" : "", isSelected ? "selected" : ""].filter(Boolean).join(" ");
     rows.push(
@@ -2017,7 +2029,7 @@ function checkUploadPlanWarnings(plan) {
   // Add cached entry counts for existing items
   for (const [dir, planned] of perDir) {
     const cached = state.folderCache.get(dir);
-    const existing = cached ? cached.length : 0;
+    const existing = cached ? cached.entries.length : 0;
     const total = planned + existing;
     if (total >= LARGE_DIR_THRESHOLD) {
       warnings.push(`${dir} will have ${total} items (${existing} existing + ${planned} new), which may cause slow or unreliable BLE directory reads`);
