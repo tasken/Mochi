@@ -78,6 +78,9 @@
 
 .topbar-badge {
   font-size: var(--fs-s);
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
   background: rgba(51,170,136,0.2);
   color: #3a8;
   border: 1px solid rgba(51,170,136,0.3);
@@ -85,6 +88,7 @@
   padding: 2px 10px;
   white-space: nowrap;
 }
+.topbar-badge[hidden] { display: none; }
 
 .topbar-badge.dev {
   background: rgba(200,133,42,0.2);
@@ -100,13 +104,6 @@
   font-size: var(--fs-s);
   color: rgba(255,255,255,0.5);
   white-space: nowrap;
-}
-
-.topbar-div {
-  width: 1px;
-  height: 14px;
-  background: rgba(255,255,255,0.15);
-  flex-shrink: 0;
 }
 
 .topbar-breadcrumb {
@@ -129,6 +126,33 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+/* Circle (icon-only) buttons — size modifiers: .sm (24px) · default (32px) · .lg (40px) */
+.btn-circle {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+.btn-circle.sm { width: 24px; height: 24px; }
+.btn-circle.lg { width: 40px; height: 40px; }
+.btn-circle[hidden] { display: none; }
+
+/* Pill buttons — rounded capsule with icon + label */
+.btn-pill {
+  padding: 0 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: 999px;
+  flex-shrink: 0;
+  font-size: var(--fs-s);
+}
+.btn-pill[hidden] { display: none; }
 
 /* Topbar button overrides — smaller, no borders, white text */
 .topbar button {
@@ -325,11 +349,10 @@
 
 .panel-actions button { flex: 1; }
 
-.panel-upload-header {
+.panel-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 4px;
 }
 
 /* --- File browser area --- */
@@ -431,6 +454,28 @@
     padding: 4px 0;
   }
 
+  .queue-warning {
+    background: oklch(0.92 0.08 85);
+    border: 1px solid oklch(0.78 0.12 85);
+    border-radius: 1rem;
+    padding: 6px 8px;
+    margin-bottom: 6px;
+    font-size: var(--fs-s);
+    color: oklch(0.35 0.08 60);
+  }
+  .queue-warning-header {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-weight: 700;
+  }
+  .queue-warning-header .ms-sm { color: oklch(0.62 0.16 70); }
+  .queue-warning ul {
+    margin: 4px 0 0;
+    padding-left: 18px;
+    line-height: 1.4;
+  }
+
   /* --- Protocol log --- */
   .log {
     background: #1a1a2e;
@@ -451,21 +496,6 @@
   .log .ok { color: #8e8; }
   .log .err { color: #f88; }
   .log .ts { color: #888; }
-
-  /* --- Toolbar --- */
-  .toolbar {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    align-items: center;
-    margin-bottom: 6px;
-  }
-
-  .toolbar:last-child { margin-bottom: 0; }
-
-  .toolbar-right {
-    margin-left: auto;
-  }
 
   .path-input {
     flex: 1;
@@ -489,6 +519,7 @@
     font-family: inherit;
     font-size: var(--fs-base);
     font-weight: 700;
+    height: 32px;
     padding: 5px 10px;
     border: 2px solid var(--border);
     border-radius: var(--radius);
@@ -598,7 +629,6 @@
   }
 
   .cell-actions button {
-    padding: 2px 4px;
     opacity: 0.25;
     transition: opacity 0.1s;
   }
@@ -729,29 +759,13 @@
     flex-shrink: 0;
   }
 
-  .path-display {
-    flex: 1;
-    font-family: "IBM Plex Mono", monospace;
-    font-size: var(--fs-base);
-    padding: 4px 8px;
-    border: 2px solid var(--border);
-    border-radius: var(--radius);
-    background: #fafafa;
-    color: #444;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    user-select: text;
-  }
-
   /* --- Disconnected / connecting states --- */
   .main-overlay {
     display: none;
     position: absolute;
     inset: 0;
     z-index: 20;
-    background: rgba(244,244,247,0.88);
-    backdrop-filter: blur(3px);
+    background: #f4f4f7;
     align-items: center;
     justify-content: center;
   }
@@ -777,9 +791,6 @@
   }
   .main-overlay-card .title { font-weight: 700; font-size: var(--fs-xl); color: #1a1a2e; }
   .main-overlay-card .sub  { font-size: var(--fs-base); color: #888; }
-
-  /* Connecting pulse on the connect button */
-  .btn-connecting { animation: pulse-ring 1.4s ease-out infinite; }
 
   /* --- Browser lock overlay --- */
   .browser-lock-overlay {
@@ -855,12 +866,12 @@
 /* Toast */
 .toast-container {
   position: fixed;
-  bottom: 24px;
+  top: 56px;
   left: 50%;
   transform: translateX(-50%);
   z-index: 200;
   display: flex;
-  flex-direction: column-reverse;
+  flex-direction: column;
   gap: 8px;
   pointer-events: none;
 }
@@ -881,6 +892,8 @@
 }
 .toast.visible { opacity: 1; }
 .toast.error { background: oklch(0.45 0.15 25); color: #fff; pointer-events: auto; }
+.toast.warning { background: oklch(0.88 0.1 85); color: oklch(0.35 0.08 60); pointer-events: auto; }
+.toast a { color: inherit; font-weight: 700; }
 .toast-close {
   background: none;
   border: none;
