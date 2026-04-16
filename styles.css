@@ -214,14 +214,21 @@
   gap: 10px;
 }
 
-.panel-commit {
+.panel-footer {
   margin-top: auto;
-  font-family: var(--mono);
+  display: flex;
+  align-items: center;
+  gap: 6px;
   font-size: var(--fs-xs);
   color: #bbb;
-  user-select: none;
   padding-top: 8px;
 }
+.panel-footer a {
+  color: #bbb;
+  text-decoration: none;
+}
+.panel-footer a:hover { color: #888; }
+.panel-footer-sep { user-select: none; }
 
 .panel-state[hidden] { display: none; }
 .panel-state {
