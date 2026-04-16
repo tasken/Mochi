@@ -240,6 +240,7 @@ class PixlToolsClient {
     if (r.status !== 0) return { ok: false, error: this._vfsError(r.status), data: null };
     const c = new Cursor(r.payload);
     const entries = [];
+    let truncated = false;
     while (c.remaining() >= 8) { // 8 = 2 (name_len u16) + 4 (size u32) + 1 (type) + 1 (meta_size)
       const nameLen = c.bytes[c.offset] | (c.bytes[c.offset + 1] << 8);
       if (c.remaining() < 2 + nameLen + 4 + 1 + 1) break;
@@ -247,7 +248,7 @@ class PixlToolsClient {
       const size = c.u32();
       const type = c.u8() === 1 ? "DIR" : "FILE";
       const metaSize = c.u8();
-      if (c.remaining() < metaSize) break;
+      if (c.remaining() < metaSize) { truncated = true; break; }
       const meta = { flags: 0, nfcTagHead: null, nfcTagTail: null };
       if (metaSize > 0) {
         const metaStart = c.offset;
@@ -281,7 +282,7 @@ class PixlToolsClient {
       }
       entries.push({ name, size, type, meta });
     }
-    const truncated = c.remaining() > 0;
+    truncated = truncated || c.remaining() > 0;
     return { ok: true, error: null, data: entries, truncated };
   }
 
@@ -1173,7 +1174,7 @@ function renderFileTable() {
     const isPanelActive = state.drawerEntry && state.drawerEntry.name === entry.name;
     const isSelected = state.selectedNames.has(entry.name);
 
-    const warnIcon = state.truncated && entry.name.length > LONG_FILENAME_THRESHOLD
+    const warnIcon = state.truncated && utf8Length(entry.name) > LONG_FILENAME_THRESHOLD
       ? `<span class="ms-sm warn-icon" title="Long filename contributes to BLE transfer limit">warning</span> `
       : "";
     const nameCell = isDir
