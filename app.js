@@ -235,7 +235,7 @@ class PixlToolsClient {
     if (r.status !== 0) return { ok: false, error: this._vfsError(r.status), data: null };
     const c = new Cursor(r.payload);
     const entries = [];
-    while (c.remaining() >= 8) {
+    while (c.remaining() >= 8) { // 8 = 2 (name_len u16) + 4 (size u32) + 1 (type) + 1 (meta_size)
       const nameLen = c.bytes[c.offset] | (c.bytes[c.offset + 1] << 8);
       if (c.remaining() < 2 + nameLen + 4 + 1 + 1) break;
       const name = c.string();
