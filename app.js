@@ -646,6 +646,13 @@ const el = {
   btnDeleteSelected: document.getElementById("btnDeleteSelected"),
   toastContainer: document.getElementById("toastContainer"),
 
+  // Sheet (mobile bottom panel)
+  sheetContainer: document.getElementById("sheetContainer"),
+  sheetBackdrop: document.getElementById("sheetBackdrop"),
+  contextPanel: document.getElementById("contextPanel"),
+  btnSheetInfo: document.getElementById("btnSheetInfo"),
+  btnSheetUpload: document.getElementById("btnSheetUpload"),
+
   // Modals
   formatModal: document.getElementById("formatModal"),
   btnFormatCancel: document.getElementById("btnFormatCancel"),
@@ -727,6 +734,24 @@ function log(msg, role) {
   el.protocolLog.scrollTop = el.protocolLog.scrollHeight;
 }
 
+// === Bottom Sheet (mobile) ===
+
+function isMobileViewport() { return window.innerWidth <= 900; }
+function openSheet() { el.sheetContainer.classList.add("open"); }
+function closeSheet() { el.sheetContainer.classList.remove("open"); }
+
+el.sheetBackdrop.addEventListener("click", closeSheet);
+
+el.btnSheetInfo.addEventListener("click", () => { setPanelState("folder"); openSheet(); });
+el.btnSheetUpload.addEventListener("click", () => { setPanelState("upload"); openSheet(); });
+
+// Swipe-down on panel handle dismisses the sheet
+let _sheetTouchY = 0;
+el.contextPanel.addEventListener("touchstart", e => { _sheetTouchY = e.touches[0].clientY; }, { passive: true });
+el.contextPanel.addEventListener("touchend", e => {
+  if (e.changedTouches[0].clientY - _sheetTouchY > 60) closeSheet();
+}, { passive: true });
+
 // === Connection State Machine ===
 
 function setConnState(newState) {
@@ -755,6 +780,8 @@ function setConnState(newState) {
   el.btnNewFolder.hidden = !connected;
   el.btnNormalize.hidden = !connected;
   el.btnLogToggle.hidden = !connected;
+  el.btnSheetInfo.hidden = !connected;
+  el.btnSheetUpload.hidden = !connected;
 
   // Error cleared on state change
   el.connError.hidden = true;
@@ -1100,6 +1127,7 @@ async function browseFolder(path) {
   renderBreadcrumb(path);
   renderFileTable();
   if (state.panelMode !== "upload") setPanelState("folder");
+  if (isMobileViewport()) closeSheet();
   updateControls();
 }
 
@@ -1290,6 +1318,7 @@ el.fileTableBody.addEventListener("click", (e) => {
       browseFolder(joinChildPath(state.currentPath, entry.name));
     } else {
       setPanelState("file", entry);
+      if (isMobileViewport()) openSheet();
     }
     return;
   }

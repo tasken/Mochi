@@ -203,8 +203,8 @@
 
 /* --- Context panel --- */
 .context-panel {
-  width: 350px;
-  min-width: 350px;
+  width: 300px;
+  min-width: 300px;
   display: flex;
   flex-direction: column;
   border-right: 2px solid var(--border);
@@ -213,6 +213,11 @@
   padding: 12px;
   gap: 10px;
 }
+
+/* Sheet handle — hidden on desktop */
+.sheet-handle { display: none; }
+/* Sheet backdrop — hidden on desktop */
+.sheet-backdrop { display: none; }
 
 .panel-footer {
   margin-top: auto;
@@ -861,14 +866,86 @@
   }
 
   /* --- Responsive --- */
+  /* Hide sheet toggle buttons on desktop */
+  @media (min-width: 901px) {
+    #btnSheetInfo, #btnSheetUpload { display: none !important; }
+  }
+
   @media (max-width: 900px) {
-    .context-panel { width: 260px; min-width: 260px; }
     .topbar-breadcrumb { max-width: 160px; }
+
+    /* Sheet container — fixed overlay */
+    .sheet-container {
+      position: fixed;
+      inset: 0;
+      z-index: 40;
+      pointer-events: none;
+    }
+    .sheet-container.open { pointer-events: all; }
+
+    /* Backdrop */
+    .sheet-backdrop {
+      display: block;
+      position: absolute;
+      inset: 0;
+      background: rgba(20, 20, 40, 0.35);
+      opacity: 0;
+      transition: opacity 0.2s;
+    }
+    .sheet-container.open .sheet-backdrop { opacity: 1; }
+
+    /* Panel becomes a bottom sheet */
+    .context-panel {
+      position: absolute;
+      bottom: 0; left: 0; right: 0;
+      width: 100%;
+      min-width: 0;
+      max-height: 70vh;
+      border-right: none;
+      border-top: 2px solid var(--border);
+      border-radius: 1rem 1rem 0 0;
+      padding-top: 0;
+      transform: translateY(100%);
+      transition: transform 0.25s ease;
+    }
+    .sheet-container.open .context-panel { transform: translateY(0); }
+
+    /* Drag handle */
+    .sheet-handle {
+      display: block;
+      width: 40px;
+      height: 4px;
+      background: var(--border);
+      border-radius: 2px;
+      margin: 10px auto 4px;
+      flex-shrink: 0;
+    }
   }
 
   @media (max-width: 640px) {
-    .app-body { flex-direction: column; }
-    .context-panel { width: 100%; min-width: auto; border-right: none; border-bottom: 2px solid var(--border); max-height: 40vh; }
+    /* Touch targets */
+    button, .nav-crumb { min-height: 44px; }
+
+    /* Hide size column */
+    .cell-size, thead th:nth-child(3) { display: none; }
+
+    /* Full-screen modals */
+    .modal-overlay .modal-box {
+      width: 100%;
+      max-width: 100%;
+      min-height: 100dvh;
+      border-radius: 0;
+    }
+
+    /* Toast: bottom-anchored, full-width */
+    #toastContainer {
+      top: auto;
+      bottom: 16px;
+      left: 8px;
+      right: 8px;
+      transform: none;
+    }
+    .toast { white-space: normal; }
   }
 
 /* Toast */
