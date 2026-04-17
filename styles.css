@@ -923,6 +923,10 @@
   }
 
   @media (max-width: 640px) {
+    /* Topbar: icon-only buttons, hide brand and badge to prevent overflow */
+    .topbar-brand, .topbar-badge { display: none; }
+    .topbar-btn-label { display: none; }
+
     /* Touch targets */
     button, .nav-crumb { min-height: 44px; }
 
