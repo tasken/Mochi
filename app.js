@@ -2226,13 +2226,15 @@ el.btnUploadClear.addEventListener("click", () => {
 // === Initial state ===
 
 const _buildCommit = document.querySelector('meta[name="build-commit"]')?.content;
+const _buildBranch = document.querySelector('meta[name="build-branch"]')?.content;
+
 if (_buildCommit && _buildCommit !== "dev") el.navCommit.textContent = _buildCommit;
 
-const isDevMode = _buildCommit === "dev";
+const isDevMode = _buildCommit === "dev" || (_buildBranch !== "" && _buildBranch !== "main");
 if (isDevMode) {
   el.btnDev.hidden = false;
   el.btnDev.addEventListener("click", devConnect);
-  el.navCommit.textContent = "dev";
+  if (_buildCommit === "dev") el.navCommit.textContent = "dev";
 }
 
 setConnState("disconnected");
