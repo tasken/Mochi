@@ -9,7 +9,7 @@ const MAX_FILE_NAME_BYTES = 47;
 const MAX_FILE_PATH_BYTES = 65;
 const MAX_FOLDER_PATH_BYTES = 57;
 const LARGE_DIR_THRESHOLD = 80;
-const LONG_FILENAME_THRESHOLD = 15;
+const LONG_FILENAME_BYTES = 15;
 const LARGE_BATCH_THRESHOLD = 200;
 const PIXL_RELEASES_URL = "https://github.com/solosky/pixl.js/releases";
 const PIXL_LATEST_API = "https://api.github.com/repos/solosky/pixl.js/releases/latest";
@@ -1174,8 +1174,8 @@ function renderFileTable() {
     const isPanelActive = state.drawerEntry && state.drawerEntry.name === entry.name;
     const isSelected = state.selectedNames.has(entry.name);
 
-    const warnIcon = state.truncated && utf8Length(entry.name) > LONG_FILENAME_THRESHOLD
-      ? `<span class="ms-sm warn-icon" title="Long filename contributes to BLE transfer limit">warning</span> `
+    const warnIcon = state.truncated && utf8Length(entry.name) > LONG_FILENAME_BYTES
+      ? `<span class="ms-sm warn-icon" title="Filename exceeds ${LONG_FILENAME_BYTES} bytes and contributes to BLE transfer limit">warning</span> `
       : "";
     const nameCell = isDir
       ? `<td class="cell-name folder">${warnIcon}<span class="ms-sm">folder</span> ${escapeHtml(entry.name)}</td>`
