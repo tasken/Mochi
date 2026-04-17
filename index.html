@@ -64,8 +64,11 @@
       </div>
     </div>
 
-    <!-- Left context panel -->
+    <!-- Context panel (bottom sheet on mobile) -->
+    <div class="sheet-container" id="sheetContainer">
+    <div class="sheet-backdrop" id="sheetBackdrop"></div>
     <aside class="context-panel" id="contextPanel">
+      <div class="sheet-handle"></div>
 
       <!-- State 1: Folder -->
       <div class="panel-state" id="panelFolder">
@@ -129,6 +132,7 @@
         <a href="https://github.com/tasken/MochiNest" target="_blank" rel="noopener">Source on GitHub</a>
       </div>
     </aside>
+    </div><!-- end sheet-container -->
 
     <!-- File browser -->
     <div class="browser-wrap">
@@ -145,6 +149,8 @@
       <div id="selectionBar" class="selection-bar">
         <button class="ghost btn-circle" id="btnNavHome" title="Home"><span class="ms">home</span></button>
         <button class="ghost btn-circle" id="btnNavUp" title="Up one level"><span class="ms">arrow_upward</span></button>
+        <button class="ghost btn-circle" id="btnSheetInfo" title="Folder info" hidden><span class="ms">info</span></button>
+        <button class="ghost btn-circle" id="btnSheetUpload" title="Upload" hidden><span class="ms">upload</span></button>
         <nav class="nav-breadcrumb" id="navBreadcrumb"></nav>
         <span id="selectionCount" hidden></span>
         <button class="ghost" id="btnDownloadSelected" hidden><span class="ms">download</span> Download</button>
