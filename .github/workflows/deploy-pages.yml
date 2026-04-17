@@ -1,65 +1,31 @@
 name: Deploy to GitHub Pages
 
-"on":
+on:
   push:
     branches: [main]
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: pages
   cancel-in-progress: true
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Pages
-        id: pages
-        uses: actions/configure-pages@v5
-
-      - name: Prepare site artifact
-        run: |
-          mkdir -p "$RUNNER_TEMP/site"
-          rsync -av \
-            --exclude='.git/' \
-            --exclude='.github/' \
-            --exclude='.local/' \
-            --exclude='.cert/' \
-            --exclude='upstream/' \
-            --exclude='scripts/' \
-            --exclude='README.md' \
-            --exclude='package.json' \
-            --exclude='LICENSE' \
-            --exclude='.gitignore' \
-            --exclude='.gitmodules' \
-            --exclude='server.py' \
-            --exclude='tasks.py' \
-            --exclude='requirements-dev.txt' \
-            ./ "$RUNNER_TEMP/site/"
-          touch "$RUNNER_TEMP/site/.nojekyll"
-          sed -i "s/content=\"dev\"/content=\"$(git rev-parse --short HEAD)\"/" "$RUNNER_TEMP/site/index.html"
-          sed -i "s/name=\"build-branch\" content=\"\"/name=\"build-branch\" content=\"main\"/" "$RUNNER_TEMP/site/index.html"
-
-      - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: ${{ runner.temp }}/site
-          retention-days: 1
-
   deploy:
-    needs: build
     runs-on: ubuntu-latest
-    permissions:
-      pages: write
-      id-token: write
-    environment: github-pages
     steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+      - uses: actions/checkout@v4
+
+      - name: Build
+        run: bash build.sh
+        env:
+          GITHUB_REF_NAME: main
+
+      - name: Deploy to gh-pages root
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./dist
+          keep_files: true
