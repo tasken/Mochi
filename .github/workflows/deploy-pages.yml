@@ -1,6 +1,6 @@
 name: Deploy to GitHub Pages
 
-on:
+"on":
   push:
     branches: [main]
   workflow_dispatch:
@@ -23,15 +23,32 @@ jobs:
         id: pages
         uses: actions/configure-pages@v5
 
-      - name: Build
-        run: bash build.sh
-        env:
-          GITHUB_REF_NAME: main
+      - name: Prepare site artifact
+        run: |
+          mkdir -p "$RUNNER_TEMP/site"
+          rsync -av \
+            --exclude='.git/' \
+            --exclude='.github/' \
+            --exclude='.local/' \
+            --exclude='.cert/' \
+            --exclude='upstream/' \
+            --exclude='scripts/' \
+            --exclude='README.md' \
+            --exclude='package.json' \
+            --exclude='LICENSE' \
+            --exclude='.gitignore' \
+            --exclude='.gitmodules' \
+            --exclude='server.py' \
+            --exclude='tasks.py' \
+            --exclude='requirements-dev.txt' \
+            ./ "$RUNNER_TEMP/site/"
+          touch "$RUNNER_TEMP/site/.nojekyll"
+          sed -i "s/content=\"dev\"/content=\"$(git rev-parse --short HEAD)\"/" "$RUNNER_TEMP/site/index.html"
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: ./dist
+          path: ${{ runner.temp }}/site
           retention-days: 1
 
   deploy:
