@@ -1100,7 +1100,7 @@ function clearToasts({ keepErrors = false } = {}) {
 // === Connection ===
 
 function shouldShowDevButton() {
-  return isDevMode && !(state.connState === "connected" && state.client instanceof DevMockClient);
+  return isDevMode && state.connState !== "connected";
 }
 
 function compareSemver(a, b) {
