@@ -13,6 +13,10 @@ const LONG_FILENAME_BYTES = 15;
 const LARGE_BATCH_THRESHOLD = 200;
 const PIXL_RELEASES_URL = "https://github.com/solosky/pixl.js/releases";
 const PIXL_LATEST_API = "https://api.github.com/repos/solosky/pixl.js/releases/latest";
+const DEV_MOCK_UPLOAD_BYTES_PER_SECOND = 192 * 1024;
+const DEV_MOCK_UPLOAD_MIN_DURATION_MS = 180;
+const DEV_MOCK_UPLOAD_MAX_DURATION_MS = 900;
+const DEV_MOCK_UPLOAD_MAX_PROGRESS_UPDATES = 6;
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
@@ -75,7 +79,7 @@ function formatBytes(bytes) {
 
 function escapeHtml(value) {
   return String(value).replace(/&/g, "&amp;").replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+    .replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 }
 
 function getBaseName(path) {
@@ -113,7 +117,7 @@ function triggerDownload(data, filename) {
   const url = URL.createObjectURL(new Blob([data]));
   const a = document.createElement("a");
   a.href = url; a.download = filename; a.click();
-  URL.revokeObjectURL(url);
+  setTimeout(() => URL.revokeObjectURL(url), 200);
 }
 
 // === Binary cursor ===
@@ -470,6 +474,7 @@ class DevMockClient {
   constructor() {
     this.onDisconnect = null;
     this.createdFolders = new Set(); // populated externally by browseFolder(); cleared by invalidateCache()
+    this.isDriveFormatted = false;
   }
 
   async connect() {}
@@ -483,10 +488,20 @@ class DevMockClient {
   }
 
   async listDrives() {
-    return { ok: true, data: [{ label: "E", name: "E:", totalBytes: 8 * 1024 * 1024, usedBytes: 2 * 1024 * 1024 }] };
+    return {
+      ok: true,
+      data: [{
+        label: "E",
+        name: "E:",
+        totalBytes: 8 * 1024 * 1024,
+        usedBytes: this.isDriveFormatted ? 0 : 2 * 1024 * 1024,
+      }],
+    };
   }
 
   async readFolder(path) {
+    if (this.isDriveFormatted) return { ok: true, data: [] };
+
     const fs = {
       "E:/": [
         { name: "nfc",        type: "DIR" },
@@ -525,7 +540,11 @@ class DevMockClient {
     return { ok: true, data: null };
   }
   async renamePath()      { return { ok: true, data: null }; }
-  async formatDrive()     { return { ok: true, data: null }; }
+  async formatDrive()     {
+    this.isDriveFormatted = true;
+    this.createdFolders.clear();
+    return { ok: true, data: null };
+  }
   async openFile()        { return { ok: true, data: 0 }; }
   async writeFileChunk()  { return { ok: true, data: null }; }
   async closeFile()       { return { ok: true, data: null }; }
@@ -560,8 +579,60 @@ class DevMockClient {
   }
   async ensureFolder()    {}
 
-  async uploadFile(path, file, onProgress) {
-    onProgress(file.size, file.size);
+  ensureUploadNotAborted(abortSignal) {
+    if (abortSignal && abortSignal.aborted) throw new Error("Upload aborted by user.");
+  }
+
+  waitForMockUploadDelay(ms, abortSignal) {
+    return new Promise((resolve, reject) => {
+      const onAbort = () => {
+        clearTimeout(timer);
+        abortSignal.removeEventListener("abort", onAbort);
+        reject(new Error("Upload aborted by user."));
+      };
+
+      if (abortSignal) {
+        if (abortSignal.aborted) {
+          reject(new Error("Upload aborted by user."));
+          return;
+        }
+        abortSignal.addEventListener("abort", onAbort, { once: true });
+      }
+
+      const timer = setTimeout(() => {
+        abortSignal?.removeEventListener("abort", onAbort);
+        resolve();
+      }, ms);
+    });
+  }
+
+  async uploadFile(path, file, onProgress, abortSignal) {
+    validateRemotePath(path, "file");
+
+    const totalBytes = file.size || 0;
+    if (totalBytes === 0) {
+      onProgress(0, 0);
+      return;
+    }
+
+    const simulatedDurationMs = Math.max(
+      DEV_MOCK_UPLOAD_MIN_DURATION_MS,
+      Math.min(DEV_MOCK_UPLOAD_MAX_DURATION_MS, Math.round(totalBytes / DEV_MOCK_UPLOAD_BYTES_PER_SECOND * 1000))
+    );
+    const progressUpdates = Math.max(
+      2,
+      Math.min(DEV_MOCK_UPLOAD_MAX_PROGRESS_UPDATES, Math.ceil(simulatedDurationMs / 140))
+    );
+    const updateIntervalMs = Math.max(70, Math.round(simulatedDurationMs / progressUpdates));
+
+    this.ensureUploadNotAborted(abortSignal);
+    for (let step = 1; step <= progressUpdates; step++) {
+      await this.waitForMockUploadDelay(updateIntervalMs, abortSignal);
+      const written = step === progressUpdates
+        ? totalBytes
+        : Math.max(1, Math.round(totalBytes * (step / progressUpdates)));
+      onProgress(written, totalBytes);
+    }
   }
 }
 
@@ -614,6 +685,7 @@ const el = {
   panelUpload: document.getElementById("panelUpload"),
   btnPickFolder: document.getElementById("btnPickFolder"),
   btnPickFiles: document.getElementById("btnPickFiles"),
+  uploadProgressTotal: document.getElementById("uploadProgressTotal"),
   uploadQueue: document.getElementById("uploadQueue"),
   btnUploadStart: document.getElementById("btnUploadStart"),
   btnUploadAbort: document.getElementById("btnUploadAbort"),
@@ -637,7 +709,13 @@ const el = {
   navBreadcrumb: document.getElementById("navBreadcrumb"),
 
   // File table
+  tableWrap: document.getElementById("tableWrap"),
+  fileTable: document.getElementById("fileTable"),
   fileTableBody: document.getElementById("fileTableBody"),
+  browserEmptyState: document.getElementById("browserEmptyState"),
+  browserEmptyIcon: document.getElementById("browserEmptyIcon"),
+  browserEmptyTitle: document.getElementById("browserEmptyTitle"),
+  browserEmptySub: document.getElementById("browserEmptySub"),
   checkAll: document.getElementById("checkAll"),
 
   // Multi-select bar
@@ -661,11 +739,13 @@ const el = {
   newFolderModal: document.getElementById("newFolderModal"),
   newFolderPath: document.getElementById("newFolderPath"),
   newFolderInput: document.getElementById("newFolderInput"),
+  newFolderError: document.getElementById("newFolderError"),
   btnNewFolderCancel: document.getElementById("btnNewFolderCancel"),
   btnNewFolderConfirm: document.getElementById("btnNewFolderConfirm"),
 
   renameModal: document.getElementById("renameModal"),
   renameInput: document.getElementById("renameInput"),
+  renameError: document.getElementById("renameError"),
   btnRenameCancel: document.getElementById("btnRenameCancel"),
   btnRenameConfirm: document.getElementById("btnRenameConfirm"),
 
@@ -694,6 +774,41 @@ const el = {
   btnSanitizeNoneConfirm: document.getElementById("btnSanitizeNoneConfirm"),
 };
 
+function validateElementBindings(bindings) {
+  const missing = Object.entries(bindings)
+    .filter(([, node]) => !node)
+    .map(([name]) => name);
+
+  if (missing.length > 0) {
+    throw new Error(`Missing required DOM bindings: ${missing.join(", ")}`);
+  }
+}
+
+validateElementBindings(el);
+
+function setButtonDisabledState(button, options) {
+  const { disabled = false, pseudoDisabled = false, reason = "" } = options;
+  if (button.dataset.baseTitle === undefined) {
+    button.dataset.baseTitle = button.getAttribute("title") || "";
+  }
+
+  if (pseudoDisabled) {
+    button.disabled = false;
+    button.setAttribute("aria-disabled", "true");
+    if (reason) button.setAttribute("title", reason);
+    return;
+  }
+
+  button.removeAttribute("aria-disabled");
+  button.disabled = disabled;
+
+  if (button.dataset.baseTitle) {
+    button.setAttribute("title", button.dataset.baseTitle);
+  } else {
+    button.removeAttribute("title");
+  }
+}
+
 // === App State ===
 
 const state = {
@@ -711,9 +826,71 @@ const state = {
   uploadActive: false,
   abortController: null,
   transferSpeed: "",
+  uploadTotalCount: 0,
+  uploadTotalBytes: 0,
+  uploadCompletedCount: 0,
+  uploadCompletedBytes: 0,
   folderCache: new Map(),
   truncated: false,
 };
+
+function showInputError(inputEl, errorEl, message) {
+  inputEl.setAttribute("aria-invalid", "true");
+  errorEl.textContent = message;
+  errorEl.hidden = false;
+}
+
+function clearInputError(inputEl, errorEl) {
+  inputEl.removeAttribute("aria-invalid");
+  errorEl.textContent = "";
+  errorEl.hidden = true;
+}
+
+function validateSingleName(rawValue, label) {
+  const value = rawValue.trim();
+  if (!value) throw new Error(`${label} is required`);
+  if (value.includes("/")) throw new Error(`${label} cannot contain /`);
+  return value;
+}
+
+function ensureSiblingNameAvailable(name, currentName = "") {
+  if (state.entries.some(entry => entry.name === name && entry.name !== currentName)) {
+    throw new Error(`"${name}" already exists in this folder`);
+  }
+}
+
+function readValidatedNameInput(inputEl, errorEl, options) {
+  clearInputError(inputEl, errorEl);
+
+  try {
+    const value = validateSingleName(inputEl.value, options.label);
+    if (options.currentName && value === options.currentName) {
+      throw new Error(`${options.label} is unchanged`);
+    }
+    ensureSiblingNameAvailable(value, options.currentName);
+    validateRemotePath(joinChildPath(state.currentPath || "E:/", value), options.kind);
+    return value;
+  } catch (err) {
+    showInputError(inputEl, errorEl, err.message);
+    inputEl.focus();
+    inputEl.select();
+    return null;
+  }
+}
+
+function readCheckedRadioValue(name, label) {
+  const selected = document.querySelector(`input[name="${name}"]:checked`);
+  if (!selected) throw new Error(`${label} is required`);
+  return selected.value;
+}
+
+function formatUploadInputFeedback(skipped) {
+  if (skipped.length === 0) return "";
+
+  const first = skipped[0];
+  const more = skipped.length > 1 ? ` (+${skipped.length - 1} more)` : "";
+  return `${first.path}: ${first.reason}${more}`;
+}
 
 // === Protocol Log ===
 
@@ -772,6 +949,7 @@ function setConnState(newState) {
 
   // Disconnect button — only visible when connected
   el.btnConnect.hidden = !connected;
+  el.btnDev.hidden = !shouldShowDevButton();
 
   // Topbar connected elements
   el.topbarBadge.hidden = !connected;
@@ -788,6 +966,7 @@ function setConnState(newState) {
   el.connError.textContent = "";
 
   if (disconnected) {
+    clearToasts({ keepErrors: true });
     state.drive = null;
     state.entries = [];
     state.selectedNames.clear();
@@ -809,17 +988,44 @@ function showConnError(msg) {
 }
 
 const MAX_TOASTS = 3;
-function showToast(msg) {
-  const isError = msg.startsWith("ERROR:");
-  const isWarning = msg.startsWith("WARN:");
-  const text = isError ? msg.slice(6) : isWarning ? msg.slice(5) : msg;
-  const sticky = isError || isWarning;
+const TOAST_STACK_OFFSET = 20;
+
+// Toast copy contract:
+// - Use a short summary plus optional detail.
+// - Builders normalize copy to "Summary. Detail." sentence structure.
+// - Success toasts auto-dismiss, warnings and errors stay sticky.
+function normalizeToastPart(value) {
+  const text = String(value || "").trim().replace(/\s+/g, " ");
+  if (!text) return "";
+  return text.replace(/[.!?]+$/, "");
+}
+
+function buildToastMessage(summary, detail = "") {
+  const parts = [normalizeToastPart(summary), normalizeToastPart(detail)].filter(Boolean);
+  return parts.length > 0 ? `${parts.join(". ")}.` : "";
+}
+
+function createToast(options) {
+  const {
+    tone = "success",
+    message = "",
+    html = "",
+    sticky = tone === "error" || tone === "warning",
+  } = options;
+
+  const hasHtml = typeof html === "string" && html.trim() !== "";
+  const finalMessage = normalizeToastPart(message);
+  if (!hasHtml && !finalMessage) return null;
 
   const toast = document.createElement("div");
-  toast.className = "toast visible" + (isError ? " error" : isWarning ? " warning" : "");
+  toast.className = "toast visible" + (tone === "error" ? " error" : tone === "warning" ? " warning" : "");
 
   const span = document.createElement("span");
-  span.textContent = text;
+  if (hasHtml) {
+    span.innerHTML = html;
+  } else {
+    span.textContent = `${finalMessage}.`;
+  }
   toast.appendChild(span);
 
   if (sticky) {
@@ -831,23 +1037,71 @@ function showToast(msg) {
     toast.appendChild(btn);
   }
 
-  el.toastContainer.appendChild(toast);
-
-  // Evict oldest if over limit
-  const toasts = el.toastContainer.querySelectorAll(".toast");
-  if (toasts.length > MAX_TOASTS) removeToast(toasts[0]);
+  appendToast(toast);
 
   if (!sticky) {
     setTimeout(() => removeToast(toast), 2500);
   }
+
+  return toast;
 }
+
+function showSuccessToast(summary, detail = "") {
+  return createToast({ tone: "success", message: buildToastMessage(summary, detail), sticky: false });
+}
+
+function showErrorToast(summary, detail = "") {
+  return createToast({ tone: "error", message: buildToastMessage(summary, detail) });
+}
+
+function showWarningToast(summary, detail = "") {
+  return createToast({ tone: "warning", message: buildToastMessage(summary, detail) });
+}
+
+function showRichWarningToast(html) {
+  return createToast({ tone: "warning", html });
+}
+
+function layoutToasts() {
+  const toasts = Array.from(el.toastContainer.querySelectorAll(".toast.visible"));
+  for (const [index, toast] of toasts.entries()) {
+    toast.style.top = `${index * TOAST_STACK_OFFSET}px`;
+    toast.style.zIndex = String(index + 1);
+  }
+}
+
+function appendToast(toast) {
+  el.toastContainer.appendChild(toast);
+
+  const toasts = el.toastContainer.querySelectorAll(".toast.visible");
+  if (toasts.length > MAX_TOASTS) removeToast(toasts[0]);
+
+  layoutToasts();
+}
+
 function removeToast(toast) {
   if (!toast || !toast.parentNode) return;
   toast.classList.remove("visible");
-  setTimeout(() => toast.remove(), 200);
+  layoutToasts();
+  setTimeout(() => {
+    toast.remove();
+    layoutToasts();
+  }, 200);
+}
+
+function clearToasts({ keepErrors = false } = {}) {
+  const toasts = Array.from(el.toastContainer.querySelectorAll(".toast"));
+  for (const toast of toasts) {
+    if (keepErrors && toast.classList.contains("error")) continue;
+    removeToast(toast);
+  }
 }
 
 // === Connection ===
+
+function shouldShowDevButton() {
+  return isDevMode && !(state.connState === "connected" && state.client instanceof DevMockClient);
+}
 
 function compareSemver(a, b) {
   const pa = a.split(".").map(Number);
@@ -867,18 +1121,10 @@ async function checkFirmwareVersion(deviceVersion) {
     const latest = data.tag_name;
     if (!latest) return;
     if (compareSemver(deviceVersion, latest) < 0) {
-      const toast = document.createElement("div");
-      toast.className = "toast visible warning";
-      const span = document.createElement("span");
-      span.innerHTML = `Firmware ${escapeHtml(deviceVersion)} is outdated, latest is ${escapeHtml(latest)}. <a href="${PIXL_RELEASES_URL}" target="_blank" rel="noopener">Download update</a>`;
-      toast.appendChild(span);
-      const btn = document.createElement("button");
-      btn.className = "toast-close";
-      btn.setAttribute("aria-label", "Dismiss");
-      btn.textContent = "\u00d7";
-      btn.addEventListener("click", () => removeToast(toast));
-      toast.appendChild(btn);
-      el.toastContainer.appendChild(toast);
+      showRichWarningToast(
+        `Firmware update available. Current version ${escapeHtml(deviceVersion)} is outdated; latest is ${escapeHtml(latest)}. ` +
+        `<a href="${PIXL_RELEASES_URL}" target="_blank" rel="noopener">Download update</a>`
+      );
     }
   } catch (_) { /* network error, skip silently */ }
 }
@@ -898,7 +1144,7 @@ async function connectOrDisconnect() {
   try {
     await state.client.connect();
     setConnState("connected");
-    showToast("Connected");
+    showSuccessToast("Connection complete");
 
     // Get version info
     const ver = await state.client.getVersion();
@@ -925,7 +1171,7 @@ async function connectOrDisconnect() {
   } catch (err) {
     log(`Connection failed: ${err.message}`);
     showConnError(err.message);
-    showToast("ERROR: Could not connect to device");
+    showErrorToast("Connection failed");
     setConnState("disconnected");
   }
 }
@@ -936,7 +1182,7 @@ async function devConnect() {
   state.client = new DevMockClient();
   state.client.onDisconnect = () => setConnState("disconnected");
   setConnState("connected");
-  showToast("Connected");
+  showSuccessToast("Connection complete");
 
   log("\u2192 getVersion()", "cmd");
   const ver = await state.client.getVersion();
@@ -983,7 +1229,11 @@ function renderDrive(driveData) {
 // === Format Modal ===
 
 function openModal(modalEl) { modalEl.classList.add("open"); }
-function closeModal(modalEl) { modalEl.classList.remove("open"); }
+function closeModal(modalEl) {
+  if (modalEl === el.newFolderModal) clearInputError(el.newFolderInput, el.newFolderError);
+  if (modalEl === el.renameModal) clearInputError(el.renameInput, el.renameError);
+  modalEl.classList.remove("open");
+}
 
 let _formatCountdown = null;
 
@@ -1020,7 +1270,7 @@ el.btnFormatConfirm.addEventListener("click", async () => {
     const res = await state.client.formatDrive("E");
     if (res.ok) {
       log("Drive E: formatted successfully.");
-      showToast("Drive formatted");
+      showSuccessToast("Format complete");
       invalidateCache();
       // Refresh drive info
       const dr = await state.client.listDrives();
@@ -1031,11 +1281,11 @@ el.btnFormatConfirm.addEventListener("click", async () => {
       await browseFolder("E:/");
     } else {
       log(`Format failed: ${res.error}`, "err");
-      showToast("ERROR: Could not format drive");
+      showErrorToast("Format failed");
     }
   } catch (err) {
     log(`Format error: ${err.message}`, "err");
-    showToast("ERROR: Could not format drive");
+    showErrorToast("Format failed");
   } finally {
     el.btnFormatConfirm.disabled = false;
   }
@@ -1072,8 +1322,16 @@ function updateControls() {
   el.btnPickFiles.disabled = !connected || uploading;
   el.btnUploadStart.disabled = !connected || uploading || state.uploadPlan.length === 0;
   el.btnUploadAbort.disabled = !uploading;
-  el.btnUploadClear.disabled = uploading || state.uploadPlan.length === 0;
-  el.btnUploadClose.disabled = uploading;
+  setButtonDisabledState(el.btnUploadClear, {
+    disabled: !uploading && state.uploadPlan.length === 0,
+    pseudoDisabled: uploading,
+    reason: "The queue cannot be cleared while an upload is in progress.",
+  });
+  setButtonDisabledState(el.btnUploadClose, {
+    disabled: false,
+    pseudoDisabled: uploading,
+    reason: "This panel cannot be closed while an upload is in progress.",
+  });
 }
 
 // === Cache ===
@@ -1108,10 +1366,10 @@ async function browseFolder(path) {
         if (e.type === "DIR") state.client.createdFolders.add(joinChildPath(path, e.name));
       }
       if (truncated) {
-        showToast("WARN:Directory listing may be incomplete, some entries could not be received over BLE");
+        showWarningToast("Directory listing may be incomplete", "Some entries could not be received over BLE");
         log(`Warning: directory listing for ${path} was truncated (${entries.length} entries received)`, "err");
       } else if (entries.length >= LARGE_DIR_THRESHOLD) {
-        showToast(`WARN:This folder has ${entries.length} items, browsing and uploads may be slow or unreliable over BLE`);
+        showWarningToast(`This folder has ${entries.length} items`, "Browsing and uploads may be slow or unreliable over BLE");
         log(`Warning: ${path} has ${entries.length} entries, above the ${LARGE_DIR_THRESHOLD}-item threshold`, "err");
       }
     } catch (err) {
@@ -1181,16 +1439,49 @@ function applyNfcTagDisplay(entry, head, tail) {
     `<div class="drawer-nfc-tag-info">` +
     `<span class="drawer-nfc-tag-hex">${escapeHtml(formatNfcTagHex(head, tail))}</span>` +
     `</div>` +
-    `<div class="drawer-nfc-tag-loading"><md-circular-progress indeterminate style="--md-circular-progress-size:28px"></md-circular-progress></div>`;
+    `<div class="drawer-nfc-tag-loading"><md-circular-progress class="drawer-nfc-tag-spinner" indeterminate></md-circular-progress></div>`;
   lookupNfcTag(head, tail).then(info => {
     if (state.drawerEntry !== entry) return;
     el.panelNfcTagContent.innerHTML = renderNfcTagField(head, tail, info);
   });
 }
 
+function getBrowserEmptyStateContent() {
+  if (state.currentPath === "E:/") {
+    return {
+      icon: "storage",
+      title: "This device is empty",
+      sub: "There are no files or folders to display on this device.",
+    };
+  }
+
+  return {
+    icon: "folder_open",
+    title: "This folder is empty",
+    sub: "There are no files or folders to display in this folder.",
+  };
+}
+
 function renderFileTable() {
-  if (state.entries.length === 0) {
-    el.fileTableBody.innerHTML = '<tr><td colspan="4" class="empty-state">This folder is empty.</td></tr>';
+  const showEmptyState = state.connState === "connected" && !!state.currentPath && state.entries.length === 0;
+  const showTable = state.connState === "connected" && state.entries.length > 0;
+
+  el.tableWrap.classList.toggle("is-empty", showEmptyState);
+  el.browserEmptyState.hidden = !showEmptyState;
+  el.fileTable.hidden = !showTable;
+
+  if (showEmptyState) {
+    const emptyState = getBrowserEmptyStateContent();
+    el.browserEmptyIcon.textContent = emptyState.icon;
+    el.browserEmptyTitle.textContent = emptyState.title;
+    el.browserEmptySub.textContent = emptyState.sub;
+    el.fileTableBody.innerHTML = "";
+    updateSelectionBar();
+    return;
+  }
+
+  if (!showTable) {
+    el.fileTableBody.innerHTML = "";
     updateSelectionBar();
     return;
   }
@@ -1290,14 +1581,10 @@ el.fileTableBody.addEventListener("click", (e) => {
   const actionBtn = e.target.closest(".cell-actions button[data-action]");
   if (actionBtn) {
     if (actionBtn.dataset.action === "rename") {
-      renameTarget = entry.name;
-      el.renameInput.value = entry.name;
-      openModal(el.renameModal);
-      el.renameInput.focus();
-      el.renameInput.select();
+      openRenameModal(entry.name);
     } else if (actionBtn.dataset.action === "delete") {
       el.deleteCount.textContent = "1";
-      el.deleteModalMsg.textContent = `Permanently delete "${entry.name}"? This cannot be undone.`;
+      el.deleteModalMsg.textContent = `Permanently delete "${entry.name}"? This action cannot be undone.`;
       state.selectedNames.clear();
       state.selectedNames.add(entry.name);
       openModal(el.deleteModal);
@@ -1339,14 +1626,14 @@ el.btnDeleteSelected.addEventListener("click", () => {
   const count = state.selectedNames.size;
   if (count === 0) return;
   el.deleteCount.textContent = String(count);
-  el.deleteModalMsg.textContent = `Permanently delete ${count === 1 ? "1 item" : `${count} items`}? This cannot be undone.`;
+  el.deleteModalMsg.textContent = `Permanently delete ${count === 1 ? "1 item" : `${count} items`}? This action cannot be undone.`;
   openModal(el.deleteModal);
 });
 
 el.btnDownloadSelected.addEventListener("click", async () => {
   const selected = state.entries.filter(e => state.selectedNames.has(e.name));
   const files = selected.filter(e => e.type === "FILE");
-  if (selected.some(e => e.type === "DIR")) showToast("Folders are skipped, only files can be downloaded");
+  if (selected.some(e => e.type === "DIR")) showWarningToast("Skipped folders", "Only files can be downloaded");
   if (files.length === 0) return;
   for (const entry of files) {
     const filePath = joinChildPath(state.currentPath, entry.name);
@@ -1381,6 +1668,7 @@ el.btnRefresh.addEventListener("click", () => {
 el.btnNewFolder.addEventListener("click", () => {
   el.newFolderPath.textContent = state.currentPath || "E:/";
   el.newFolderInput.value = "";
+  clearInputError(el.newFolderInput, el.newFolderError);
   openModal(el.newFolderModal);
   el.newFolderInput.focus();
 });
@@ -1388,26 +1676,32 @@ el.btnNewFolder.addEventListener("click", () => {
 el.btnNewFolderCancel.addEventListener("click", () => closeModal(el.newFolderModal));
 
 el.btnNewFolderConfirm.addEventListener("click", async () => {
-  const name = el.newFolderInput.value.trim();
-  if (!name) return;
-  closeModal(el.newFolderModal);
   if (!state.client) return;
+
+  const name = readValidatedNameInput(el.newFolderInput, el.newFolderError, {
+    label: "Folder name",
+    kind: "folder",
+    currentName: "",
+  });
+  if (!name) return;
+
+  closeModal(el.newFolderModal);
+
   try {
     const folderPath = joinChildPath(state.currentPath, name);
-    validateRemotePath(folderPath, "folder");
     const res = await state.client.createFolder(folderPath);
     if (res.ok) {
       log(`Created folder: ${folderPath}`);
-      showToast("Folder created");
+      showSuccessToast("Successfully created the folder");
       state.folderCache.delete(state.currentPath);
       await browseFolder(state.currentPath);
     } else {
       log(`Failed to create folder: ${res.error}`, "err");
-      showToast("ERROR: Could not create folder");
+      showErrorToast("Could not create the folder");
     }
   } catch (err) {
     log(`Failed to create folder: ${err.message}`, "err");
-    showToast("ERROR: Could not create folder");
+    showErrorToast("Could not create the folder");
   }
 });
 
@@ -1452,17 +1746,16 @@ function setPanelState(mode, entry) {
     const flagDefs = [
       { bit: 0x02, label: "Hidden" },
       { bit: 0x04, label: "System" },
-      { bit: 0x01, label: "Readonly" },
+      { bit: 0x01, label: "Read-only" },
     ];
     const flags = entry.meta ? entry.meta.flags : 0;
     el.panelFileFlags.innerHTML = flagDefs.map(f => {
       const active = (flags & f.bit) !== 0;
-      const color = active ? "#3a8" : "#ccc";
-      return `<div style="font-size:0.78rem"><span class="ms-sm" style="color:${color}">check</span> ${escapeHtml(f.label)}</div>`;
+      return `<div class="drawer-flag-row"><span class="ms-sm drawer-flag-icon${active ? " is-active" : ""}">check</span> ${escapeHtml(f.label)}</div>`;
     }).join("");
 
     // NFC tag section — only for .bin files
-    el.panelFileLabel.textContent = entry.name.toLowerCase().endsWith(".bin") ? "NFC Tag" : "File";
+    el.panelFileLabel.textContent = entry.name.toLowerCase().endsWith(".bin") ? "NFC tag" : "File";
     const isBin = entry.type === "FILE" && entry.name.toLowerCase().endsWith(".bin");
     el.panelNfcTag.hidden = !isBin;
     if (isBin) {
@@ -1525,18 +1818,23 @@ function setPanelState(mode, entry) {
 // Panel rename button — renames the currently displayed file
 el.panelBtnRename.addEventListener("click", () => {
   if (!state.drawerEntry) return;
-  renameTarget = state.drawerEntry.name;
-  el.renameInput.value = state.drawerEntry.name;
+  openRenameModal(state.drawerEntry.name);
+});
+
+function openRenameModal(name) {
+  renameTarget = name;
+  el.renameInput.value = name;
+  clearInputError(el.renameInput, el.renameError);
   openModal(el.renameModal);
   el.renameInput.focus();
   el.renameInput.select();
-});
+}
 
 // Panel delete button — deletes the currently displayed file
 el.panelBtnDelete.addEventListener("click", () => {
   if (!state.drawerEntry) return;
   el.deleteCount.textContent = "1";
-  el.deleteModalMsg.textContent = `Permanently delete "${state.drawerEntry.name}"? This cannot be undone.`;
+  el.deleteModalMsg.textContent = `Permanently delete "${state.drawerEntry.name}"? This action cannot be undone.`;
   // Pre-select the entry so the existing delete confirm handler works
   state.selectedNames.clear();
   state.selectedNames.add(state.drawerEntry.name);
@@ -1566,6 +1864,7 @@ el.btnFolderUpload.addEventListener("click", () => {
 });
 
 el.btnUploadClose.addEventListener("click", () => {
+  if (el.btnUploadClose.getAttribute("aria-disabled") === "true") return;
   // Return to previous panel state
   if (state.panelPrevMode === "file" && state.drawerEntry) {
     setPanelState("file", state.drawerEntry);
@@ -1588,6 +1887,10 @@ el.newFolderInput.addEventListener("keydown", (e) => {
   }
 });
 
+el.newFolderInput.addEventListener("input", () => {
+  clearInputError(el.newFolderInput, el.newFolderError);
+});
+
 el.renameInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter") {
     e.preventDefault();
@@ -1595,36 +1898,42 @@ el.renameInput.addEventListener("keydown", (e) => {
   }
 });
 
+el.renameInput.addEventListener("input", () => {
+  clearInputError(el.renameInput, el.renameError);
+});
+
 let renameTarget = "";
 
 // --- Rename confirm ---
 
 el.btnRenameConfirm.addEventListener("click", async () => {
-  const newName = el.renameInput.value.trim();
-  closeModal(el.renameModal);
-  if (!newName || newName === renameTarget) return;
-  if (newName.includes("/")) {
-    log("Rename failed: name cannot contain /", "err");
-    return;
-  }
   if (!state.client) return;
+
+  const entry = state.entries.find(e => e.name === renameTarget);
+  const kind = entry && entry.type === "DIR" ? "folder" : "file";
+  const newName = readValidatedNameInput(el.renameInput, el.renameError, {
+    label: "Name",
+    kind,
+    currentName: renameTarget,
+  });
+  if (!newName) return;
+
+  closeModal(el.renameModal);
+
   try {
     const oldPath = joinChildPath(state.currentPath, renameTarget);
     const newPath = joinChildPath(state.currentPath, newName);
-    const entry = state.entries.find(e => e.name === renameTarget);
-    const kind = entry && entry.type === "DIR" ? "folder" : "file";
-    validateRemotePath(newPath, kind);
     const res = await state.client.renamePath(oldPath, newPath);
     if (res.ok) {
       log(`Renamed: ${renameTarget} \u2192 ${newName}`);
-      showToast("Renamed");
+      showSuccessToast("Successfully renamed the item");
     } else {
       log(`Rename failed: ${res.error}`, "err");
-      showToast("ERROR: Could not rename");
+      showErrorToast("Could not rename the item");
     }
   } catch (err) {
     log(`Failed to rename: ${err.message}`, "err");
-    showToast("ERROR: Could not rename");
+    showErrorToast("Could not rename the item");
   } finally {
     invalidateCache();
     await browseFolder(state.currentPath);
@@ -1657,6 +1966,7 @@ el.btnDeleteConfirm.addEventListener("click", async () => {
   el.browserLockTitle.textContent = "Deleting…";
   updateControls();
   let deleted = 0;
+  const failedPaths = [];
   const total = paths.length;
   try {
     for (const item of paths) {
@@ -1665,19 +1975,23 @@ el.btnDeleteConfirm.addEventListener("click", async () => {
         if (res.ok) {
           deleted++;
         } else {
-          log(`Delete failed: ${item.name}: ${res.error}`, "err");
+          failedPaths.push(item.path);
+          log(`Delete failed: ${item.path}: ${res.error}`, "err");
         }
       } catch (err) {
-        log(`Failed to delete: ${item.name}: ${err.message}`, "err");
+        failedPaths.push(item.path);
+        log(`Failed to delete: ${item.path}: ${err.message}`, "err");
       }
     }
     log(`Deleted ${deleted} of ${total} ${total === 1 ? "item" : "items"}.`);
     if (deleted === total) {
-      showToast(`Deleted ${deleted} ${deleted === 1 ? "item" : "items"}`);
+      showSuccessToast(`Successfully deleted ${deleted} ${deleted === 1 ? "item" : "items"}`);
     } else if (deleted > 0) {
-      showToast(`ERROR: Deleted ${deleted} of ${total} items`);
+      const failedPathText = failedPaths.length > 1 ? `${failedPaths[0]} (+${failedPaths.length - 1} more)` : failedPaths[0];
+      showErrorToast(`Deleted ${deleted} of ${total} ${total === 1 ? "item" : "items"}`, `Failed: ${failedPathText}`);
     } else {
-      showToast("ERROR: Could not delete items");
+      const failedPathText = failedPaths.length > 1 ? `${failedPaths[0]} (+${failedPaths.length - 1} more)` : failedPaths[0];
+      showErrorToast(`Could not delete ${total === 1 ? "the item" : "the selected items"}`, failedPathText ? `Failed: ${failedPathText}` : "No items were deleted");
     }
   } finally {
     el.browserLockOverlay.classList.remove("active");
@@ -1689,10 +2003,10 @@ el.btnDeleteConfirm.addEventListener("click", async () => {
 
 // --- Sanitize helpers ---
 
-function buildSanitizeOps(entries, parentPath) {
+function buildSanitizeOps(entries, parentPath, allSiblings = entries) {
   const ops = [];
   const skipped = [];
-  const existing = new Set(entries.map(e => e.name));
+  const existing = new Set(allSiblings.map(e => e.name));
   const groups = new Map();
   for (const e of entries) {
     const lower = e.name.toLowerCase();
@@ -1702,12 +2016,12 @@ function buildSanitizeOps(entries, parentPath) {
   }
   for (const [lower, group] of groups) {
     if (group.length > 1) {
-      for (const e of group) skipped.push({ name: e.name, reason: `collision: multiple \u2192 ${lower}` });
+      for (const e of group) skipped.push({ name: e.name, reason: `Collision: multiple -> ${lower}` });
       continue;
     }
     const [e] = group;
     if (existing.has(lower)) {
-      skipped.push({ name: e.name, reason: `${lower} already exists` });
+      skipped.push({ name: e.name, reason: `Already exists as ${lower}` });
       continue;
     }
     const from = joinChildPath(parentPath, e.name);
@@ -1772,14 +2086,17 @@ async function executeSanitize(allOps, allSkipped) {
     }
   }
   log(`Normalized: ${parts.join(", ")}`);
-  if (renamed === allOps.length) {
-    showToast(`Normalized: ${parts.join(", ")}`);
+  const renamedText = `${renamed} ${renamed === 1 ? "item" : "items"}`;
+  const totalText = `${allOps.length} ${allOps.length === 1 ? "item" : "items"}`;
+  const skippedText = allSkipped.length > 0 ? `Skipped ${allSkipped.length} ${allSkipped.length === 1 ? "item" : "items"}` : "";
+  if (renamed === allOps.length && renamed > 0) {
+    showSuccessToast(`Successfully normalized ${renamedText}`, skippedText);
   } else if (renamed > 0) {
-    showToast(`ERROR: Normalized ${renamed} of ${allOps.length} items`);
+    showErrorToast(`Normalized ${renamedText} of ${totalText}`, skippedText);
   } else if (allOps.length > 0) {
-    showToast("ERROR: Could not normalize names");
+    showErrorToast("Could not normalize any items");
   } else {
-    showToast(`Normalized: ${parts.join(", ")}`);
+    showSuccessToast("No items needed normalization", skippedText);
   }
 }
 
@@ -1791,7 +2108,7 @@ async function withBrowserLock(title, fn) {
     await fn();
   } catch (err) {
     log(err.message, "err");
-    showToast(`ERROR: ${err.message}`);
+    showErrorToast("Could not normalize the selected items", err.message);
   } finally {
     el.browserLockOverlay.classList.remove("active");
     updateControls();
@@ -1807,7 +2124,7 @@ el.btnSanitizeFilesConfirm.addEventListener("click", async () => {
   if (!state.client) return;
   await withBrowserLock("Normalizing…", async () => {
     const selected = state.entries.filter(e => state.selectedNames.has(e.name) && e.type === "FILE");
-    const { ops, skipped } = buildSanitizeOps(selected, state.currentPath);
+    const { ops, skipped } = buildSanitizeOps(selected, state.currentPath, state.entries);
     await executeSanitize(ops, skipped);
   });
 });
@@ -1818,7 +2135,13 @@ el.btnSanitizeFoldersConfirm.addEventListener("click", async () => {
   closeModal(el.sanitizeModalFolders);
   if (!state.client) return;
 
-  const scope = document.querySelector('input[name="sanitizeFolderScope"]:checked').value;
+  let scope;
+  try {
+    scope = readCheckedRadioValue("sanitizeFolderScope", "Normalize scope");
+  } catch (err) {
+    showErrorToast("Could not start normalization", err.message);
+    return;
+  }
 
   await withBrowserLock("Normalizing…", async () => {
     const allOps = [];
@@ -1826,7 +2149,7 @@ el.btnSanitizeFoldersConfirm.addEventListener("click", async () => {
 
     if (scope === "selected") {
       const selected = state.entries.filter(e => state.selectedNames.has(e.name));
-      const { ops, skipped } = buildSanitizeOps(selected, state.currentPath);
+      const { ops, skipped } = buildSanitizeOps(selected, state.currentPath, state.entries);
       allOps.push(...ops);
       allSkipped.push(...skipped);
     } else {
@@ -1842,7 +2165,7 @@ el.btnSanitizeFoldersConfirm.addEventListener("click", async () => {
         }
       }
       // Also rename the selected items themselves (shallower than contents, renamed last by executeSanitize sort)
-      const { ops, skipped } = buildSanitizeOps(selectedEntries, state.currentPath);
+      const { ops, skipped } = buildSanitizeOps(selectedEntries, state.currentPath, state.entries);
       allOps.push(...ops);
       allSkipped.push(...skipped);
     }
@@ -1857,7 +2180,13 @@ el.btnSanitizeNoneConfirm.addEventListener("click", async () => {
   closeModal(el.sanitizeModalNone);
   if (!state.client) return;
 
-  const scope = document.querySelector('input[name="sanitizeNoneScope"]:checked').value;
+  let scope;
+  try {
+    scope = readCheckedRadioValue("sanitizeNoneScope", "Normalize scope");
+  } catch (err) {
+    showErrorToast("Could not start normalization", err.message);
+    return;
+  }
 
   await withBrowserLock("Normalizing…", async () => {
     const allOps = [];
@@ -1865,7 +2194,7 @@ el.btnSanitizeNoneConfirm.addEventListener("click", async () => {
 
     if (scope === "files") {
       const files = state.entries.filter(e => e.type === "FILE");
-      const { ops, skipped } = buildSanitizeOps(files, state.currentPath);
+      const { ops, skipped } = buildSanitizeOps(files, state.currentPath, state.entries);
       allOps.push(...ops);
       allSkipped.push(...skipped);
     } else if (scope === "filesAndFolders") {
@@ -1936,31 +2265,62 @@ function collectFromFiles(fileList) {
 
 function getQueueStatusIcon(status) {
   switch (status) {
-    case "done": return '<span class="ms-sm" style="color:#3a8">check_circle</span>';
-    case "active": return '<span class="ms-sm spin" style="color:#7878cc">sync</span>';
-    case "pending": return '<span class="ms-sm" style="color:#888">schedule</span>';
-    case "error": return '<span class="ms-sm" style="color:#c33">error</span>';
-    case "aborted": return '<span class="ms-sm" style="color:#b80">block</span>';
+    case "done": return '<span class="ms-sm queue-icon done">check_circle</span>';
+    case "active": return '<span class="ms-sm spin queue-icon active">sync</span>';
+    case "pending": return '<span class="ms-sm queue-icon pending">schedule</span>';
+    case "error": return '<span class="ms-sm queue-icon error">error</span>';
+    case "aborted": return '<span class="ms-sm queue-icon aborted">block</span>';
     default: return '';
   }
 }
 
+function resetUploadProgress(plan = state.uploadPlan) {
+  state.uploadTotalCount = plan.length;
+  state.uploadTotalBytes = plan.reduce((sum, item) => sum + item.size, 0);
+  state.uploadCompletedCount = 0;
+  state.uploadCompletedBytes = 0;
+}
+
+function consumeCompletedUploadItem(item) {
+  state.uploadCompletedCount += 1;
+  state.uploadCompletedBytes += item.size;
+  state.uploadPlan = state.uploadPlan.filter(candidate => candidate.id !== item.id);
+  state.uploadWarnings = checkUploadPlanWarnings(state.uploadPlan);
+}
+
+function renderUploadSummary() {
+  if (state.uploadTotalCount === 0) {
+    el.uploadProgressTotal.textContent = "No uploads queued";
+    return;
+  }
+
+  const transferredBytes = state.uploadPlan.reduce((sum, item) => sum + item.transferred, 0);
+  const visibleBytes = Math.min(state.uploadTotalBytes, state.uploadCompletedBytes + transferredBytes);
+  const totalPct = state.uploadTotalBytes > 0
+    ? Math.round((visibleBytes / state.uploadTotalBytes) * 100)
+    : (state.uploadCompletedCount === state.uploadTotalCount ? 100 : 0);
+  const remainingCount = state.uploadPlan.length;
+  const remainingText = remainingCount === 1 ? "1 remaining" : `${remainingCount} remaining`;
+  const speedStr = state.transferSpeed
+    ? ` \u00b7 <span class="ms-sm">upload</span> <span class="queue-summary-speed">${escapeHtml(state.transferSpeed)}</span>`
+    : "";
+
+  el.uploadProgressTotal.innerHTML =
+    `${state.uploadCompletedCount} / ${state.uploadTotalCount} items \u00b7 ${remainingText} \u00b7 ${totalPct}% (${formatBytes(visibleBytes)} / ${formatBytes(state.uploadTotalBytes)})${speedStr}`;
+}
+
 function renderUploadQueue() {
+  renderUploadSummary();
+
   if (state.uploadPlan.length === 0) {
-    el.uploadQueue.innerHTML = '<div class="queue-empty">No uploads queued</div>';
+    const emptyText = state.uploadTotalCount > 0 ? "No remaining uploads" : "No uploads queued";
+    el.uploadQueue.innerHTML = `<div class="queue-empty">${emptyText}</div>`;
     return;
   }
 
   const items = [];
-  let totalBytes = 0;
-  let doneBytes = 0;
-  let doneCount = 0;
 
   for (const item of state.uploadPlan) {
-    totalBytes += item.size;
-    if (item.status === "done") { doneBytes += item.size; doneCount++; }
-    else { doneBytes += item.transferred; }
-
     const icon = getQueueStatusIcon(item.status);
     const baseName = escapeHtml(getBaseName(item.remotePath));
     const title = escapeHtml(item.remotePath);
@@ -1986,14 +2346,6 @@ function renderUploadQueue() {
       );
     }
   }
-
-  const totalPct = totalBytes > 0 ? Math.round((doneBytes / totalBytes) * 100) : (doneCount === state.uploadPlan.length ? 100 : 0);
-  const speedStr = state.transferSpeed
-    ? ` \u00b7 <span class="ms-sm">upload</span> <span style="color:#7878cc;font-weight:700">${state.transferSpeed}</span>`
-    : "";
-  items.push(
-    `<div class="queue-summary">${doneCount} / ${state.uploadPlan.length} items \u00b7 ${totalPct}% (${formatBytes(doneBytes)} / ${formatBytes(totalBytes)})${speedStr}</div>`
-  );
 
   el.uploadQueue.innerHTML = items.join("");
 
@@ -2022,30 +2374,51 @@ function buildUploadPlan(folders, files) {
     return d !== 0 ? d : a.localeCompare(b);
   });
   const plan = [];
+  const skipped = [];
+
   for (const rel of sortedFolders) {
     const remote = joinChildPath(base, rel);
     try {
       validateRemotePath(remote, "folder");
     } catch (err) {
       log(`Skipping folder ${rel}: ${err.message}`, "err");
+      skipped.push({ path: rel, reason: err.message });
       continue;
     }
     plan.push({ id: ++planSeed, kind: "folder", localPath: rel, remotePath: remote, size: 0, file: null, transferred: 0, status: "pending" });
   }
+
   for (const entry of files) {
     const remote = joinChildPath(base, entry.relativePath);
     try {
       validateRemotePath(remote, "file");
     } catch (err) {
       log(`Skipping file ${entry.relativePath}: ${err.message}`, "err");
+      skipped.push({ path: entry.relativePath, reason: err.message });
       continue;
     }
     plan.push({ id: ++planSeed, kind: "file", localPath: entry.relativePath, remotePath: remote, size: entry.file.size, file: entry.file, transferred: 0, status: "pending" });
   }
+
   state.uploadPlan = plan;
   state.uploadWarnings = checkUploadPlanWarnings(plan);
+  resetUploadProgress(plan);
   renderUploadQueue();
   updateControls();
+
+  if (plan.length === 0) {
+    if (skipped.length > 0) {
+      showErrorToast("Could not add any upload items", formatUploadInputFeedback(skipped));
+    } else {
+      showWarningToast("No upload items were added");
+    }
+    return;
+  }
+
+  if (skipped.length > 0) {
+    const countText = skipped.length === 1 ? "1 invalid upload item" : `${skipped.length} invalid upload items`;
+    showWarningToast(`Skipped ${countText}`, formatUploadInputFeedback(skipped));
+  }
 }
 
 function checkUploadPlanWarnings(plan) {
@@ -2077,8 +2450,8 @@ function showUploadWarningModal(warnings) {
   return new Promise(resolve => {
     const lines = warnings.map(w => `<li>${escapeHtml(w)}</li>`).join("");
     el.uploadWarnMsg.innerHTML =
-      `<ul style="margin:0;padding-left:18px;line-height:1.5">${lines}</ul>` +
-      `<p style="margin:8px 0 0;font-size:var(--fs-s);color:#666">You can still proceed, but the upload may be slow or fail partway through.</p>`;
+      `<ul class="modal-list">${lines}</ul>` +
+      `<p class="modal-note">You can still proceed, but the upload may be slow or fail partway through.</p>`;
     openModal(el.uploadWarnModal);
     const onConfirm = () => { cleanup(); resolve(true); };
     const onCancel = () => { cleanup(); resolve(false); };
@@ -2109,23 +2482,29 @@ async function runUpload() {
 
   updateControls();
 
+  resetUploadProgress(state.uploadPlan);
+
   // Reset statuses
   for (const item of state.uploadPlan) { item.transferred = 0; item.status = "pending"; }
   renderUploadQueue();
 
+  const folderItems = state.uploadPlan.filter(i => i.kind === "folder");
+  const fileItems = state.uploadPlan.filter(i => i.kind === "file");
+
   try {
     // Create folders (shallow-first)
-    for (const item of state.uploadPlan.filter(i => i.kind === "folder")) {
+    for (const item of folderItems) {
       if (state.abortController.signal.aborted) throw new Error("Aborted.");
       item.status = "active";
       renderUploadQueue();
       await state.client.ensureFolder(item.remotePath);
-      item.status = "done";
+      item.transferred = item.size;
+      consumeCompletedUploadItem(item);
       renderUploadQueue();
     }
 
     // Upload files
-    for (const item of state.uploadPlan.filter(i => i.kind === "file")) {
+    for (const item of fileItems) {
       if (state.abortController.signal.aborted) throw new Error("Aborted.");
       item.status = "active";
       renderUploadQueue();
@@ -2149,17 +2528,18 @@ async function runUpload() {
         renderUploadQueue();
       }, state.abortController.signal);
       item.transferred = item.size;
-      item.status = "done";
+      consumeCompletedUploadItem(item);
       renderUploadQueue();
     }
-    log("Upload complete.");
-    showToast("Upload complete");
+    const uploadedFileText = fileItems.length === 1 ? "1 file" : `${fileItems.length} files`;
+    log(`Successfully uploaded ${uploadedFileText}.`);
+    showSuccessToast(`Successfully uploaded ${uploadedFileText}`);
   } catch (err) {
     log(`Upload error: ${err.message}`, "err");
     if (state.abortController && state.abortController.signal.aborted) {
-      showToast("ERROR: Upload cancelled");
+      showErrorToast("Upload was cancelled");
     } else {
-      showToast("ERROR: Upload failed");
+      showErrorToast("Could not complete the upload");
     }
     const active = state.uploadPlan.find(i => i.status === "active");
     if (active) { active.status = state.abortController.signal.aborted ? "aborted" : "error"; }
@@ -2218,7 +2598,10 @@ el.btnUploadAbort.addEventListener("click", () => {
 });
 
 el.btnUploadClear.addEventListener("click", () => {
+  if (el.btnUploadClear.getAttribute("aria-disabled") === "true") return;
   state.uploadPlan = [];
+  state.uploadWarnings = [];
+  resetUploadProgress([]);
   renderUploadQueue();
   updateControls();
 });
@@ -2230,9 +2613,8 @@ const _buildBranch = document.querySelector('meta[name="build-branch"]')?.conten
 
 if (_buildCommit && _buildCommit !== "dev") el.navCommit.textContent = _buildCommit;
 
-const isDevMode = _buildCommit === "dev" || (_buildBranch !== "" && _buildBranch !== "main");
+const isDevMode = _buildCommit === "dev" || (_buildBranch && _buildBranch !== "main") || (!_buildCommit && !_buildBranch);
 if (isDevMode) {
-  el.btnDev.hidden = false;
   el.btnDev.addEventListener("click", devConnect);
   if (_buildCommit === "dev") el.navCommit.textContent = "dev";
 }
