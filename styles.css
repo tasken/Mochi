@@ -165,6 +165,7 @@
 
 .topbar button:hover:not(:disabled) {
   background: rgba(255,255,255,0.15);
+  color: #1a1a2e;
 }
 
 .topbar button.primary {
@@ -190,7 +191,7 @@
 
 .topbar button.ghost:hover:not(:disabled) {
   background: rgba(255,255,255,0.1);
-  color: #fff;
+  color: #1a1a2e;
 }
 
 /* --- App body (panel + browser) --- */
