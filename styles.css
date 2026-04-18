@@ -1054,6 +1054,7 @@
   .ms {
     font-family: 'Material Symbols Rounded';
     font-size: 16px;
+    font-weight: 400;
     vertical-align: -0.2em;
     user-select: none;
     line-height: 1;
@@ -1061,6 +1062,7 @@
   .ms-sm {
     font-family: 'Material Symbols Rounded';
     font-size: 16px;
+    font-weight: 400;
     vertical-align: -0.15em;
     user-select: none;
     line-height: 1;
