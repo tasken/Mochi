@@ -790,6 +790,10 @@
 
   tr:hover .cell-actions button { opacity: 1; }
 
+  .cell-actions button.ghost:hover:not(:disabled) {
+    background: rgba(0,0,0,0.08);
+  }
+
   /* --- Navigation bar --- */
   .selection-bar {
     display: flex;
