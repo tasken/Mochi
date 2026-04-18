@@ -80,7 +80,7 @@
         <span class="panel-title" id="panelFolderName"></span>
         <span class="panel-sub" id="panelFolderPath"></span>
         <span class="panel-meta" id="panelFolderCount"></span>
-        <div class="panel-drive-bar"><div class="panel-drive-bar-fill" id="panelDriveBarFill" style="width:0%"></div></div>
+        <div class="panel-drive-bar"><div class="panel-drive-bar-fill" id="panelDriveBarFill"></div></div>
         <span class="panel-meta" id="panelDriveUsage"></span>
       </div>
 
@@ -98,7 +98,7 @@
         </div>
         <!-- NFC tag subsection — shown for .bin files -->
         <div class="panel-field" id="panelNfcTag" hidden>
-          <span class="panel-field-label"><span class="ms-sm">nfc</span> NFC Tag ID</span>
+          <span class="panel-field-label"><span class="ms-sm">nfc</span> NFC tag ID</span>
           <div class="panel-nfc-tag-content" id="panelNfcTagContent"></div>
         </div>
         <div class="panel-actions">
@@ -113,16 +113,20 @@
           <span class="panel-label">Upload</span>
           <button class="ghost btn-circle" id="btnUploadClose" title="Close"><span class="ms-sm">close</span></button>
         </div>
-        <div style="display:flex;gap:6px;margin-bottom:6px">
-          <button style="flex:1" id="btnPickFolder"><span class="ms">folder</span> Folder</button>
-          <button style="flex:1" id="btnPickFiles"><span class="ms">upload_file</span> Files</button>
+        <div class="panel-button-row">
+          <button class="panel-button-grow" id="btnPickFolder"><span class="ms">folder</span> Folder</button>
+          <button class="panel-button-grow" id="btnPickFiles"><span class="ms">upload_file</span> Files</button>
+        </div>
+        <div class="panel-button-row">
+          <button class="primary panel-button-grow" id="btnUploadStart" disabled><span class="ms">play_arrow</span> Start</button>
+          <button class="danger panel-button-grow" id="btnUploadAbort" disabled><span class="ms">stop</span> Stop</button>
+          <button class="ghost panel-button-grow" id="btnUploadClear" disabled><span class="ms">delete</span> Clear</button>
+        </div>
+        <div id="uploadSummary" class="upload-summary">
+          <span class="summary-label">Queue summary</span>
+          <span id="uploadProgressTotal">No uploads queued</span>
         </div>
         <div id="uploadQueue"><div class="queue-empty">No uploads queued</div></div>
-        <div style="display:flex;gap:6px;margin-top:6px">
-          <button class="primary" style="flex:1" id="btnUploadStart" disabled><span class="ms">play_arrow</span> Start</button>
-          <button class="danger" style="flex:1" id="btnUploadAbort" disabled><span class="ms">stop</span> Stop</button>
-          <button class="ghost" style="flex:1" id="btnUploadClear" disabled><span class="ms">delete</span> Clear</button>
-        </div>
         <input id="folderInput" type="file" hidden multiple webkitdirectory directory>
         <input id="filesInput" type="file" hidden multiple>
       </div>
@@ -161,8 +165,15 @@
       </div>
 
       <!-- File table -->
-      <div class="table-wrap">
-        <table>
+      <div class="table-wrap" id="tableWrap">
+        <div class="browser-empty-state" id="browserEmptyState" hidden>
+          <div class="browser-empty-card">
+            <span class="ms browser-empty-icon" id="browserEmptyIcon">folder_open</span>
+            <span class="browser-empty-title" id="browserEmptyTitle">This folder is empty</span>
+            <span class="browser-empty-sub" id="browserEmptySub">There are no files or folders to display here.</span>
+          </div>
+        </div>
+        <table id="fileTable">
           <thead>
             <tr>
               <th class="cell-check"><input type="checkbox" id="checkAll" title="Select all" aria-label="Select all"></th>
@@ -171,9 +182,7 @@
               <th class="cell-actions"></th>
             </tr>
           </thead>
-          <tbody id="fileTableBody">
-            <tr><td colspan="4" class="empty-state">This folder is empty.</td></tr>
-          </tbody>
+          <tbody id="fileTableBody"></tbody>
         </table>
       </div>
     </div><!-- end browser-wrap -->
@@ -185,7 +194,7 @@
 <div class="log-overlay" id="logOverlay">
   <div class="log-overlay-panel">
     <div class="log-overlay-header">
-      <span style="font-size:var(--fs-s);font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:#aaa">Protocol Log</span>
+      <span class="log-title">Protocol log</span>
       <button class="ghost btn-circle" id="btnLogClose" title="Close"><span class="ms-sm">close</span></button>
     </div>
     <pre class="log" id="protocolLog"></pre>
@@ -195,8 +204,8 @@
 <!-- Format drive modal -->
 <div id="formatModal" class="modal-overlay">
   <div class="modal-box">
-    <h3>Format drive E:?</h3>
-    <p id="formatModalMsg">All data on E: will be permanently erased. This cannot be undone.</p>
+    <h3 class="modal-title modal-title-danger">Format drive E:?</h3>
+    <p id="formatModalMsg">All data on E: will be permanently erased. This action cannot be undone.</p>
     <div class="modal-actions">
       <button class="ghost" id="btnFormatCancel">Cancel</button>
       <button class="danger" id="btnFormatConfirm">Format drive</button>
@@ -207,9 +216,10 @@
 <!-- New folder modal -->
 <div id="newFolderModal" class="modal-overlay">
   <div class="modal-box">
-    <h3 style="color:#1a1a2e">New folder</h3>
-    <p>Create a folder inside <strong style="font-family:monospace" id="newFolderPath"></strong></p>
-    <input type="text" class="path-input" id="newFolderInput" style="width:100%;margin-bottom:14px" placeholder="folder name" spellcheck="false" autofocus>
+    <h3 class="modal-title modal-title-neutral">New folder</h3>
+    <p>Create a folder inside <strong class="modal-inline-mono" id="newFolderPath"></strong></p>
+    <input type="text" class="path-input modal-input" id="newFolderInput" placeholder="Folder name" spellcheck="false" autofocus>
+    <div class="field-error" id="newFolderError" hidden aria-live="polite"></div>
     <div class="modal-actions">
       <button class="ghost" id="btnNewFolderCancel">Cancel</button>
       <button class="primary" id="btnNewFolderConfirm">Create</button>
@@ -220,9 +230,10 @@
 <!-- Rename modal -->
 <div id="renameModal" class="modal-overlay">
   <div class="modal-box">
-    <h3 style="color:#1a1a2e">Rename</h3>
+    <h3 class="modal-title modal-title-neutral">Rename</h3>
     <p>New name:</p>
-    <input type="text" class="path-input" id="renameInput" style="width:100%;margin-bottom:14px" placeholder="new name" spellcheck="false">
+    <input type="text" class="path-input modal-input" id="renameInput" placeholder="New name" spellcheck="false">
+    <div class="field-error" id="renameError" hidden aria-live="polite"></div>
     <div class="modal-actions">
       <button class="ghost" id="btnRenameCancel">Cancel</button>
       <button class="primary" id="btnRenameConfirm">Rename</button>
@@ -233,7 +244,7 @@
 <!-- Delete confirmation modal -->
 <div id="deleteModal" class="modal-overlay">
   <div class="modal-box">
-    <h3>Delete <span id="deleteCount">0</span> items?</h3>
+    <h3 class="modal-title modal-title-danger">Delete <span id="deleteCount">0</span> items?</h3>
     <p id="deleteModalMsg"></p>
     <div class="modal-actions">
       <button class="ghost" id="btnDeleteCancel">Cancel</button>
@@ -245,7 +256,7 @@
 <!-- Upload warning modal -->
 <div id="uploadWarnModal" class="modal-overlay">
   <div class="modal-box">
-    <h3 style="color:oklch(0.55 0.15 70)"><span class="ms" style="vertical-align:-4px">warning</span> Upload warnings</h3>
+    <h3 class="modal-title modal-title-warning modal-title-with-icon"><span class="ms modal-title-icon">warning</span> Upload warnings</h3>
     <div id="uploadWarnMsg"></div>
     <div class="modal-actions">
       <button class="ghost" id="btnUploadWarnCancel">Cancel</button>
@@ -257,9 +268,9 @@
 <!-- Sanitize names modal — files selected -->
 <div id="sanitizeModalFiles" class="modal-overlay sanitize-modal">
   <div class="modal-box">
-    <h3 style="color:#1a1a2e">Normalize names</h3>
-    <p>Normalize <strong id="sanitizeFilesCount">0 selected files</strong> to lowercase on the device?</p>
-    <p id="sanitizeFilesList" style="font-size:var(--fs-base);color:#888;margin-bottom:14px"></p>
+    <h3 class="modal-title modal-title-neutral">Normalize names</h3>
+    <p>Normalize <strong id="sanitizeFilesCount">0 selected files</strong> to lowercase?</p>
+    <p id="sanitizeFilesList" class="modal-helper-copy"></p>
     <div class="modal-actions">
       <button class="ghost" id="btnSanitizeFilesCancel">Cancel</button>
       <button class="primary" id="btnSanitizeFilesConfirm">Normalize</button>
@@ -270,13 +281,13 @@
 <!-- Sanitize names modal — folders selected -->
 <div id="sanitizeModalFolders" class="modal-overlay sanitize-modal">
   <div class="modal-box">
-    <h3 style="color:#1a1a2e">Normalize names</h3>
+    <h3 class="modal-title modal-title-neutral">Normalize names</h3>
     <p>Selection includes folders. How deep should this go?</p>
-    <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px">
-      <label style="display:flex;align-items:center;gap:8px;font-size:var(--fs-md);cursor:pointer">
+    <div class="modal-choice-list">
+      <label class="modal-choice-option">
         <input type="radio" name="sanitizeFolderScope" value="selected" checked> Only the selected items
       </label>
-      <label style="display:flex;align-items:center;gap:8px;font-size:var(--fs-md);cursor:pointer">
+      <label class="modal-choice-option">
         <input type="radio" name="sanitizeFolderScope" value="recursive"> Recursive, includes all contents
       </label>
     </div>
@@ -290,16 +301,16 @@
 <!-- Sanitize names modal — nothing selected -->
 <div id="sanitizeModalNone" class="modal-overlay sanitize-modal">
   <div class="modal-box">
-    <h3 style="color:#1a1a2e">Normalize names</h3>
-    <p>What should be renamed in <strong style="font-family:monospace" id="sanitizeNonePath"></strong>?</p>
-    <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px">
-      <label style="display:flex;align-items:center;gap:8px;font-size:var(--fs-md);cursor:pointer">
+    <h3 class="modal-title modal-title-neutral">Normalize names</h3>
+    <p>What should be renamed in <strong class="modal-inline-mono" id="sanitizeNonePath"></strong>?</p>
+    <div class="modal-choice-list">
+      <label class="modal-choice-option">
         <input type="radio" name="sanitizeNoneScope" value="files" checked> Files in this folder only
       </label>
-      <label style="display:flex;align-items:center;gap:8px;font-size:var(--fs-md);cursor:pointer">
+      <label class="modal-choice-option">
         <input type="radio" name="sanitizeNoneScope" value="filesAndFolders"> Files and folders in this folder
       </label>
-      <label style="display:flex;align-items:center;gap:8px;font-size:var(--fs-md);cursor:pointer">
+      <label class="modal-choice-option">
         <input type="radio" name="sanitizeNoneScope" value="recursive"> Everything, recursively
       </label>
     </div>
