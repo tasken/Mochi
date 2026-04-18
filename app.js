@@ -1417,7 +1417,9 @@ async function lookupNfcTag(head, tail) {
 
 function renderNfcTagField(head, tail, info) {
   const hex = `<span class="drawer-nfc-tag-hex">${escapeHtml(formatNfcTagHex(head, tail))}</span>`;
-  if (!info) return hex;
+  if (!info) {
+    return `<div class="drawer-nfc-tag-info"><span class="drawer-nfc-tag-name">No match found</span>${hex}</div>`;
+  }
   const seriesLine = info.amiiboSeries && info.amiiboSeries !== info.gameSeries
     ? `${escapeHtml(info.gameSeries)} · ${escapeHtml(info.amiiboSeries)}`
     : escapeHtml(info.gameSeries);
@@ -1430,6 +1432,10 @@ function renderNfcTagField(head, tail, info) {
 }
 
 function applyNfcTagDisplay(entry, head, tail) {
+  if ((head >>> 0) === 0 && (tail >>> 0) === 0) {
+    el.panelNfcTagContent.innerHTML = `<div class="drawer-nfc-tag-info"><span class="drawer-nfc-tag-name">No tag data</span><span class="drawer-nfc-tag-hex">Not an NFC tag file</span></div>`;
+    return;
+  }
   const key = `${head >>> 0}:${tail >>> 0}`;
   if (_nfcTagCache.has(key)) {
     el.panelNfcTagContent.innerHTML = renderNfcTagField(head, tail, _nfcTagCache.get(key));
@@ -1758,7 +1764,9 @@ function setPanelState(mode, entry) {
     el.panelFileLabel.textContent = entry.name.toLowerCase().endsWith(".bin") ? "NFC tag" : "File";
     const isBin = entry.type === "FILE" && entry.name.toLowerCase().endsWith(".bin");
     el.panelNfcTag.hidden = !isBin;
-    if (isBin) {
+    if (!isBin) {
+      el.panelNfcTagContent.innerHTML = "";
+    } else {
       const metaHead = entry.meta ? entry.meta.nfcTagHead : null;
       const metaTail = entry.meta ? entry.meta.nfcTagTail : null;
       if (metaHead != null) {
