@@ -226,7 +226,7 @@ class PixlToolsClient {
         label: String.fromCharCode(c.u8()),
         name: c.string(),
         totalBytes: c.u32(),
-        usedBytes: c.u32(),
+        freeBytes: c.u32(),
       });
     }
     return { ok: true, error: null, data: drives };
@@ -494,7 +494,7 @@ class DevMockClient {
         label: "E",
         name: "E:",
         totalBytes: 8 * 1024 * 1024,
-        usedBytes: this.isDriveFormatted ? 0 : 2 * 1024 * 1024,
+        freeBytes: this.isDriveFormatted ? 8 * 1024 * 1024 : 6 * 1024 * 1024,
       }],
     };
   }
@@ -1214,14 +1214,16 @@ function renderDrive(driveData) {
     el.topbarDriveInfo.textContent = "—";
     return;
   }
+  const freeBytes = driveData.freeBytes ?? (driveData.totalBytes - (driveData.usedBytes ?? 0));
+  const usedBytes = driveData.totalBytes - freeBytes;
   const pct = driveData.totalBytes > 0
-    ? Math.round((driveData.usedBytes / driveData.totalBytes) * 100)
+    ? Math.round((usedBytes / driveData.totalBytes) * 100)
     : 0;
   el.panelDriveBarFill.style.width = `${pct}%`;
   el.panelDriveBarFill.classList.toggle("high", pct >= 85);
-  const used = formatBytes(driveData.usedBytes);
+  const used = formatBytes(usedBytes);
   const total = formatBytes(driveData.totalBytes);
-  const free = formatBytes(driveData.totalBytes - driveData.usedBytes);
+  const free = formatBytes(freeBytes);
   el.panelDriveUsage.textContent = `${used} / ${total} (${free} free)`;
   el.topbarDriveInfo.textContent = `${free} free`;
 }
