@@ -1053,14 +1053,14 @@
   /* --- Material icons --- */
   .ms {
     font-family: 'Material Symbols Rounded';
-    font-size: 1.1em;
+    font-size: 16px;
     vertical-align: -0.2em;
     user-select: none;
     line-height: 1;
   }
   .ms-sm {
     font-family: 'Material Symbols Rounded';
-    font-size: 0.95em;
+    font-size: 16px;
     vertical-align: -0.15em;
     user-select: none;
     line-height: 1;
