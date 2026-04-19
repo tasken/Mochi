@@ -1515,9 +1515,9 @@ function renderFileTable() {
       nameCell +
       `<td class="cell-size">${size}</td>` +
       `<td class="cell-actions">` +
-      (!isDir ? `<button class="ghost btn-circle" data-action="download" title="Download"><span class="ms-sm">download</span></button>` : "") +
-      `<button class="ghost btn-circle" data-action="rename" title="Rename"><span class="ms-sm">edit</span></button>` +
-      `<button class="ghost btn-circle" data-action="delete" title="Delete"><span class="ms-sm">delete</span></button>` +
+      (!isDir ? `<button class="btn-icon ghost" data-action="download" title="Download"><span class="ms-sm">download</span></button>` : "") +
+      `<button class="btn-icon ghost" data-action="rename" title="Rename"><span class="ms-sm">edit</span></button>` +
+      `<button class="btn-icon ghost" data-action="delete" title="Delete"><span class="ms-sm">delete</span></button>` +
       `</td>` +
       `</tr>`
     );
