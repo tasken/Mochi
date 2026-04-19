@@ -127,8 +127,8 @@
   text-overflow: ellipsis;
 }
 
-/* Circle (icon-only) buttons — size modifiers: .sm (24px) · default (32px) · .lg (40px) */
-.btn-circle {
+/* Circle (icon-only) buttons — .btn-icon is canonical; .btn-circle is an alias */
+.btn-icon, .btn-circle {
   width: 32px;
   height: 32px;
   padding: 0;
@@ -140,7 +140,7 @@
 }
 .btn-circle.sm { width: 24px; height: 24px; }
 .btn-circle.lg { width: 40px; height: 40px; }
-.btn-circle[hidden] { display: none; }
+.btn-icon[hidden], .btn-circle[hidden] { display: none; }
 
 /* Pill buttons — rounded capsule with icon + label */
 .btn-pill {
@@ -625,10 +625,15 @@
     background: #f0f0f4;
     color: #1a1a2e;
     transition: background 0.1s, transform 0.1s ease-out;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
   }
 
   button:hover:not(:disabled):not([aria-disabled="true"]) { background: #e4e4ec; }
   button:active:not(:disabled):not([aria-disabled="true"]) { transform: scale(0.96); }
+  button[hidden] { display: none; }
   button:disabled,
   button[aria-disabled="true"] { opacity: 0.45; cursor: not-allowed; }
 
@@ -655,6 +660,13 @@
   }
 
   button.ghost:hover:not(:disabled):not([aria-disabled="true"]) { background: #f0f0f4; }
+
+  /* --- Button layout utilities ---
+   * .btn-icon    — icon only, circular (see top-level definition)
+   * .btn-labeled — icon + label (layout inherited from base button rule)
+   * Color: add .ghost | .primary | .danger
+   */
+  .btn-labeled[hidden] { display: none; }
 
   /* --- Table --- */
   .table-wrap {
@@ -1164,9 +1176,17 @@
     /* Topbar: icon-only buttons, hide brand and badge to prevent overflow */
     .topbar-brand, .topbar-badge { display: none; }
     .topbar-btn-label { display: none; }
+    .nav-btn-label { display: none; }
+    .nav-breadcrumb { display: none; }
+    .selection-bar button:has(.nav-btn-label) { width: 44px; aspect-ratio: 1; border-radius: 999px; padding: 0; justify-content: center; }
 
-    /* Touch targets */
-    button, .nav-crumb { min-height: 44px; }
+    /* Icons */
+    .ms { font-size: 24px; }
+    .ms-sm { font-size: 24px; }
+
+    /* Touch targets — btn-circle and btn-icon get 44px; labeled buttons stretch naturally */
+    .btn-circle, .btn-icon { width: 44px; height: 44px; }
+    button:not(.btn-circle), .nav-crumb { min-height: 44px; }
 
     /* Hide size column */
     .cell-size, thead th:nth-child(3) { display: none; }
