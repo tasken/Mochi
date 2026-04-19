@@ -145,9 +145,15 @@ class PixlToolsClient {
     this.chunking = false;
     this.rxParts = [];
     this.createdFolders = new Set();
+    this._pendingTimer = null;
+    this._intentionalDisconnect = false;
+    this._reconnecting = false;
+    this._abortReconnect = false;
     this._onNotification = this._onNotification.bind(this);
     this._onDisconnect = this._onDisconnect.bind(this);
     this.onDisconnect = null;
+    this.onReconnecting = null;
+    this.onReconnect = null;
   }
 
   async connect() {
@@ -157,18 +163,31 @@ class PixlToolsClient {
       filters: [{ services: [NUS_SERVICE_UUID] }],
       optionalServices: [NUS_SERVICE_UUID],
     });
+    await this._setupGatt(device);
+  }
+
+  async _setupGatt(device) {
+    device.removeEventListener("gattserverdisconnected", this._onDisconnect);
     device.addEventListener("gattserverdisconnected", this._onDisconnect);
+    if (this.rxChar) this.rxChar.removeEventListener("characteristicvaluechanged", this._onNotification);
     const server = await device.gatt.connect();
-    const service = await server.getPrimaryService(NUS_SERVICE_UUID);
-    const chars = await service.getCharacteristics();
-    for (const c of chars) {
-      if (c.uuid === NUS_CHAR_TX_UUID) this.txChar = c;
-      else if (c.uuid === NUS_CHAR_RX_UUID) this.rxChar = c;
+    try {
+      const service = await server.getPrimaryService(NUS_SERVICE_UUID);
+      const chars = await service.getCharacteristics();
+      this.txChar = null; this.rxChar = null;
+      for (const c of chars) {
+        if (c.uuid === NUS_CHAR_TX_UUID) this.txChar = c;
+        else if (c.uuid === NUS_CHAR_RX_UUID) this.rxChar = c;
+      }
+      if (!this.txChar || !this.rxChar) throw new Error("NUS characteristics not found.");
+      this.device = device;
+      await this.rxChar.startNotifications();
+      this.rxChar.addEventListener("characteristicvaluechanged", this._onNotification);
+    } catch (err) {
+      this.txChar = null; this.rxChar = null; this.device = null;
+      if (server.connected) server.disconnect();
+      throw err;
     }
-    if (!this.txChar || !this.rxChar) throw new Error("NUS characteristics not found.");
-    this.device = device;
-    await this.rxChar.startNotifications();
-    this.rxChar.addEventListener("characteristicvaluechanged", this._onNotification);
     this.createdFolders.clear();
     this._log(`Connected to ${device.name || "BLE device"}.`);
 
@@ -184,13 +203,22 @@ class PixlToolsClient {
   }
 
   disconnect() {
-    if (this.device && this.device.gatt.connected) { this.device.gatt.disconnect(); return; }
+    if (this._reconnecting) {
+      this._abortReconnect = true;
+      return;
+    }
+    if (this.device && this.device.gatt.connected) {
+      this._intentionalDisconnect = true;
+      this.device.gatt.disconnect();
+      return;
+    }
     this._resetTransport("Disconnected.");
   }
 
   _resetTransport(reason) {
     if (this.rxChar) this.rxChar.removeEventListener("characteristicvaluechanged", this._onNotification);
     if (this.device) this.device.removeEventListener("gattserverdisconnected", this._onDisconnect);
+    clearTimeout(this._pendingTimer); this._pendingTimer = null;
     if (this.pending) { this.pending.reject(new Error(reason)); this.pending = null; }
     this.device = null; this.txChar = null; this.rxChar = null;
     this.queue = Promise.resolve(); this.chunking = false; this.rxParts = [];
@@ -199,7 +227,41 @@ class PixlToolsClient {
 
   _onDisconnect() {
     this._log("Device disconnected.");
+    const savedDevice = this.device;
+    const intentional = this._intentionalDisconnect;
+    this._intentionalDisconnect = false;
     this._resetTransport("Device disconnected.");
+    if (this._reconnecting) return;
+    if (savedDevice && !intentional) {
+      if (this.onReconnecting) this.onReconnecting();
+      this._attemptReconnect(savedDevice);
+    } else {
+      if (this.onDisconnect) this.onDisconnect();
+    }
+  }
+
+  async _attemptReconnect(device) {
+    this._reconnecting = true;
+    this._abortReconnect = false;
+    const delays = [2000, 4000, 8000];
+    for (const delay of delays) {
+      await new Promise(r => setTimeout(r, delay));
+      if (this._abortReconnect) {
+        this._reconnecting = false;
+        this._abortReconnect = false;
+        return;
+      }
+      try {
+        this._log("Reconnecting...");
+        await this._setupGatt(device);
+        this._reconnecting = false;
+        if (this.onReconnect) this.onReconnect();
+        return;
+      } catch (_) {
+        // try next delay
+      }
+    }
+    this._reconnecting = false;
     if (this.onDisconnect) this.onDisconnect();
   }
 
@@ -399,7 +461,7 @@ class PixlToolsClient {
   _sendCommand(cmd, payload = new Uint8Array()) {
     const cmdName = CMD_NAMES[cmd] || `0x${cmd.toString(16)}`;
     const run = () => this._performCommand(cmd, payload, cmdName);
-    this.queue = this.queue.catch(() => undefined).then(run);
+    this.queue = this.queue.catch((err) => { if (!this.txChar) return; throw err; }).then(run);
     return this.queue;
   }
 
@@ -417,6 +479,14 @@ class PixlToolsClient {
         } else {
           await this.txChar.writeValue(frame);
         }
+        const pendingRef = this.pending;
+        this._pendingTimer = setTimeout(() => {
+          if (this.pending === pendingRef) {
+            this.pending = null;
+            this._pendingTimer = null;
+            reject(new Error("Command timed out"));
+          }
+        }, 15000);
       } catch (err) {
         this.pending = null;
         reject(err);
@@ -426,45 +496,52 @@ class PixlToolsClient {
 
   _onNotification(event) {
     if (!this.pending) return;
-    const incoming = new Uint8Array(
-      event.target.value.buffer.slice(
-        event.target.value.byteOffset,
-        event.target.value.byteOffset + event.target.value.byteLength
-      )
-    );
-    const chunk = incoming[2] | (incoming[3] << 8);
-    const hasMore = (chunk & 0x8000) !== 0;
-    if (hasMore) {
-      if (!this.chunking) { this.rxParts = [incoming]; this.chunking = true; }
-      else { this.rxParts.push(incoming.slice(FRAME_HEADER_SIZE)); }
-      return;
+    try {
+      const incoming = new Uint8Array(
+        event.target.value.buffer.slice(
+          event.target.value.byteOffset,
+          event.target.value.byteOffset + event.target.value.byteLength
+        )
+      );
+      const chunk = incoming[2] | (incoming[3] << 8);
+      const hasMore = (chunk & 0x8000) !== 0;
+      if (hasMore) {
+        if (!this.chunking) { this.rxParts = [incoming]; this.chunking = true; }
+        else { this.rxParts.push(incoming.slice(FRAME_HEADER_SIZE)); }
+        return;
+      }
+      let frame = incoming;
+      if (this.chunking) {
+        this.rxParts.push(incoming.slice(FRAME_HEADER_SIZE));
+        frame = concatBytes(...this.rxParts);
+        this.rxParts = []; this.chunking = false;
+      }
+      const response = {
+        cmd: frame[0],
+        status: frame[1],
+        chunk: frame[2] | (frame[3] << 8),
+        payload: frame.slice(FRAME_HEADER_SIZE),
+      };
+      const p = this.pending;
+      clearTimeout(this._pendingTimer); this._pendingTimer = null;
+      this.pending = null;
+      const cmdName = CMD_NAMES[response.cmd] || `0x${response.cmd.toString(16)}`;
+      if (response.status === 0) {
+        this._log(`← ${cmdName} OK${response.payload.length > 0 ? ` (${response.payload.length}B)` : ""}`);
+      } else {
+        const errMsg = this._vfsError(response.status);
+        this._log(`← ${cmdName} ERR: ${errMsg}`);
+      }
+      if (response.cmd !== p.cmd) {
+        p.reject(new Error(`Unexpected response 0x${response.cmd.toString(16)} for 0x${p.cmd.toString(16)}`));
+        return;
+      }
+      p.resolve(response);
+    } catch (err) {
+      clearTimeout(this._pendingTimer); this._pendingTimer = null;
+      if (this.pending) { this.pending.reject(err); this.pending = null; }
+      this.chunking = false; this.rxParts = [];
     }
-    let frame = incoming;
-    if (this.chunking) {
-      this.rxParts.push(incoming.slice(FRAME_HEADER_SIZE));
-      frame = concatBytes(...this.rxParts);
-      this.rxParts = []; this.chunking = false;
-    }
-    const response = {
-      cmd: frame[0],
-      status: frame[1],
-      chunk: frame[2] | (frame[3] << 8),
-      payload: frame.slice(FRAME_HEADER_SIZE),
-    };
-    const p = this.pending;
-    this.pending = null;
-    const cmdName = CMD_NAMES[response.cmd] || `0x${response.cmd.toString(16)}`;
-    if (response.status === 0) {
-      this._log(`← ${cmdName} OK${response.payload.length > 0 ? ` (${response.payload.length}B)` : ""}`);
-    } else {
-      const errMsg = this._vfsError(response.status);
-      this._log(`← ${cmdName} ERR: ${errMsg}`);
-    }
-    if (response.cmd !== p.cmd) {
-      p.reject(new Error(`Unexpected response 0x${response.cmd.toString(16)} for 0x${p.cmd.toString(16)}`));
-      return;
-    }
-    p.resolve(response);
   }
 }
 
@@ -832,6 +909,7 @@ const state = {
   uploadCompletedBytes: 0,
   folderCache: new Map(),
   truncated: false,
+  disconnectToast: null,
 };
 
 function showInputError(inputEl, errorEl, message) {
@@ -936,30 +1014,31 @@ function setConnState(newState) {
 
   const connected = newState === "connected";
   const connecting = newState === "connecting";
+  const reconnecting = newState === "reconnecting";
   const disconnected = newState === "disconnected";
 
   // Main overlay
   el.mainOverlay.classList.toggle("active", !connected);
-  el.mainOverlayIcon.hidden = connecting;
-  el.mainOverlaySpinner.hidden = !connecting;
-  el.mainOverlayTitle.textContent = connecting ? "Connecting to Pixl.js\u2026" : "No device connected";
-  el.mainOverlaySub.textContent = connecting ? "" : "Browse and manage files on your Pixl.js over Bluetooth.";
-  el.btnConnectCta.hidden = connecting;
-  el.btnConnectCta.disabled = connecting;
+  el.mainOverlayIcon.hidden = connecting || reconnecting;
+  el.mainOverlaySpinner.hidden = !(connecting || reconnecting);
+  el.mainOverlayTitle.textContent = reconnecting ? "Reconnecting\u2026" : connecting ? "Connecting to Pixl.js\u2026" : "No device connected";
+  el.mainOverlaySub.textContent = (connecting || reconnecting) ? "" : "Browse and manage files on your Pixl.js over Bluetooth.";
+  el.btnConnectCta.hidden = connecting || reconnecting;
+  el.btnConnectCta.disabled = connecting || reconnecting;
 
-  // Disconnect button — only visible when connected
-  el.btnConnect.hidden = !connected;
+  // Disconnect button — visible when connected or reconnecting
+  el.btnConnect.hidden = !(connected || reconnecting);
   el.btnDev.hidden = !shouldShowDevButton();
 
-  // Topbar connected elements
-  el.topbarBadge.hidden = !connected;
-  el.topbarDrive.hidden = !connected;
-  el.btnRefresh.hidden = !connected;
-  el.btnNewFolder.hidden = !connected;
-  el.btnNormalize.hidden = !connected;
-  el.btnLogToggle.hidden = !connected;
-  el.btnSheetInfo.hidden = !connected;
-  el.btnSheetUpload.hidden = !connected;
+  // Topbar connected elements — keep visible during reconnecting
+  el.topbarBadge.hidden = !(connected || reconnecting);
+  el.topbarDrive.hidden = !(connected || reconnecting);
+  el.btnRefresh.hidden = !(connected || reconnecting);
+  el.btnNewFolder.hidden = !(connected || reconnecting);
+  el.btnNormalize.hidden = !(connected || reconnecting);
+  el.btnLogToggle.hidden = !(connected || reconnecting);
+  el.btnSheetInfo.hidden = !(connected || reconnecting);
+  el.btnSheetUpload.hidden = !(connected || reconnecting);
 
   // Error cleared on state change
   el.connError.hidden = true;
@@ -1032,7 +1111,7 @@ function createToast(options) {
     const btn = document.createElement("button");
     btn.className = "toast-close";
     btn.setAttribute("aria-label", "Dismiss");
-    btn.textContent = "\u00d7";
+    btn.innerHTML = '<span class="ms-sm">close</span>';
     btn.addEventListener("click", () => removeToast(toast));
     toast.appendChild(btn);
   }
@@ -1100,7 +1179,7 @@ function clearToasts({ keepErrors = false } = {}) {
 // === Connection ===
 
 function shouldShowDevButton() {
-  return isDevMode && state.connState !== "connected";
+  return isDevMode && state.connState === "disconnected";
 }
 
 function compareSemver(a, b) {
@@ -1130,16 +1209,36 @@ async function checkFirmwareVersion(deviceVersion) {
 }
 
 async function connectOrDisconnect() {
-  if (state.connState === "connected") {
+  if (state.connState === "connected" || state.connState === "reconnecting") {
     if (state.client) state.client.disconnect();
     setConnState("disconnected");
     return;
   }
 
   setConnState("connecting");
+  clearToasts();
 
   state.client = new PixlToolsClient(log);
-  state.client.onDisconnect = () => setConnState("disconnected");
+  state.client.onDisconnect = () => {
+    const wasReconnecting = state.connState === "reconnecting";
+    if (state.disconnectToast) { removeToast(state.disconnectToast); state.disconnectToast = null; }
+    if (state.connState !== "disconnected") setConnState("disconnected");
+    if (wasReconnecting) showErrorToast("Reconnection timed out");
+  };
+  state.client.onReconnecting = () => {
+    if (state.abortController) state.abortController.abort();
+    setConnState("reconnecting");
+    state.disconnectToast = showErrorToast("Disconnected", "Attempting to reconnect...");
+  };
+  state.client.onReconnect = async () => {
+    if (state.disconnectToast) { removeToast(state.disconnectToast); state.disconnectToast = null; }
+    setConnState("connected");
+    showSuccessToast("Reconnected");
+    if (state.currentPath) {
+      invalidateCache();
+      await browseFolder(state.currentPath);
+    }
+  };
 
   try {
     await state.client.connect();
@@ -2547,14 +2646,19 @@ async function runUpload() {
     showSuccessToast(`Successfully uploaded ${uploadedFileText}`);
   } catch (err) {
     log(`Upload error: ${err.message}`, "err");
-    if (state.abortController && state.abortController.signal.aborted) {
+    const isReconnecting = state.connState === "reconnecting";
+    const isConnectionLoss = !isReconnecting && /GATT|NetworkError|disconnected/i.test(err.message);
+    const isUserAbort = !isReconnecting && !isConnectionLoss && state.abortController && state.abortController.signal.aborted;
+    if (isUserAbort) {
       showErrorToast("Upload was cancelled");
-    } else {
+    } else if (!isReconnecting && !isConnectionLoss) {
       showErrorToast("Could not complete the upload");
     }
     const active = state.uploadPlan.find(i => i.status === "active");
-    if (active) { active.status = state.abortController.signal.aborted ? "aborted" : "error"; }
-    for (const item of state.uploadPlan) { if (item.status === "pending") item.status = "aborted"; }
+    if (active) active.status = isUserAbort ? "aborted" : "error";
+    if (!isReconnecting && !isConnectionLoss) {
+      for (const item of state.uploadPlan) { if (item.status === "pending") item.status = "aborted"; }
+    }
     renderUploadQueue();
   } finally {
     state.uploadActive = false;
@@ -2562,8 +2666,12 @@ async function runUpload() {
     state.transferSpeed = "";
     el.browserLockOverlay.classList.remove("active");
     updateControls();
-    invalidateCache();
-    if (state.currentPath) await browseFolder(state.currentPath);
+    if (state.connState === "connected" && state.client && state.client.device) {
+      invalidateCache();
+      if (state.currentPath) {
+        try { await browseFolder(state.currentPath); } catch (_) { /* connection may be dropping */ }
+      }
+    }
   }
 }
 
