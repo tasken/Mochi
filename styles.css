@@ -449,8 +449,8 @@
 
   /* --- Upload queue --- */
   .upload-summary {
-    display: flex;
-    flex-wrap: wrap;
+    /* display: flex; */
+    /* flex-wrap: wrap; */
     gap: 4px 6px;
     padding: 8px 10px;
     border: 1px solid #ececf2;
@@ -458,6 +458,12 @@
     background: #f6f6fb;
     font-size: var(--fs-s);
     color: #666;
+  }
+
+  #uploadProgressTotal {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
   }
 
   .summary-label {

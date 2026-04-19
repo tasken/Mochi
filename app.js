@@ -2312,11 +2312,12 @@ function renderUploadSummary() {
   const remainingCount = state.uploadPlan.length;
   const remainingText = remainingCount === 1 ? "1 remaining" : `${remainingCount} remaining`;
   const speedStr = state.transferSpeed
-    ? ` \u00b7 <span class="ms-sm">upload</span> <span class="queue-summary-speed">${escapeHtml(state.transferSpeed)}</span>`
+    ? ` \u00b7 <span class="queue-summary-speed">${escapeHtml(state.transferSpeed)}</span>`
     : "";
 
   el.uploadProgressTotal.innerHTML =
-    `${state.uploadCompletedCount} / ${state.uploadTotalCount} items \u00b7 ${remainingText} \u00b7 ${totalPct}% (${formatBytes(visibleBytes)} / ${formatBytes(state.uploadTotalBytes)})${speedStr}`;
+    `<span>${state.uploadCompletedCount} / ${state.uploadTotalCount} items \u00b7 ${remainingText}</span>` +
+    `<span>${totalPct}% (${escapeHtml(formatBytes(visibleBytes))} / ${escapeHtml(formatBytes(state.uploadTotalBytes))})${speedStr}</span>`;
 }
 
 function renderUploadQueue() {
