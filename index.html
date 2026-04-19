@@ -35,20 +35,20 @@
   <header class="topbar" id="topbar">
     <span class="topbar-brand">MochiNest</span>
     <button id="btnDev" hidden>Mock device</button>
-    <button class="danger" id="btnConnect" hidden>
+    <button class="btn-labeled danger" id="btnConnect" hidden>
       <span class="ms">bluetooth_disabled</span> <span class="topbar-btn-label">Disconnect</span>
     </button>
     <!-- shown only when connected -->
     <span class="topbar-badge" id="topbarBadge" hidden></span>
     <span class="topbar-drive" id="topbarDrive" hidden>
       <span id="topbarDriveInfo">—</span>
-      <button class="ghost btn-circle" id="btnFormat" title="Format drive E:">
+      <button class="btn-icon ghost" id="btnFormat" title="Format drive E:">
         <span class="ms-sm">delete_forever</span>
       </button>
     </span>
     <span class="topbar-spacer"></span>
-    <button class="ghost" id="btnNormalize" hidden><span class="ms">match_case</span> <span class="topbar-btn-label">Normalize</span></button>
-    <button class="ghost btn-circle" id="btnLogToggle" title="Protocol log" aria-label="Toggle protocol log" hidden><span class="ms">terminal</span></button>
+    <button class="btn-labeled ghost" id="btnNormalize" hidden><span class="ms">match_case</span> <span class="topbar-btn-label">Normalize</span></button>
+    <button class="btn-icon ghost" id="btnLogToggle" title="Protocol log" aria-label="Toggle protocol log" hidden><span class="ms">terminal</span></button>
     <span class="topbar-error" id="connError" hidden></span>
   </header>
 
@@ -61,7 +61,7 @@
         <div id="mainOverlaySpinner" hidden><md-circular-progress indeterminate></md-circular-progress></div>
         <span class="title" id="mainOverlayTitle">No device connected</span>
         <span class="sub" id="mainOverlaySub"></span>
-        <button class="primary" id="btnConnectCta"><span class="ms">bluetooth</span> Connect to Pixl.js</button>
+        <button class="btn-labeled primary" id="btnConnectCta"><span class="ms">bluetooth</span> Connect to Pixl.js</button>
       </div>
     </div>
 
@@ -102,8 +102,8 @@
           <div class="panel-nfc-tag-content" id="panelNfcTagContent"></div>
         </div>
         <div class="panel-actions">
-          <button class="ghost" id="panelBtnRename"><span class="ms-sm">edit</span> Rename</button>
-          <button class="danger" id="panelBtnDelete"><span class="ms-sm">delete</span> Delete</button>
+          <button class="btn-labeled ghost" id="panelBtnRename"><span class="ms-sm">edit</span> Rename</button>
+          <button class="btn-labeled danger" id="panelBtnDelete"><span class="ms-sm">delete</span> Delete</button>
         </div>
       </div>
 
@@ -111,16 +111,16 @@
       <div class="panel-state" id="panelUpload" hidden>
         <div class="panel-header">
           <span class="panel-label">Upload</span>
-          <button class="ghost btn-circle" id="btnUploadClose" title="Close"><span class="ms-sm">close</span></button>
+          <button class="btn-icon ghost" id="btnUploadClose" title="Close"><span class="ms-sm">close</span></button>
         </div>
         <div class="panel-button-row">
-          <button class="panel-button-grow" id="btnPickFolder"><span class="ms">folder</span> Folder</button>
-          <button class="panel-button-grow" id="btnPickFiles"><span class="ms">upload_file</span> Files</button>
+          <button class="btn-labeled panel-button-grow" id="btnPickFolder"><span class="ms">folder</span> Folder</button>
+          <button class="btn-labeled panel-button-grow" id="btnPickFiles"><span class="ms">upload_file</span> Files</button>
         </div>
         <div class="panel-button-row">
-          <button class="primary panel-button-grow" id="btnUploadStart" disabled><span class="ms">play_arrow</span> Start</button>
-          <button class="danger panel-button-grow" id="btnUploadAbort" disabled><span class="ms">stop</span> Stop</button>
-          <button class="ghost panel-button-grow" id="btnUploadClear" disabled><span class="ms">delete</span> Clear</button>
+          <button class="btn-labeled primary panel-button-grow" id="btnUploadStart" disabled><span class="ms">play_arrow</span> Start</button>
+          <button class="btn-labeled danger panel-button-grow" id="btnUploadAbort" disabled><span class="ms">stop</span> Stop</button>
+          <button class="btn-labeled ghost panel-button-grow" id="btnUploadClear" disabled><span class="ms">delete</span> Clear</button>
         </div>
         <div id="uploadSummary" class="upload-summary">
           <span class="summary-label">Queue summary</span>
@@ -152,16 +152,16 @@
 
       <!-- Navigation / selection bar -->
       <div id="selectionBar" class="selection-bar">
-        <button class="ghost btn-circle" id="btnNavHome" title="Home"><span class="ms">home</span></button>
-        <button class="ghost btn-circle" id="btnNavUp" title="Up one level"><span class="ms">arrow_upward</span></button>
-        <button class="ghost btn-circle" id="btnSheetInfo" title="Folder info" hidden><span class="ms">info</span></button>
-        <button class="ghost btn-circle" id="btnSheetUpload" title="Upload" hidden><span class="ms">upload</span></button>
+        <button class="btn-icon ghost" id="btnNavHome" title="Home"><span class="ms">home</span></button>
+        <button class="btn-icon ghost" id="btnNavUp" title="Up one level"><span class="ms">arrow_upward</span></button>
+        <button class="btn-icon ghost" id="btnSheetInfo" title="Folder info" hidden><span class="ms">info</span></button>
+        <button class="btn-icon ghost" id="btnSheetUpload" title="Upload" hidden><span class="ms">upload</span></button>
         <nav class="nav-breadcrumb" id="navBreadcrumb"></nav>
         <span id="selectionCount" hidden></span>
-        <button class="ghost" id="btnDownloadSelected" hidden><span class="ms">download</span> Download</button>
-        <button class="danger" id="btnDeleteSelected" hidden><span class="ms">delete</span> Delete</button>
-        <button class="ghost" id="btnNewFolder" title="New folder" hidden><span class="ms">create_new_folder</span> <span class="new-folder-label">New folder</span></button>
-        <button class="ghost btn-circle" id="btnRefresh" title="Refresh" aria-label="Refresh folder" hidden><span class="ms">refresh</span></button>
+        <button class="btn-labeled ghost" id="btnDownloadSelected" hidden><span class="ms">download</span> <span class="nav-btn-label">Download</span></button>
+        <button class="btn-labeled danger" id="btnDeleteSelected" hidden><span class="ms">delete</span> <span class="nav-btn-label">Delete</span></button>
+        <button class="btn-labeled ghost" id="btnNewFolder" title="New folder" hidden><span class="ms">create_new_folder</span> <span class="nav-btn-label">New folder</span></button>
+        <button class="btn-icon ghost" id="btnRefresh" title="Refresh" aria-label="Refresh folder" hidden><span class="ms">refresh</span></button>
       </div>
 
       <!-- File table -->
@@ -195,7 +195,7 @@
   <div class="log-overlay-panel">
     <div class="log-overlay-header">
       <span class="log-title">Protocol log</span>
-      <button class="ghost btn-circle" id="btnLogClose" title="Close"><span class="ms-sm">close</span></button>
+      <button class="btn-icon ghost" id="btnLogClose" title="Close"><span class="ms-sm">close</span></button>
     </div>
     <pre class="log" id="protocolLog"></pre>
   </div>
