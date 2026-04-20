@@ -1455,7 +1455,12 @@ async function browseFolder(path) {
     truncated = cached.truncated;
   } else {
     try {
-      const res = await state.client.readFolder(path);
+      let res;
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        res = await state.client.readFolder(path);
+        if (!res.ok || !res.truncated) break;
+        log(`Directory listing for ${path} truncated on attempt ${attempt}, retrying…`, "err");
+      }
       if (!res.ok) {
         log(`Failed to read ${path}: ${res.error}`, "err");
         return;
