@@ -378,33 +378,6 @@
 
 
 
-/* New / Refresh grid */
-.sidebar-action-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--border);
-}
-
-.sidebar-action-btn {
-  height: 40px;
-  border-radius: var(--radius);
-  border: 1px solid var(--border) !important;
-  background: #fff !important;
-  color: #374151 !important;
-  font-size: var(--fs-s);
-  font-weight: 500;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  cursor: pointer;
-  transition: background 0.15s;
-}
-.sidebar-action-btn:hover:not(:disabled) { background: #f9fafb !important; }
-.sidebar-action-btn:disabled { opacity: 0.45; cursor: not-allowed; }
-
 /* Sidebar drop zone */
 .sidebar-drop-zone {
   flex: 1;
@@ -958,6 +931,10 @@
     background: #fff;
   }
 
+  @media (max-width: 767px) {
+    .table-wrap { overflow-x: hidden; }
+  }
+
   .table-wrap.is-empty {
     display: flex;
     overflow: hidden;
@@ -1033,12 +1010,24 @@
   .cell-name {
     font-weight: 500;
     cursor: pointer;
+    overflow: hidden;
+    max-width: 0; /* forces the column to honour its <col> width */
+    width: 100%;
   }
 
   .cell-name-inner {
-    display: inline-flex;
+    display: flex;
     align-items: center;
     gap: 10px;
+    overflow: hidden;
+    min-width: 0;
+  }
+
+  .cell-name-inner > :last-child {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
   }
 
   .cell-name-icon {
@@ -1124,6 +1113,11 @@
     border-bottom: 1px solid var(--border);
     flex-shrink: 0;
   }
+
+  /* Mobile-only elements hidden on desktop */
+  .mobile-up-btn { display: none; }
+  .mobile-folder-name { display: none; }
+  .nav-spacer { display: none; }
 
   .selection-bar button.ghost:hover:not(:disabled) {
     background: #f3f4f6;
@@ -1557,7 +1551,7 @@
 
   /* --- Responsive --- */
   /* Hide sheet toggle buttons on desktop */
-  @media (min-width: 901px) {
+  @media (min-width: 992px) {
     .sheet-container {
       display: flex;
       min-height: 0;
@@ -1567,10 +1561,20 @@
       height: 100%;
     }
 
-    #btnSheetInfo, #btnSheetUpload { display: none !important; }
+    /* Info button opens the bottom sheet — not needed when sidebar is always visible */
+    #btnSheetInfo { display: none !important; }
   }
 
-  @media (max-width: 900px) {
+  /* Upload is the primary nav action — filled on all viewports */
+  #btnSheetUpload {
+    background: #111827;
+    color: #fff;
+    border: none;
+    flex-shrink: 0;
+  }
+  #btnSheetUpload:hover:not(:disabled) { background: #1f2937; }
+
+  @media (max-width: 991px) {
     .topbar-breadcrumb { max-width: 160px; }
 
     .panel-nfc-tag-content {
@@ -1633,7 +1637,7 @@
     }
   }
 
-  @media (max-width: 640px) {
+  @media (max-width: 767px) {
     .main-overlay {
       padding-inline: 12px;
     }
@@ -1643,11 +1647,41 @@
       max-width: 28rem;
     }
 
-    /* Topbar: icon-only buttons, hide brand and badge to prevent overflow */
-    .topbar-brand, .topbar-badge { display: none; }
+    /* Topbar: brand + badge stay visible; hide text labels and drive chip */
     .topbar-btn-label { display: none; }
     .nav-btn-label { display: none; }
-    .selection-bar button:has(.nav-btn-label) { width: 44px; aspect-ratio: 1; border-radius: 999px; padding: 0; justify-content: center; }
+    .topbar-drive { display: none; }
+
+    /* Nav bar layout: back arrow + folder name on left, actions on right */
+    .selection-bar { height: 52px; padding: 0 4px; gap: 2px; }
+    .nav-breadcrumb { display: none; }
+    .mobile-up-btn { display: inline-flex; flex-shrink: 0; }
+    .mobile-folder-name { display: block;
+      font-size: var(--fs-md);
+      font-weight: 600;
+      color: var(--foreground);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      min-width: 0;
+      flex: 1;
+    }
+    .nav-spacer { flex: 1; display: block; }
+
+    /* Hide refresh — pull-to-refresh handles this on mobile */
+    #btnRefresh { display: none !important; }
+
+    /* New folder + Upload — icon only on mobile (labels hidden, collapse padding) */
+    #btnNewFolder,
+    #btnSheetUpload {
+      width: 44px;
+      height: 44px;
+      padding: 0;
+      border-radius: 999px;
+      aspect-ratio: 1;
+      justify-content: center;
+      flex-shrink: 0;
+    }
 
     /* Icons */
     .ms { font-size: 24px; }
@@ -1671,7 +1705,7 @@
 
     /* Toast: centered below topbar, matching desktop behaviour */
     #toastContainer {
-      top: calc(env(safe-area-inset-top, 0px) + 60px);
+      top: calc(env(safe-area-inset-top, 0px) + 108px);
       bottom: auto;
       left: 50%;
       transform: translateX(-50%);
@@ -1682,7 +1716,13 @@
     .toast {
       white-space: normal;
       border-radius: 14px;
+      font-size: var(--fs-xs);
+      padding: 6px 8px 6px 7px;
+      gap: 5px;
     }
+    .toast-icon { width: 18px; height: 18px; font-size: 11px; }
+    .toast-close { width: 18px; height: 18px; font-size: 12px; }
+    .toast-body { gap: 0; }
   }
 
 /* ============================================================
@@ -1790,7 +1830,7 @@
   display: block;
   pointer-events: none;
 }
-@media (max-width: 640px) {
+@media (max-width: 767px) {
   .img-lightbox { padding: 0; }
   .img-lightbox-inner { border-radius: 0; flex-direction: column; max-width: 100%; }
   .img-lightbox-img-wrap { min-height: 0; flex: 1; padding: 20px; }
@@ -2098,7 +2138,7 @@
 }
 
 /* Mobile: details panel becomes bottom sheet */
-@media (max-width: 900px) {
+@media (max-width: 991px) {
   .details-sheet-container {
     display: block;
     position: fixed;
@@ -2133,9 +2173,41 @@
   .details-sheet-container.open .details-panel { transform: translateY(0); }
 }
 
-@media (min-width: 901px) {
+@media (min-width: 992px) {
   .details-sheet-container { display: flex; min-height: 0; }
   .details-panel { height: 100%; }
+}
+
+/* Pull-to-refresh indicator */
+.ptr-indicator {
+  display: none;
+}
+@media (max-width: 767px) {
+  .ptr-indicator {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 0;
+    overflow: hidden;
+    transition: height 0.15s ease, opacity 0.15s;
+    opacity: 0;
+    pointer-events: none;
+  }
+  .ptr-indicator.ptr-pulling {
+    opacity: 1;
+  }
+  .ptr-indicator.ptr-ready .ptr-icon {
+    color: var(--violet);
+  }
+  .ptr-indicator.ptr-loading .ptr-icon {
+    animation: spin 0.7s linear infinite;
+    color: var(--violet);
+  }
+  .ptr-icon {
+    font-size: 20px;
+    color: #9ca3af;
+    transition: transform 0.15s, color 0.15s;
+  }
 }
 
 /* Toast */

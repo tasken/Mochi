@@ -109,10 +109,6 @@
           </div>
           <div class="sidebar-folder-size" id="panelFolderSize"></div>
         </div>
-        <div class="sidebar-action-grid">
-          <button class="btn-labeled ghost sidebar-action-btn" id="btnSidebarNew"><span class="ms-sm">create_new_folder</span> New</button>
-          <button class="btn-labeled ghost sidebar-action-btn" id="btnSidebarRefresh"><span class="ms-sm">refresh</span> Refresh</button>
-        </div>
         <div class="sidebar-drop-zone" id="sidebarDropZone" role="button" tabindex="0" aria-label="Drop files to upload, or click to browse">
           <span class="ms sidebar-drop-icon">cloud_upload</span>
           <span class="sidebar-drop-title">Drop files here</span>
@@ -168,11 +164,17 @@
 
       <!-- Navigation bar -->
       <div id="selectionBar" class="selection-bar">
-        <button class="btn-icon ghost" id="btnSheetInfo" title="Folder info" hidden><span class="ms">info</span></button>
-        <button class="btn-icon ghost" id="btnSheetUpload" title="Upload" hidden><span class="ms">upload</span></button>
+        <!-- Mobile: back button + current folder name (hidden on desktop) -->
+        <button class="btn-icon ghost mobile-up-btn" id="btnMobileUp" title="Go up" aria-label="Go up one level" hidden><span class="ms">arrow_back</span></button>
+        <span class="mobile-folder-name" id="mobileFolderName" aria-hidden="true"></span>
+        <!-- Desktop: full breadcrumb (hidden on mobile) -->
         <nav class="nav-breadcrumb" id="navBreadcrumb"></nav>
-        <button class="btn-icon ghost" id="btnRefresh" title="Refresh" aria-label="Refresh folder" hidden><span class="ms">refresh</span></button>
-        <button class="btn-labeled" id="btnNewFolder" title="New folder" hidden><span class="ms-sm">create_new_folder</span> <span class="nav-btn-label">New folder</span></button>
+        <!-- Spacer pushes actions to the right on mobile -->
+        <span class="nav-spacer"></span>
+        <button class="btn-icon ghost" id="btnSheetInfo" title="Folder info" hidden><span class="ms">info</span></button>
+        <button class="btn-labeled ghost" id="btnRefresh" title="Refresh" aria-label="Refresh folder" hidden><span class="ms-sm">refresh</span> <span class="nav-btn-label">Refresh</span></button>
+        <button class="btn-labeled ghost" id="btnNewFolder" title="New folder" hidden><span class="ms-sm">create_new_folder</span> <span class="nav-btn-label">New folder</span></button>
+        <button class="btn-labeled" id="btnSheetUpload" title="Upload" hidden><span class="ms-sm">upload</span> <span class="nav-btn-label">Upload</span></button>
       </div>
 
       <!-- Table column header (always visible, above banners) -->
@@ -210,6 +212,10 @@
 
       <!-- File table -->
       <div class="table-wrap" id="tableWrap">
+        <!-- Pull-to-refresh indicator (mobile only) -->
+        <div class="ptr-indicator" id="ptrIndicator" aria-hidden="true">
+          <span class="ptr-icon ms">refresh</span>
+        </div>
         <div class="browser-empty-state" id="browserEmptyState" hidden>
           <div class="browser-empty-card">
             <span class="ms browser-empty-icon" id="browserEmptyIcon">folder_open</span>
