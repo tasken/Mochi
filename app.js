@@ -733,6 +733,9 @@ const el = {
   btnFormat: document.getElementById("btnFormat"),
   btnRefresh: document.getElementById("btnRefresh"),
   btnNewFolder: document.getElementById("btnNewFolder"),
+  btnMobileUp: document.getElementById("btnMobileUp"),
+  mobileFolderName: document.getElementById("mobileFolderName"),
+  ptrIndicator: document.getElementById("ptrIndicator"),
   navCommit: document.getElementById("navCommit"),
   btnNormalize: document.getElementById("btnNormalize"),
   btnLogToggle: document.getElementById("btnLogToggle"),
@@ -761,9 +764,7 @@ const el = {
   detailsPanel: document.getElementById("detailsPanel"),
   detailsSheetContainer: document.getElementById("detailsSheetContainer"),
   detailsSheetBackdrop: document.getElementById("detailsSheetBackdrop"),
-  detailsHero: document.getElementById("detailsHero"),
   detailsHeroImgArea: document.getElementById("detailsHeroImgArea"),
-  detailsHeroIcon: document.getElementById("detailsHeroIcon"),
   detailsHeroBand: document.getElementById("detailsHeroBand"),
   detailsFilePath: document.getElementById("detailsFilePath"),
   detailsKind: document.getElementById("detailsKind"),
@@ -834,8 +835,7 @@ const el = {
   btnSheetUpload: document.getElementById("btnSheetUpload"),
 
   // Sidebar action buttons
-  btnSidebarNew: document.getElementById("btnSidebarNew"),
-  btnSidebarRefresh: document.getElementById("btnSidebarRefresh"),
+
 
   // Modals
   formatModal: document.getElementById("formatModal"),
@@ -1072,6 +1072,7 @@ function setConnState(newState) {
   el.btnLogToggle.hidden = !(connected || reconnecting);
   el.btnSheetInfo.hidden = !(connected || reconnecting);
   el.btnSheetUpload.hidden = !(connected || reconnecting);
+  if (!(connected || reconnecting)) el.btnMobileUp.hidden = true;
 
   // Error cleared on state change
   el.connError.hidden = true;
@@ -1486,8 +1487,6 @@ function updateControls() {
   const atRoot = !state.currentPath || state.currentPath === "E:/";
   el.btnRefresh.disabled = !connected || uploading;
   el.btnNewFolder.disabled = !connected || uploading;
-  el.btnSidebarNew.disabled = !connected || uploading;
-  el.btnSidebarRefresh.disabled = !connected || uploading;
   el.sidebarDropZone.setAttribute("aria-disabled", String(!connected || uploading));
   el.btnNormalize.disabled = !connected || uploading;
   el.btnFormat.disabled = !connected || uploading;
@@ -1814,7 +1813,14 @@ function renderFileTable() {
 // === Navigation Breadcrumb ===
 
 function renderBreadcrumb(path) {
-  if (!path) { el.navBreadcrumb.innerHTML = ""; return; }
+  if (!path) {
+    el.navBreadcrumb.innerHTML = "";
+    el.mobileFolderName.textContent = "";
+    el.btnMobileUp.hidden = true;
+    el.btnMobileUp.disabled = false;
+    el.btnMobileUp.querySelector(".ms").textContent = "arrow_back";
+    return;
+  }
   const trimmed = path.endsWith("/") ? path.slice(0, -1) : path;
   const parts = trimmed.split("/");
   const crumbs = parts.map((part, i) => ({
@@ -1829,6 +1835,13 @@ function renderBreadcrumb(path) {
     return (i > 0 ? '<span class="nav-sep">›</span>' : "") +
       `<button class="nav-crumb${isActive ? " active" : ""}" data-path="${escapeHtml(c.path)}">${label}</button>`;
   }).join("");
+
+  // Mobile: show current folder name; swap icon between home (root) and arrow_back (subfolder)
+  const isRoot = path === "E:/";
+  el.mobileFolderName.textContent = isRoot ? "Pixl.js" : (getBaseName(trimmed) || "Pixl.js");
+  el.btnMobileUp.hidden = false;
+  el.btnMobileUp.disabled = isRoot;
+  el.btnMobileUp.querySelector(".ms").textContent = isRoot ? "home" : "arrow_back";
 }
 
 // === Selection Bar ===
@@ -1953,6 +1966,60 @@ el.btnRefresh.addEventListener("click", () => {
     browseFolder(state.currentPath);
   }
 });
+
+// Mobile back button — navigate up one level
+el.btnMobileUp.addEventListener("click", () => {
+  if (state.currentPath && state.currentPath !== "E:/") {
+    browseFolder(getParentPath(state.currentPath));
+  }
+});
+
+// Pull-to-refresh (mobile)
+{
+  const PTR_THRESHOLD = 72; // px of pull needed to trigger
+  const PTR_MAX = 96;       // max visual pull height
+  let _ptrStartY = 0;
+  let _ptrActive = false;
+
+  function _ptrReset() {
+    _ptrActive = false;
+    el.ptrIndicator.style.height = "";
+    el.ptrIndicator.classList.remove("ptr-pulling", "ptr-ready", "ptr-loading");
+  }
+
+  el.tableWrap.addEventListener("touchstart", e => {
+    if (el.tableWrap.scrollTop === 0 && e.touches.length === 1) {
+      _ptrStartY = e.touches[0].clientY;
+      _ptrActive = true;
+    }
+  }, { passive: true });
+
+  el.tableWrap.addEventListener("touchmove", e => {
+    if (!_ptrActive) return;
+    const dy = e.touches[0].clientY - _ptrStartY;
+    if (dy <= 0) { _ptrReset(); return; }
+    const h = Math.min(dy * 0.45, PTR_MAX);
+    el.ptrIndicator.style.height = `${h}px`;
+    el.ptrIndicator.classList.add("ptr-pulling");
+    el.ptrIndicator.classList.toggle("ptr-ready", dy >= PTR_THRESHOLD);
+    const rotation = Math.min((dy / PTR_THRESHOLD) * 180, 360);
+    el.ptrIndicator.querySelector(".ptr-icon").style.transform = `rotate(${rotation}deg)`;
+  }, { passive: true });
+
+  el.tableWrap.addEventListener("touchend", () => {
+    if (!_ptrActive) return;
+    const h = parseFloat(el.ptrIndicator.style.height) || 0;
+    if (h >= PTR_THRESHOLD * 0.45 && state.currentPath && state.connected) {
+      el.ptrIndicator.classList.add("ptr-loading");
+      el.ptrIndicator.classList.remove("ptr-ready");
+      el.ptrIndicator.querySelector(".ptr-icon").style.transform = "";
+      state.folderCache.delete(state.currentPath);
+      browseFolder(state.currentPath).finally(() => _ptrReset());
+    } else {
+      _ptrReset();
+    }
+  }, { passive: true });
+}
 
 // New folder modal
 el.btnNewFolder.addEventListener("click", () => {
@@ -2255,10 +2322,6 @@ el.sidebarDropZone.addEventListener("drop", (e) => {
   buildUploadPlan(collected.folders, collected.files);
   setPanelState("upload");
 });
-
-// Sidebar shortcut buttons
-el.btnSidebarNew.addEventListener("click", () => el.btnNewFolder.click());
-el.btnSidebarRefresh.addEventListener("click", () => el.btnRefresh.click());
 
 el.btnUploadClose.addEventListener("click", () => {
   if (el.btnUploadClose.getAttribute("aria-disabled") === "true") return;
