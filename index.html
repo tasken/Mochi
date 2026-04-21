@@ -16,7 +16,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="build-commit" content="dev">
 <meta name="build-branch" content="">
-<title>MochiNest</title>
+<title>Mochi</title>
 <link rel="icon" type="image/svg+xml" href="./favicon.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -44,21 +44,25 @@
 <div class="app">
   <!-- Top bar -->
   <header class="topbar" id="topbar">
-    <span class="topbar-brand">MochiNest</span>
+    <div class="topbar-brand">
+      <div class="topbar-brand-icon"><span class="ms">auto_awesome</span></div>
+      <span class="topbar-brand-name">Mochi</span>
+    </div>
+    <div class="topbar-sep"></div>
     <button id="btnDev" hidden>Mock device</button>
-    <button class="btn-labeled danger" id="btnConnect" hidden>
-      <span class="ms">bluetooth_disabled</span> <span class="topbar-btn-label">Disconnect</span>
+    <button class="topbar-connect-btn" id="btnConnect" hidden>
+      <span class="ms-sm">bluetooth</span>
+      <span class="topbar-btn-label">Disconnect</span>
     </button>
-    <!-- shown only when connected -->
     <span class="topbar-badge" id="topbarBadge" hidden></span>
-    <span class="topbar-drive" id="topbarDrive" hidden>
-      <span id="topbarDriveInfo">—</span>
-      <button class="btn-icon ghost" id="btnFormat" title="Format drive E:">
-        <span class="ms-sm">delete_forever</span>
-      </button>
-    </span>
     <span class="topbar-spacer"></span>
-    <button class="btn-labeled ghost" id="btnNormalize" hidden><span class="ms">match_case</span> <span class="topbar-btn-label">Normalize</span></button>
+    <span class="topbar-drive" id="topbarDrive" hidden>
+      <span class="ms-sm topbar-drive-icon">hard_drive</span>
+      <span id="topbarDriveInfo">—</span>
+    </span>
+    <span class="topbar-action-sep" id="topbarActionSep" hidden></span>
+    <button class="btn-icon ghost" id="btnFormat" title="Format drive E:" aria-label="Format drive" hidden><span class="ms">mop</span></button>
+    <button class="btn-icon ghost" id="btnNormalize" title="Normalize filenames" aria-label="Normalize filenames" hidden><span class="ms">match_case</span></button>
     <button class="btn-icon ghost" id="btnLogToggle" title="Protocol log" aria-label="Toggle protocol log" hidden><span class="ms">terminal</span></button>
     <span class="topbar-error" id="connError" hidden></span>
   </header>
@@ -68,7 +72,7 @@
     <!-- Disconnected overlay -->
     <div class="main-overlay active" id="mainOverlay">
       <div class="main-overlay-card">
-        <span class="ms" id="mainOverlayIcon">bluetooth_disabled</span>
+        <div class="main-overlay-icon-wrap" id="mainOverlayIcon"><span class="ms">bluetooth_disabled</span></div>
         <div id="mainOverlaySpinner" hidden><md-circular-progress indeterminate></md-circular-progress></div>
         <span class="title" id="mainOverlayTitle">No device connected</span>
         <span class="sub" id="mainOverlaySub"></span>
@@ -82,41 +86,41 @@
     <aside class="context-panel" id="contextPanel">
       <div class="sheet-handle"></div>
 
-      <!-- State 1: Folder -->
+      <!-- State 1: Drive / Folder (sidebar) -->
       <div class="panel-state" id="panelFolder">
-        <div class="panel-header">
-          <span class="panel-label">Folder</span>
-          <button class="primary btn-pill" id="btnFolderUpload" title="Upload to this folder"><span class="ms-sm">upload</span> Upload</button>
+        <div class="sidebar-module">
+          <div class="sidebar-section-label">Drive</div>
+          <div class="sidebar-drive-row">
+            <span class="ms-sm sidebar-drive-icon">hard_drive</span>
+            <span class="sidebar-drive-name" id="panelFolderName">Pixl.js</span>
+            <span class="sidebar-drive-path" id="panelFolderPath">E:/</span>
+          </div>
+          <div class="sidebar-drive-storage">
+            <div class="panel-drive-bar"><div class="panel-drive-bar-fill" id="panelDriveBarFill"></div></div>
+            <div class="sidebar-storage-usage" id="panelDriveUsage"></div>
+          </div>
         </div>
-        <span class="panel-title" id="panelFolderName"></span>
-        <span class="panel-sub" id="panelFolderPath"></span>
-        <span class="panel-meta" id="panelFolderCount"></span>
-        <div class="panel-drive-bar"><div class="panel-drive-bar-fill" id="panelDriveBarFill"></div></div>
-        <span class="panel-meta" id="panelDriveUsage"></span>
+        <div class="sidebar-module">
+          <div class="sidebar-section-label">Folder</div>
+          <div class="sidebar-storage-header">
+            <span class="sidebar-folder-icon ms-sm">folder</span>
+            <span class="sidebar-folder-display-name" id="panelCurrentFolderName">—</span>
+            <span class="sidebar-storage-count" id="panelFolderCount"></span>
+          </div>
+          <div class="sidebar-folder-size" id="panelFolderSize"></div>
+        </div>
+        <div class="sidebar-action-grid">
+          <button class="btn-labeled ghost sidebar-action-btn" id="btnSidebarNew"><span class="ms-sm">create_new_folder</span> New</button>
+          <button class="btn-labeled ghost sidebar-action-btn" id="btnSidebarRefresh"><span class="ms-sm">refresh</span> Refresh</button>
+        </div>
+        <div class="sidebar-drop-zone" id="sidebarDropZone" role="button" tabindex="0" aria-label="Drop files to upload, or click to browse">
+          <span class="ms sidebar-drop-icon">cloud_upload</span>
+          <span class="sidebar-drop-title">Drop files here</span>
+          <span class="sidebar-drop-sub">or click to browse your computer</span>
+        </div>
       </div>
 
-      <!-- State 2+3: File / NFC Tag -->
-      <div class="panel-state" id="panelFile" hidden>
-        <span class="panel-label" id="panelFileLabel">File</span>
-        <span class="panel-title" id="panelFileName"></span>
-        <div class="panel-field">
-          <span class="panel-field-label"><span class="ms-sm">straighten</span> Size</span>
-          <span id="panelFileSize"></span>
-        </div>
-        <div class="panel-field">
-          <span class="panel-field-label"><span class="ms-sm">flag</span> Flags</span>
-          <div id="panelFileFlags"></div>
-        </div>
-        <!-- NFC tag subsection — shown for .bin files -->
-        <div class="panel-field" id="panelNfcTag" hidden>
-          <span class="panel-field-label"><span class="ms-sm">nfc</span> NFC tag ID</span>
-          <div class="panel-nfc-tag-content" id="panelNfcTagContent"></div>
-        </div>
-        <div class="panel-actions">
-          <button class="btn-labeled ghost" id="panelBtnRename"><span class="ms-sm">edit</span> Rename</button>
-          <button class="btn-labeled danger" id="panelBtnDelete"><span class="ms-sm">delete</span> Delete</button>
-        </div>
-      </div>
+
 
       <!-- State 4: Upload -->
       <div class="panel-state" id="panelUpload" hidden>
@@ -142,10 +146,11 @@
         <input id="filesInput" type="file" hidden multiple>
       </div>
 
+
       <div class="panel-footer">
         <span id="navCommit"></span>
         <span class="panel-footer-sep">&middot;</span>
-        <a href="https://github.com/tasken/MochiNest" target="_blank" rel="noopener">Source on GitHub</a>
+        <a href="https://github.com/tasken/MochiNest" target="_blank" rel="noopener">GitHub</a>
       </div>
     </aside>
     </div><!-- end sheet-container -->
@@ -161,18 +166,46 @@
         </div>
       </div>
 
-      <!-- Navigation / selection bar -->
+      <!-- Navigation bar -->
       <div id="selectionBar" class="selection-bar">
-        <button class="btn-icon ghost" id="btnNavHome" title="Home"><span class="ms">home</span></button>
-        <button class="btn-icon ghost" id="btnNavUp" title="Up one level"><span class="ms">arrow_upward</span></button>
         <button class="btn-icon ghost" id="btnSheetInfo" title="Folder info" hidden><span class="ms">info</span></button>
         <button class="btn-icon ghost" id="btnSheetUpload" title="Upload" hidden><span class="ms">upload</span></button>
         <nav class="nav-breadcrumb" id="navBreadcrumb"></nav>
-        <span id="selectionCount" hidden></span>
-        <button class="btn-labeled ghost" id="btnDownloadSelected" hidden><span class="ms">download</span> <span class="nav-btn-label">Download</span></button>
-        <button class="btn-labeled danger" id="btnDeleteSelected" hidden><span class="ms">delete</span> <span class="nav-btn-label">Delete</span></button>
-        <button class="btn-labeled ghost" id="btnNewFolder" title="New folder" hidden><span class="ms">create_new_folder</span> <span class="nav-btn-label">New folder</span></button>
         <button class="btn-icon ghost" id="btnRefresh" title="Refresh" aria-label="Refresh folder" hidden><span class="ms">refresh</span></button>
+        <button class="btn-labeled" id="btnNewFolder" title="New folder" hidden><span class="ms-sm">create_new_folder</span> <span class="nav-btn-label">New folder</span></button>
+      </div>
+
+      <!-- Table column header (always visible, above banners) -->
+      <div class="table-head-wrap" id="tableHeadWrap">
+        <table class="file-table-head">
+          <colgroup>
+            <col class="col-check">
+            <col class="col-name">
+            <col class="col-size">
+            <col class="col-actions">
+          </colgroup>
+          <thead>
+            <tr>
+              <th class="cell-check"><input type="checkbox" id="checkAll" title="Select all" aria-label="Select all"></th>
+              <th>Name</th>
+              <th>Size</th>
+              <th class="cell-actions"></th>
+            </tr>
+          </thead>
+        </table>
+      </div>
+
+      <!-- Folder warning banner (large dir / truncated listing) -->
+      <div id="folderWarningBanner" class="folder-warning-banner" hidden>
+        <span class="ms-sm folder-warning-icon">warning</span>
+        <span class="folder-warning-text" id="folderWarningText"></span>
+      </div>
+
+      <!-- Selection banner (visible only when rows are selected) -->
+      <div id="selectionBanner" class="selection-banner" hidden>
+        <span id="selectionCount" class="selection-banner-count"></span>
+        <button class="btn-labeled ghost selection-banner-clear" id="btnClearSelection">Clear</button>
+        <button class="btn-labeled danger" id="btnDeleteSelected"><span class="ms-sm">delete</span> <span class="nav-btn-label">Delete</span></button>
       </div>
 
       <!-- File table -->
@@ -185,41 +218,107 @@
           </div>
         </div>
         <table id="fileTable">
-          <thead>
-            <tr>
-              <th class="cell-check"><input type="checkbox" id="checkAll" title="Select all" aria-label="Select all"></th>
-              <th>Name</th>
-              <th>Size</th>
-              <th class="cell-actions"></th>
-            </tr>
-          </thead>
+          <colgroup>
+            <col class="col-check">
+            <col class="col-name">
+            <col class="col-size">
+            <col class="col-actions">
+          </colgroup>
           <tbody id="fileTableBody"></tbody>
         </table>
       </div>
     </div><!-- end browser-wrap -->
 
+    <!-- Details panel (right side on desktop / bottom sheet on mobile) -->
+    <div class="details-sheet-container" id="detailsSheetContainer">
+      <div class="details-sheet-backdrop" id="detailsSheetBackdrop"></div>
+      <aside class="details-panel" id="detailsPanel">
+        <div class="sheet-handle"></div>
+        <div class="details-header">
+          <span class="details-header-title" id="panelFileLabel">Details</span>
+          <button class="btn-icon ghost" id="btnDetailsClose" aria-label="Close details"><span class="ms">close</span></button>
+        </div>
+        <div class="details-hero" id="detailsHero">
+          <div class="details-hero-img-area" id="detailsHeroImgArea">
+            <span class="ms details-hero-file-icon" id="detailsHeroIcon">insert_drive_file</span>
+          </div>
+          <div class="details-hero-band" id="detailsHeroBand" hidden></div>
+        </div>
+        <div class="details-body">
+          <div class="details-title-block">
+            <div class="details-name" id="panelFileName"></div>
+            <div class="details-path" id="detailsFilePath"></div>
+          </div>
+          <div id="panelNfcTag" hidden>
+            <div class="sidebar-module">
+              <div class="sidebar-section-label">NFC Tag Info</div>
+              <div id="panelNfcTagContent" class="details-nfc-rows"></div>
+            </div>
+          </div>
+          <div class="sidebar-module">
+            <div class="sidebar-section-label">Properties</div>
+            <div class="details-info-rows">
+              <div class="details-info-row">
+                <span class="details-info-label">Kind</span>
+                <span id="detailsKind" class="details-info-value">—</span>
+              </div>
+              <div class="details-info-row">
+                <span class="details-info-label">Size</span>
+                <span id="panelFileSize" class="details-info-value"></span>
+              </div>
+              <div class="details-info-row">
+                <span class="details-info-label">Path</span>
+                <span id="detailsPathInRow" class="details-info-value details-info-mono"></span>
+              </div>
+            </div>
+          </div>
+          <div class="sidebar-module">
+            <div class="sidebar-section-label">Flags</div>
+            <div id="panelFileFlags" class="details-flags"></div>
+          </div>
+        </div>
+      </aside>
+    </div><!-- end details-sheet-container -->
+
   </div><!-- end app-body -->
 </div><!-- end .app -->
 
 <!-- Log overlay -->
-<div class="log-overlay" id="logOverlay">
-  <div class="log-overlay-panel">
-    <div class="log-overlay-header">
-      <span class="log-title">Protocol log</span>
-      <button class="btn-icon ghost" id="btnLogClose" title="Close"><span class="ms-sm">close</span></button>
+<div class="log-sheet-backdrop" id="logSheetBackdrop"></div>
+<aside class="log-sheet" id="logOverlay">
+  <div class="log-sheet-header">
+    <span class="log-sheet-title"><span class="ms-sm">terminal</span> Protocol log</span>
+    <button class="btn-icon ghost" id="btnLogClose" title="Close" aria-label="Close protocol log"><span class="ms-sm">close</span></button>
+  </div>
+  <pre class="log" id="protocolLog"></pre>
+</aside>
+
+<!-- Image lightbox -->
+<div class="img-lightbox" id="imgLightbox" hidden role="dialog" aria-modal="true" aria-label="Image preview">
+  <button class="img-lightbox-close btn-icon" id="btnLightboxClose" aria-label="Close"><span class="ms">close</span></button>
+  <div class="img-lightbox-inner">
+    <div class="img-lightbox-img-wrap">
+      <img class="img-lightbox-img" id="imgLightboxImg" src="" alt="">
     </div>
-    <pre class="log" id="protocolLog"></pre>
+    <aside class="img-lightbox-side" id="imgLightboxSide"></aside>
   </div>
 </div>
 
 <!-- Format drive modal -->
 <div id="formatModal" class="modal-overlay">
   <div class="modal-box">
-    <h3 class="modal-title modal-title-danger">Format drive E:?</h3>
-    <p id="formatModalMsg">All data on E: will be permanently erased. This action cannot be undone.</p>
-    <div class="modal-actions">
-      <button class="ghost" id="btnFormatCancel">Cancel</button>
-      <button class="danger" id="btnFormatConfirm">Format drive</button>
+    <div class="modal-header">
+      <span class="modal-header-title">Format drive</span>
+      <button class="modal-close" data-modal-close aria-label="Close"><span class="ms">close</span></button>
+    </div>
+    <div class="modal-body">
+      <div class="modal-icon-badge warning"><span class="ms">warning</span></div>
+      <div class="modal-body-title">Erase all files on Pixl.js?</div>
+      <p id="formatModalMsg">Formatting permanently removes every file and folder on the device. Firmware is not affected. This action cannot be undone.</p>
+      <div class="modal-actions">
+        <button class="btn-labeled ghost" id="btnFormatCancel">Cancel</button>
+        <button class="btn-labeled danger" id="btnFormatConfirm"><span class="ms">diamond</span> Format drive</button>
+      </div>
     </div>
   </div>
 </div>
@@ -227,13 +326,19 @@
 <!-- New folder modal -->
 <div id="newFolderModal" class="modal-overlay">
   <div class="modal-box">
-    <h3 class="modal-title modal-title-neutral">New folder</h3>
-    <p>Create a folder inside <strong class="modal-inline-mono" id="newFolderPath"></strong></p>
-    <input type="text" class="path-input modal-input" id="newFolderInput" placeholder="Folder name" spellcheck="false" autofocus>
-    <div class="field-error" id="newFolderError" hidden aria-live="polite"></div>
-    <div class="modal-actions">
-      <button class="ghost" id="btnNewFolderCancel">Cancel</button>
-      <button class="primary" id="btnNewFolderConfirm">Create</button>
+    <div class="modal-header">
+      <span class="modal-header-title">New folder</span>
+      <button class="modal-close" data-modal-close aria-label="Close"><span class="ms">close</span></button>
+    </div>
+    <div class="modal-body">
+      <label class="modal-field-label" for="newFolderInput">Folder name</label>
+      <input type="text" class="path-input modal-input" id="newFolderInput" placeholder="e.g. firmware" spellcheck="false" autofocus>
+      <div class="field-error" id="newFolderError" hidden aria-live="polite"></div>
+      <div class="modal-helper-text">Created in <span class="modal-inline-mono" id="newFolderPath"></span></div>
+      <div class="modal-actions">
+        <button class="btn-labeled ghost" id="btnNewFolderCancel">Cancel</button>
+        <button class="btn-labeled primary" id="btnNewFolderConfirm">Create</button>
+      </div>
     </div>
   </div>
 </div>
@@ -241,13 +346,18 @@
 <!-- Rename modal -->
 <div id="renameModal" class="modal-overlay">
   <div class="modal-box">
-    <h3 class="modal-title modal-title-neutral">Rename</h3>
-    <p>New name:</p>
-    <input type="text" class="path-input modal-input" id="renameInput" placeholder="New name" spellcheck="false">
-    <div class="field-error" id="renameError" hidden aria-live="polite"></div>
-    <div class="modal-actions">
-      <button class="ghost" id="btnRenameCancel">Cancel</button>
-      <button class="primary" id="btnRenameConfirm">Rename</button>
+    <div class="modal-header">
+      <span class="modal-header-title">Rename</span>
+      <button class="modal-close" data-modal-close aria-label="Close"><span class="ms">close</span></button>
+    </div>
+    <div class="modal-body">
+      <label class="modal-field-label" for="renameInput">New name</label>
+      <input type="text" class="path-input modal-input" id="renameInput" placeholder="New name" spellcheck="false">
+      <div class="field-error" id="renameError" hidden aria-live="polite"></div>
+      <div class="modal-actions">
+        <button class="btn-labeled ghost" id="btnRenameCancel">Cancel</button>
+        <button class="btn-labeled primary" id="btnRenameConfirm">Rename</button>
+      </div>
     </div>
   </div>
 </div>
@@ -255,11 +365,18 @@
 <!-- Delete confirmation modal -->
 <div id="deleteModal" class="modal-overlay">
   <div class="modal-box">
-    <h3 class="modal-title modal-title-danger">Delete <span id="deleteCount">0</span> items?</h3>
-    <p id="deleteModalMsg"></p>
-    <div class="modal-actions">
-      <button class="ghost" id="btnDeleteCancel">Cancel</button>
-      <button class="danger" id="btnDeleteConfirm">Delete</button>
+    <div class="modal-header">
+      <span class="modal-header-title">Delete items</span>
+      <button class="modal-close" data-modal-close aria-label="Close"><span class="ms">close</span></button>
+    </div>
+    <div class="modal-body">
+      <div class="modal-icon-badge danger"><span class="ms">delete</span></div>
+      <div class="modal-body-title">Permanently delete <span id="deleteCount">0</span> item?</div>
+      <p id="deleteModalMsg"></p>
+      <div class="modal-actions">
+        <button class="btn-labeled ghost" id="btnDeleteCancel">Cancel</button>
+        <button class="btn-labeled danger" id="btnDeleteConfirm">Delete</button>
+      </div>
     </div>
   </div>
 </div>
@@ -267,11 +384,16 @@
 <!-- Upload warning modal -->
 <div id="uploadWarnModal" class="modal-overlay">
   <div class="modal-box">
-    <h3 class="modal-title modal-title-warning modal-title-with-icon"><span class="ms modal-title-icon">warning</span> Upload warnings</h3>
-    <div id="uploadWarnMsg"></div>
-    <div class="modal-actions">
-      <button class="ghost" id="btnUploadWarnCancel">Cancel</button>
-      <button class="primary" id="btnUploadWarnConfirm">Upload anyway</button>
+    <div class="modal-header">
+      <span class="modal-header-title">Upload warnings</span>
+      <button class="modal-close" data-modal-close aria-label="Close"><span class="ms">close</span></button>
+    </div>
+    <div class="modal-body">
+      <div id="uploadWarnMsg"></div>
+      <div class="modal-actions">
+        <button class="btn-labeled ghost" id="btnUploadWarnCancel">Cancel</button>
+        <button class="btn-labeled primary" id="btnUploadWarnConfirm">Upload anyway</button>
+      </div>
     </div>
   </div>
 </div>
@@ -279,12 +401,17 @@
 <!-- Sanitize names modal — files selected -->
 <div id="sanitizeModalFiles" class="modal-overlay sanitize-modal">
   <div class="modal-box">
-    <h3 class="modal-title modal-title-neutral">Normalize names</h3>
-    <p>Normalize <strong id="sanitizeFilesCount">0 selected files</strong> to lowercase?</p>
-    <p id="sanitizeFilesList" class="modal-helper-copy"></p>
-    <div class="modal-actions">
-      <button class="ghost" id="btnSanitizeFilesCancel">Cancel</button>
-      <button class="primary" id="btnSanitizeFilesConfirm">Normalize</button>
+    <div class="modal-header">
+      <span class="modal-header-title">Normalize names</span>
+      <button class="modal-close" data-modal-close aria-label="Close"><span class="ms">close</span></button>
+    </div>
+    <div class="modal-body">
+      <p>Normalize <strong id="sanitizeFilesCount">0 selected files</strong> to lowercase?</p>
+      <p id="sanitizeFilesList" class="modal-helper-copy"></p>
+      <div class="modal-actions">
+        <button class="btn-labeled ghost" id="btnSanitizeFilesCancel">Cancel</button>
+        <button class="btn-labeled primary" id="btnSanitizeFilesConfirm">Normalize</button>
+      </div>
     </div>
   </div>
 </div>
@@ -292,19 +419,24 @@
 <!-- Sanitize names modal — folders selected -->
 <div id="sanitizeModalFolders" class="modal-overlay sanitize-modal">
   <div class="modal-box">
-    <h3 class="modal-title modal-title-neutral">Normalize names</h3>
-    <p>Selection includes folders. How deep should this go?</p>
-    <div class="modal-choice-list">
-      <label class="modal-choice-option">
-        <input type="radio" name="sanitizeFolderScope" value="selected" checked> Only the selected items
-      </label>
-      <label class="modal-choice-option">
-        <input type="radio" name="sanitizeFolderScope" value="recursive"> Recursive, includes all contents
-      </label>
+    <div class="modal-header">
+      <span class="modal-header-title">Normalize names</span>
+      <button class="modal-close" data-modal-close aria-label="Close"><span class="ms">close</span></button>
     </div>
-    <div class="modal-actions">
-      <button class="ghost" id="btnSanitizeFoldersCancel">Cancel</button>
-      <button class="primary" id="btnSanitizeFoldersConfirm">Normalize</button>
+    <div class="modal-body">
+      <p>Selection includes folders. How deep should this go?</p>
+      <div class="modal-choice-list">
+        <label class="modal-choice-option">
+          <input type="radio" name="sanitizeFolderScope" value="selected" checked> Only the selected items
+        </label>
+        <label class="modal-choice-option">
+          <input type="radio" name="sanitizeFolderScope" value="recursive"> Recursive, includes all contents
+        </label>
+      </div>
+      <div class="modal-actions">
+        <button class="btn-labeled ghost" id="btnSanitizeFoldersCancel">Cancel</button>
+        <button class="btn-labeled primary" id="btnSanitizeFoldersConfirm">Normalize</button>
+      </div>
     </div>
   </div>
 </div>
@@ -312,22 +444,27 @@
 <!-- Sanitize names modal — nothing selected -->
 <div id="sanitizeModalNone" class="modal-overlay sanitize-modal">
   <div class="modal-box">
-    <h3 class="modal-title modal-title-neutral">Normalize names</h3>
-    <p>What should be renamed in <strong class="modal-inline-mono" id="sanitizeNonePath"></strong>?</p>
-    <div class="modal-choice-list">
-      <label class="modal-choice-option">
-        <input type="radio" name="sanitizeNoneScope" value="files" checked> Files in this folder only
-      </label>
-      <label class="modal-choice-option">
-        <input type="radio" name="sanitizeNoneScope" value="filesAndFolders"> Files and folders in this folder
-      </label>
-      <label class="modal-choice-option">
-        <input type="radio" name="sanitizeNoneScope" value="recursive"> Everything, recursively
-      </label>
+    <div class="modal-header">
+      <span class="modal-header-title">Normalize names</span>
+      <button class="modal-close" data-modal-close aria-label="Close"><span class="ms">close</span></button>
     </div>
-    <div class="modal-actions">
-      <button class="ghost" id="btnSanitizeNoneCancel">Cancel</button>
-      <button class="primary" id="btnSanitizeNoneConfirm">Rename</button>
+    <div class="modal-body">
+      <p>What should be renamed in <strong class="modal-inline-mono" id="sanitizeNonePath"></strong>?</p>
+      <div class="modal-choice-list">
+        <label class="modal-choice-option">
+          <input type="radio" name="sanitizeNoneScope" value="files" checked> Files in this folder only
+        </label>
+        <label class="modal-choice-option">
+          <input type="radio" name="sanitizeNoneScope" value="filesAndFolders"> Files and folders in this folder
+        </label>
+        <label class="modal-choice-option">
+          <input type="radio" name="sanitizeNoneScope" value="recursive"> Everything, recursively
+        </label>
+      </div>
+      <div class="modal-actions">
+        <button class="btn-labeled ghost" id="btnSanitizeNoneCancel">Cancel</button>
+        <button class="btn-labeled primary" id="btnSanitizeNoneConfirm">Rename</button>
+      </div>
     </div>
   </div>
 </div>

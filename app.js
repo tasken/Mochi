@@ -598,12 +598,19 @@ class DevMockClient {
       "E:/save": [
         { name: "backup.bin", type: "FILE", size: 1229, meta: { nfcTagHead: null, nfcTagTail: null } },
       ],
-      "E:/nfc/large-set": Array.from({ length: 95 }, (_, i) => ({
-        name: `amiibo_${String(i + 1).padStart(3, "0")}.bin`,
-        type: "FILE",
-        size: 540,
-        meta: { nfcTagHead: 0x01000000 + i, nfcTagTail: 0x03530902 },
-      })),
+      "E:/nfc/large-set": [
+        { name: "super_smash_bros_ultimate_mario_classic_costume.bin", type: "FILE", size: 540, meta: { nfcTagHead: 0x01000060, nfcTagTail: 0x03530902 } },
+        { name: "the_legend_of_zelda_breath_of_the_wild_link.bin",     type: "FILE", size: 540, meta: { nfcTagHead: 0x01000061, nfcTagTail: 0x03530902 } },
+        { name: "animal_crossing_new_horizons_isabelle_summer.bin",     type: "FILE", size: 540, meta: { nfcTagHead: 0x01000062, nfcTagTail: 0x03530902 } },
+        { name: "splatoon_3_inkling_girl_neon_pink_special_ed.bin",     type: "FILE", size: 540, meta: { nfcTagHead: 0x01000063, nfcTagTail: 0x03530902 } },
+        { name: "pokemon_scarlet_violet_koraidon_full_power.bin",       type: "FILE", size: 540, meta: { nfcTagHead: 0x01000064, nfcTagTail: 0x03530902 } },
+        ...Array.from({ length: 90 }, (_, i) => ({
+          name: `tag_${String(i + 1).padStart(3, "0")}.bin`,
+          type: "FILE",
+          size: 540,
+          meta: { nfcTagHead: 0x01000000 + i, nfcTagTail: 0x03530902 },
+        })),
+      ],
     };
     return { ok: true, data: fs[path] ?? [] };
   }
@@ -635,7 +642,7 @@ class DevMockClient {
       "E:/save/backup.bin":                { size: 1229, nfcTagHead: null,       nfcTagTail: null },
     };
     // Generate mock entries for large-set files
-    const largeMatch = path.match(/^E:\/nfc\/large-set\/amiibo_(\d+)\.bin$/);
+    const largeMatch = path.match(/^E:\/nfc\/large-set\/tag_(\d+)\.bin$/);
     if (largeMatch) {
       const idx = parseInt(largeMatch[1], 10) - 1;
       const data = new Uint8Array(540);
@@ -722,6 +729,7 @@ const el = {
   topbarBadge: document.getElementById("topbarBadge"),
   topbarDrive: document.getElementById("topbarDrive"),
   topbarDriveInfo: document.getElementById("topbarDriveInfo"),
+  topbarActionSep: document.getElementById("topbarActionSep"),
   btnFormat: document.getElementById("btnFormat"),
   btnRefresh: document.getElementById("btnRefresh"),
   btnNewFolder: document.getElementById("btnNewFolder"),
@@ -740,23 +748,34 @@ const el = {
 
   // Context panel — folder state
   panelFolder: document.getElementById("panelFolder"),
-  btnFolderUpload: document.getElementById("btnFolderUpload"),
+  sidebarDropZone: document.getElementById("sidebarDropZone"),
   panelFolderName: document.getElementById("panelFolderName"),
   panelFolderPath: document.getElementById("panelFolderPath"),
+  panelCurrentFolderName: document.getElementById("panelCurrentFolderName"),
   panelFolderCount: document.getElementById("panelFolderCount"),
+  panelFolderSize: document.getElementById("panelFolderSize"),
   panelDriveBarFill: document.getElementById("panelDriveBarFill"),
   panelDriveUsage: document.getElementById("panelDriveUsage"),
 
-  // Context panel — file/NFC tag state
-  panelFile: document.getElementById("panelFile"),
+  // Context panel — file/NFC tag state (right details panel)
+  detailsPanel: document.getElementById("detailsPanel"),
+  detailsSheetContainer: document.getElementById("detailsSheetContainer"),
+  detailsSheetBackdrop: document.getElementById("detailsSheetBackdrop"),
+  detailsHero: document.getElementById("detailsHero"),
+  detailsHeroImgArea: document.getElementById("detailsHeroImgArea"),
+  detailsHeroIcon: document.getElementById("detailsHeroIcon"),
+  detailsHeroBand: document.getElementById("detailsHeroBand"),
+  detailsFilePath: document.getElementById("detailsFilePath"),
+  detailsKind: document.getElementById("detailsKind"),
+  detailsPathInRow: document.getElementById("detailsPathInRow"),
+  btnDetailsClose: document.getElementById("btnDetailsClose"),
+
   panelFileLabel: document.getElementById("panelFileLabel"),
   panelFileName: document.getElementById("panelFileName"),
   panelFileSize: document.getElementById("panelFileSize"),
   panelFileFlags: document.getElementById("panelFileFlags"),
   panelNfcTag: document.getElementById("panelNfcTag"),
   panelNfcTagContent: document.getElementById("panelNfcTagContent"),
-  panelBtnRename: document.getElementById("panelBtnRename"),
-  panelBtnDelete: document.getElementById("panelBtnDelete"),
 
   // Context panel — upload state
   panelUpload: document.getElementById("panelUpload"),
@@ -771,8 +790,13 @@ const el = {
   filesInput: document.getElementById("filesInput"),
   btnUploadClose: document.getElementById("btnUploadClose"),
 
-  // Log overlay
+  // Log side sheet
+  imgLightbox: document.getElementById("imgLightbox"),
+  imgLightboxImg: document.getElementById("imgLightboxImg"),
+  imgLightboxSide: document.getElementById("imgLightboxSide"),
+  btnLightboxClose: document.getElementById("btnLightboxClose"),
   logOverlay: document.getElementById("logOverlay"),
+  logSheetBackdrop: document.getElementById("logSheetBackdrop"),
   protocolLog: document.getElementById("protocolLog"),
   btnLogClose: document.getElementById("btnLogClose"),
 
@@ -781,8 +805,6 @@ const el = {
   browserLockTitle: document.getElementById("browserLockTitle"),
 
   // Navigation bar
-  btnNavHome: document.getElementById("btnNavHome"),
-  btnNavUp: document.getElementById("btnNavUp"),
   navBreadcrumb: document.getElementById("navBreadcrumb"),
 
   // File table
@@ -796,9 +818,12 @@ const el = {
   checkAll: document.getElementById("checkAll"),
 
   // Multi-select bar
+  selectionBanner: document.getElementById("selectionBanner"),
   selectionCount: document.getElementById("selectionCount"),
-  btnDownloadSelected: document.getElementById("btnDownloadSelected"),
+  btnClearSelection: document.getElementById("btnClearSelection"),
   btnDeleteSelected: document.getElementById("btnDeleteSelected"),
+  folderWarningBanner: document.getElementById("folderWarningBanner"),
+  folderWarningText: document.getElementById("folderWarningText"),
   toastContainer: document.getElementById("toastContainer"),
 
   // Sheet (mobile bottom panel)
@@ -807,6 +832,10 @@ const el = {
   contextPanel: document.getElementById("contextPanel"),
   btnSheetInfo: document.getElementById("btnSheetInfo"),
   btnSheetUpload: document.getElementById("btnSheetUpload"),
+
+  // Sidebar action buttons
+  btnSidebarNew: document.getElementById("btnSidebarNew"),
+  btnSidebarRefresh: document.getElementById("btnSidebarRefresh"),
 
   // Modals
   formatModal: document.getElementById("formatModal"),
@@ -994,6 +1023,8 @@ function log(msg, role) {
 function isMobileViewport() { return window.innerWidth <= 900; }
 function openSheet() { el.sheetContainer.classList.add("open"); }
 function closeSheet() { el.sheetContainer.classList.remove("open"); }
+function openDetailsSheet() { el.detailsSheetContainer.classList.add("open"); }
+function closeDetailsSheet() { el.detailsSheetContainer.classList.remove("open"); }
 
 el.sheetBackdrop.addEventListener("click", closeSheet);
 
@@ -1033,6 +1064,8 @@ function setConnState(newState) {
   // Topbar connected elements — keep visible during reconnecting
   el.topbarBadge.hidden = !(connected || reconnecting);
   el.topbarDrive.hidden = !(connected || reconnecting);
+  el.topbarActionSep.hidden = !(connected || reconnecting);
+  el.btnFormat.hidden = !(connected || reconnecting);
   el.btnRefresh.hidden = !(connected || reconnecting);
   el.btnNewFolder.hidden = !(connected || reconnecting);
   el.btnNormalize.hidden = !(connected || reconnecting);
@@ -1054,6 +1087,8 @@ function setConnState(newState) {
     renderDrive(null);
     renderFileTable();
     renderBreadcrumb("");
+    el.folderWarningBanner.hidden = true;
+    el.folderWarningText.textContent = "";
     el.topbarBadge.textContent = "";
     el.topbarBadge.classList.remove("dev");
   }
@@ -1067,7 +1102,6 @@ function showConnError(msg) {
 }
 
 const MAX_TOASTS = 3;
-const TOAST_STACK_OFFSET = 20;
 
 // Toast copy contract:
 // - Use a short summary plus optional detail.
@@ -1079,42 +1113,81 @@ function normalizeToastPart(value) {
   return text.replace(/[.!?]+$/, "");
 }
 
-function buildToastMessage(summary, detail = "") {
-  const parts = [normalizeToastPart(summary), normalizeToastPart(detail)].filter(Boolean);
-  return parts.length > 0 ? `${parts.join(". ")}.` : "";
-}
-
 function createToast(options) {
   const {
     tone = "success",
+    summary = "",
+    detail = "",
     message = "",
     html = "",
     sticky = tone === "error" || tone === "warning",
+    actionLabel = "",
+    actionUrl = "",
+    onAction = null,
   } = options;
 
+  // Resolve summary/detail from legacy `message` string if needed
+  let resolvedSummary = summary;
+  let resolvedDetail = detail;
+  if (!resolvedSummary && message) {
+    const parts = message.replace(/[.!?]+$/, "").split(/\.\s+/);
+    resolvedSummary = parts[0] || "";
+    resolvedDetail = parts.slice(1).join(". ");
+  }
+
   const hasHtml = typeof html === "string" && html.trim() !== "";
-  const finalMessage = normalizeToastPart(message);
-  if (!hasHtml && !finalMessage) return null;
+  if (!hasHtml && !resolvedSummary) return null;
+
+  const iconMap = { success: "check", error: "error", warning: "warning", info: "info" };
 
   const toast = document.createElement("div");
-  toast.className = "toast visible" + (tone === "error" ? " error" : tone === "warning" ? " warning" : "");
+  toast.className = `toast ${tone}`;
 
-  const span = document.createElement("span");
+  // Icon
+  const icon = document.createElement("span");
+  icon.className = "toast-icon";
+  icon.textContent = iconMap[tone] || "info";
+  toast.appendChild(icon);
+
+  // Body
+  const body = document.createElement("div");
+  body.className = "toast-body";
   if (hasHtml) {
-    span.innerHTML = html;
+    body.innerHTML = html;
   } else {
-    span.textContent = `${finalMessage}.`;
+    const s = document.createElement("span");
+    s.className = "toast-summary";
+    s.textContent = resolvedSummary;
+    body.appendChild(s);
+    if (resolvedDetail) {
+      const d = document.createElement("span");
+      d.className = "toast-detail";
+      d.textContent = resolvedDetail;
+      body.appendChild(d);
+    }
   }
-  toast.appendChild(span);
+  toast.appendChild(body);
 
-  if (sticky) {
+  // Optional action button
+  if (actionLabel) {
     const btn = document.createElement("button");
-    btn.className = "toast-close";
-    btn.setAttribute("aria-label", "Dismiss");
-    btn.innerHTML = '<span class="ms-sm">close</span>';
-    btn.addEventListener("click", () => removeToast(toast));
+    btn.className = "toast-action";
+    btn.textContent = actionLabel;
+    btn.addEventListener("click", () => {
+      if (actionUrl) window.open(actionUrl, "_blank", "noopener");
+      if (onAction) onAction();
+      removeToast(toast);
+    });
     toast.appendChild(btn);
   }
+
+  // Close button (always shown)
+  const closeBtn = document.createElement("button");
+  closeBtn.className = "toast-close";
+  closeBtn.setAttribute("aria-label", "Dismiss");
+  closeBtn.innerHTML = '<span class="ms-sm">close</span>';
+  closeBtn.addEventListener("click", () => removeToast(toast));
+  toast.appendChild(closeBtn);
 
   appendToast(toast);
 
@@ -1126,46 +1199,28 @@ function createToast(options) {
 }
 
 function showSuccessToast(summary, detail = "") {
-  return createToast({ tone: "success", message: buildToastMessage(summary, detail), sticky: false });
+  return createToast({ tone: "success", summary: normalizeToastPart(summary), detail: normalizeToastPart(detail), sticky: false });
 }
 
 function showErrorToast(summary, detail = "") {
-  return createToast({ tone: "error", message: buildToastMessage(summary, detail) });
+  return createToast({ tone: "error", summary: normalizeToastPart(summary), detail: normalizeToastPart(detail) });
 }
 
 function showWarningToast(summary, detail = "") {
-  return createToast({ tone: "warning", message: buildToastMessage(summary, detail) });
-}
-
-function showRichWarningToast(html) {
-  return createToast({ tone: "warning", html });
-}
-
-function layoutToasts() {
-  const toasts = Array.from(el.toastContainer.querySelectorAll(".toast.visible"));
-  for (const [index, toast] of toasts.entries()) {
-    toast.style.top = `${index * TOAST_STACK_OFFSET}px`;
-    toast.style.zIndex = String(index + 1);
-  }
+  return createToast({ tone: "warning", summary: normalizeToastPart(summary), detail: normalizeToastPart(detail) });
 }
 
 function appendToast(toast) {
+  toast.classList.add("visible");
   el.toastContainer.appendChild(toast);
-
-  const toasts = el.toastContainer.querySelectorAll(".toast.visible");
+  const toasts = el.toastContainer.querySelectorAll(".toast");
   if (toasts.length > MAX_TOASTS) removeToast(toasts[0]);
-
-  layoutToasts();
 }
 
 function removeToast(toast) {
   if (!toast || !toast.parentNode) return;
   toast.classList.remove("visible");
-  layoutToasts();
-  setTimeout(() => {
-    toast.remove();
-    layoutToasts();
-  }, 200);
+  setTimeout(() => toast.remove(), 200);
 }
 
 function clearToasts({ keepErrors = false } = {}) {
@@ -1200,10 +1255,13 @@ async function checkFirmwareVersion(deviceVersion) {
     const latest = data.tag_name;
     if (!latest) return;
     if (compareSemver(deviceVersion, latest) < 0) {
-      showRichWarningToast(
-        `Firmware update available. Current version ${escapeHtml(deviceVersion)} is outdated; latest is ${escapeHtml(latest)}. ` +
-        `<a href="${PIXL_RELEASES_URL}" target="_blank" rel="noopener">Download update</a>`
-      );
+      createToast({
+        tone: "info",
+        summary: `Firmware ${latest} available`,
+        detail: `You have ${deviceVersion}`,
+        actionLabel: "Download",
+        actionUrl: PIXL_RELEASES_URL,
+      });
     }
   } catch (_) { /* network error, skip silently */ }
 }
@@ -1309,7 +1367,7 @@ function renderDrive(driveData) {
   if (!driveData) {
     el.panelDriveBarFill.style.width = "0%";
     el.panelDriveBarFill.classList.remove("high");
-    el.panelDriveUsage.textContent = "";
+    el.panelDriveUsage.innerHTML = "";
     el.topbarDriveInfo.textContent = "—";
     return;
   }
@@ -1321,9 +1379,8 @@ function renderDrive(driveData) {
   el.panelDriveBarFill.style.width = `${pct}%`;
   el.panelDriveBarFill.classList.toggle("high", pct >= 85);
   const used = formatBytes(usedBytes);
-  const total = formatBytes(driveData.totalBytes);
   const free = formatBytes(freeBytes);
-  el.panelDriveUsage.textContent = `${used} / ${total} (${free} free)`;
+  el.panelDriveUsage.innerHTML = `<span>${escapeHtml(used)} used</span><span>${escapeHtml(free)} free</span>`;
   el.topbarDriveInfo.textContent = `${free} free`;
 }
 
@@ -1356,6 +1413,20 @@ el.btnFormat.addEventListener("click", () => {
   }, 1000);
   openModal(el.formatModal);
 });
+// Generic close button delegate for all modals
+document.querySelectorAll("[data-modal-close]").forEach(btn => {
+  btn.addEventListener("click", () => closeModal(btn.closest(".modal-overlay")));
+});
+
+// Escape key — close lightbox, then topmost modal, then log sheet
+document.addEventListener("keydown", e => {
+  if (e.key !== "Escape") return;
+  if (!el.imgLightbox.hidden) { e.preventDefault(); closeLightbox(); return; }
+  const openModal = document.querySelector(".modal-overlay.open");
+  if (openModal) { e.preventDefault(); closeModal(openModal); return; }
+  if (el.logOverlay && el.logOverlay.classList.contains("open")) { e.preventDefault(); el.logOverlay.classList.remove("open"); }
+});
+
 el.btnFormatCancel.addEventListener("click", () => {
   clearInterval(_formatCountdown);
   _formatCountdown = null;
@@ -1413,10 +1484,11 @@ function updateControls() {
   const connected = state.connState === "connected";
   const uploading = state.uploadActive;
   const atRoot = !state.currentPath || state.currentPath === "E:/";
-  el.btnNavHome.disabled = !connected || atRoot;
-  el.btnNavUp.disabled = !connected || atRoot;
   el.btnRefresh.disabled = !connected || uploading;
   el.btnNewFolder.disabled = !connected || uploading;
+  el.btnSidebarNew.disabled = !connected || uploading;
+  el.btnSidebarRefresh.disabled = !connected || uploading;
+  el.sidebarDropZone.setAttribute("aria-disabled", String(!connected || uploading));
   el.btnNormalize.disabled = !connected || uploading;
   el.btnFormat.disabled = !connected || uploading;
   el.btnPickFolder.disabled = !connected || uploading;
@@ -1453,8 +1525,7 @@ async function browseFolder(path) {
   if (cached) {
     entries = cached.entries;
     truncated = cached.truncated;
-  } else {
-    try {
+  } else {    try {
       let res;
       for (let attempt = 1; attempt <= 3; attempt++) {
         res = await state.client.readFolder(path);
@@ -1472,16 +1543,26 @@ async function browseFolder(path) {
         if (e.type === "DIR") state.client.createdFolders.add(joinChildPath(path, e.name));
       }
       if (truncated) {
-        showWarningToast("Directory listing may be incomplete", "Some entries could not be received over BLE");
         log(`Warning: directory listing for ${path} was truncated (${entries.length} entries received)`, "err");
       } else if (entries.length >= LARGE_DIR_THRESHOLD) {
-        showWarningToast(`This folder has ${entries.length} items`, "Browsing and uploads may be slow or unreliable over BLE");
         log(`Warning: ${path} has ${entries.length} entries, above the ${LARGE_DIR_THRESHOLD}-item threshold`, "err");
       }
     } catch (err) {
       log(`Error reading ${path}: ${err.message}`, "err");
       return;
     }
+  }
+
+  // Update warning banner for current folder (always, whether cached or fresh)
+  if (truncated) {
+    el.folderWarningBanner.hidden = false;
+    el.folderWarningText.textContent = "Directory listing may be incomplete. Some entries could not be received over BLE.";
+  } else if (entries.length >= LARGE_DIR_THRESHOLD) {
+    el.folderWarningBanner.hidden = false;
+    el.folderWarningText.textContent = `This folder has ${entries.length} items. Browsing and uploads may be slow or unreliable over BLE.`;
+  } else {
+    el.folderWarningBanner.hidden = true;
+    el.folderWarningText.textContent = "";
   }
 
   state.currentPath = path;
@@ -1491,18 +1572,11 @@ async function browseFolder(path) {
   renderBreadcrumb(path);
   renderFileTable();
   if (state.panelMode !== "upload") setPanelState("folder");
-  if (isMobileViewport()) closeSheet();
+  if (isMobileViewport()) { closeSheet(); closeDetailsSheet(); }
   updateControls();
 }
 
 // === Render File Table ===
-
-function formatNfcTagHex(head, tail) {
-  if (head == null || tail == null) return "\u2014";
-  const h = (head >>> 0).toString(16).toUpperCase().padStart(8, "0");
-  const t = (tail >>> 0).toString(16).toUpperCase().padStart(8, "0");
-  return `${h}:${t}`;
-}
 
 // NFC tag API lookup — session cache to avoid re-fetching the same ID
 const _nfcTagCache = new Map();
@@ -1521,41 +1595,146 @@ async function lookupNfcTag(head, tail) {
   return info;
 }
 
-function renderNfcTagField(head, tail, info) {
-  const hex = `<span class="drawer-nfc-tag-hex">${escapeHtml(formatNfcTagHex(head, tail))}</span>`;
-  if (!info) {
-    return `<div class="drawer-nfc-tag-info"><span class="drawer-nfc-tag-name">No match found</span>${hex}</div>`;
+function nfcSeriesGradient(series) {
+  if (!series) return "linear-gradient(135deg, #8b5cf6, #d946ef)";
+  const map = [
+    ["super smash",       "linear-gradient(135deg, #1e1b4b, #312e81)"],
+    ["super mario",       "linear-gradient(135deg, #ef4444, #dc2626)"],
+    ["mario kart",        "linear-gradient(135deg, #ef4444, #f59e0b)"],
+    ["mario sports",      "linear-gradient(135deg, #ef4444, #22c55e)"],
+    ["8-bit",             "linear-gradient(135deg, #dc2626, #7f1d1d)"],
+    ["zelda",             "linear-gradient(135deg, #10b981, #0d9488)"],
+    ["pokemon",           "linear-gradient(135deg, #f59e0b, #d97706)"],
+    ["animal crossing",   "linear-gradient(135deg, #84cc16, #65a30d)"],
+    ["splatoon",          "linear-gradient(135deg, #f97316, #ea580c)"],
+    ["fire emblem",       "linear-gradient(135deg, #3b82f6, #2563eb)"],
+    ["metroid",           "linear-gradient(135deg, #f97316, #dc2626)"],
+    ["kirby",             "linear-gradient(135deg, #ec4899, #db2777)"],
+    ["donkey kong",       "linear-gradient(135deg, #f59e0b, #dc2626)"],
+    ["star fox",          "linear-gradient(135deg, #8b5cf6, #7c3aed)"],
+    ["pikmin",            "linear-gradient(135deg, #84cc16, #10b981)"],
+    ["yoshi",             "linear-gradient(135deg, #22c55e, #16a34a)"],
+    ["xenoblade",         "linear-gradient(135deg, #0284c7, #0d9488)"],
+    ["mega man",          "linear-gradient(135deg, #0ea5e9, #0284c7)"],
+    ["monster hunter",    "linear-gradient(135deg, #92400e, #78350f)"],
+    ["shovel knight",     "linear-gradient(135deg, #1d4ed8, #1e40af)"],
+    ["street fighter",    "linear-gradient(135deg, #dc2626, #ca8a04)"],
+    ["diablo",            "linear-gradient(135deg, #991b1b, #450a0a)"],
+    ["yu-gi-oh",          "linear-gradient(135deg, #7c3aed, #d97706)"],
+    ["super nintendo",    "linear-gradient(135deg, #ef4444, #16a34a)"],
+    ["skylanders",        "linear-gradient(135deg, #7c3aed, #1d4ed8)"],
+    ["chibi-robo",        "linear-gradient(135deg, #06b6d4, #0891b2)"],
+    ["power pros",        "linear-gradient(135deg, #1d4ed8, #15803d)"],
+    ["boxboy",            "linear-gradient(135deg, #374151, #111827)"],
+  ];
+  const lower = series.toLowerCase();
+  for (const [key, grad] of map) {
+    if (lower.includes(key)) return grad;
   }
-  const seriesLine = info.amiiboSeries && info.amiiboSeries !== info.gameSeries
-    ? `${escapeHtml(info.gameSeries)} · ${escapeHtml(info.amiiboSeries)}`
-    : escapeHtml(info.gameSeries);
-  return `<div class="drawer-nfc-tag-info">` +
-    `<span class="drawer-nfc-tag-name">${escapeHtml(info.name)}</span>` +
-    `<span class="drawer-nfc-tag-series">${seriesLine}</span>` +
-    hex +
-    `</div>` +
-    `<img src="${escapeHtml(info.image)}" alt="${escapeHtml(info.name)}" loading="lazy">`;
+  let h = 0;
+  for (const c of series) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  const hue = h % 360;
+  return `linear-gradient(135deg, hsl(${hue},60%,45%), hsl(${(hue+40)%360},65%,40%))`;
+}
+
+function renderNfcTagField(head, tail, info) {
+  const uid = `${(head >>> 0).toString(16).toUpperCase().padStart(8, "0")}:${(tail >>> 0).toString(16).toUpperCase().padStart(8, "0")}`;
+  if (!info) {
+    return `<div class="details-nfc-row"><span class="details-nfc-label">Figure ID</span><span class="details-nfc-value details-nfc-mono js-copy-id" title="Copy ID">${escapeHtml(uid)}</span></div>`;
+  }
+  const rows = [];
+  if (info.name) rows.push(`<div class="details-nfc-row"><span class="details-nfc-label">Character</span><span class="details-nfc-value">${escapeHtml(info.name)}</span></div>`);
+  if (info.amiiboSeries) rows.push(`<div class="details-nfc-row"><span class="details-nfc-label">Series</span><span class="details-nfc-value">${escapeHtml(info.amiiboSeries)}</span></div>`);
+  if (info.gameSeries) rows.push(`<div class="details-nfc-row"><span class="details-nfc-label">Game</span><span class="details-nfc-value">${escapeHtml(info.gameSeries)}</span></div>`);
+  if (info.type) rows.push(`<div class="details-nfc-row"><span class="details-nfc-label">Type</span><span class="details-nfc-value">${escapeHtml(info.type)}</span></div>`);
+  if (info.release?.na) rows.push(`<div class="details-nfc-row"><span class="details-nfc-label">Released</span><span class="details-nfc-value">${escapeHtml(info.release.na)}</span></div>`);
+  rows.push(`<div class="details-nfc-row"><span class="details-nfc-label">Figure ID</span><span class="details-nfc-value details-nfc-mono js-copy-id" title="Copy ID">${escapeHtml(uid)}</span></div>`);
+  return rows.join("");
+}
+
+function wireNfcTagCopyButtons() {
+  el.panelNfcTagContent.querySelectorAll(".js-copy-id").forEach(node => {
+    node.addEventListener("click", () => navigator.clipboard?.writeText(node.textContent || ""));
+  });
 }
 
 function applyNfcTagDisplay(entry, head, tail) {
   if ((head >>> 0) === 0 && (tail >>> 0) === 0) {
-    el.panelNfcTagContent.innerHTML = `<div class="drawer-nfc-tag-info"><span class="drawer-nfc-tag-name">No tag data</span><span class="drawer-nfc-tag-hex">Not an NFC tag file</span></div>`;
+    el.panelNfcTagContent.innerHTML = `<div class="details-nfc-row"><span class="details-nfc-label">Figure ID</span><span class="details-nfc-value" style="color:#9ca3af">Not an NFC tag file</span></div>`;
     return;
   }
   const key = `${head >>> 0}:${tail >>> 0}`;
   if (_nfcTagCache.has(key)) {
-    el.panelNfcTagContent.innerHTML = renderNfcTagField(head, tail, _nfcTagCache.get(key));
+    const info = _nfcTagCache.get(key);
+    el.panelNfcTagContent.innerHTML = renderNfcTagField(head, tail, info);
+    wireNfcTagCopyButtons();
+    _applyNfcHero(entry, info, head, tail);
     return;
   }
-  el.panelNfcTagContent.innerHTML =
-    `<div class="drawer-nfc-tag-info">` +
-    `<span class="drawer-nfc-tag-hex">${escapeHtml(formatNfcTagHex(head, tail))}</span>` +
-    `</div>` +
-    `<div class="drawer-nfc-tag-loading"><md-circular-progress class="drawer-nfc-tag-spinner" indeterminate></md-circular-progress></div>`;
+  const uidStr = `${(head >>> 0).toString(16).toUpperCase().padStart(8,"0")}:${(tail >>> 0).toString(16).toUpperCase().padStart(8,"0")}`;
+  el.panelNfcTagContent.innerHTML = `<div class="details-nfc-row"><span class="details-nfc-label">Figure ID</span><span class="details-nfc-value details-nfc-mono">${escapeHtml(uidStr)}</span></div>`;
   lookupNfcTag(head, tail).then(info => {
     if (state.drawerEntry !== entry) return;
     el.panelNfcTagContent.innerHTML = renderNfcTagField(head, tail, info);
+    wireNfcTagCopyButtons();
+    _applyNfcHero(entry, info, head, tail);
   });
+}
+
+function _gradientTextColor(gradientCss) {
+  // Try hex color first
+  const hexMatch = gradientCss.match(/#([0-9a-f]{6})/i);
+  if (hexMatch) {
+    const h = hexMatch[1];
+    const r = parseInt(h.slice(0, 2), 16);
+    const g = parseInt(h.slice(2, 4), 16);
+    const b = parseInt(h.slice(4, 6), 16);
+    // Perceived luminance
+    const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+    return lum > 0.52 ? "#1f2937" : "#ffffff";
+  }
+  // Try hsl()
+  const hslMatch = gradientCss.match(/hsl\((\d+),\s*(\d+)%,\s*(\d+)%\)/);
+  if (hslMatch) {
+    return parseInt(hslMatch[3]) > 55 ? "#1f2937" : "#ffffff";
+  }
+  return "#ffffff";
+}
+
+function _applyNfcHero(entry, info, head, tail) {
+  if (!info) return;
+  const grad = nfcSeriesGradient(info.gameSeries || info.amiiboSeries);
+  const textColor = _gradientTextColor(grad);
+
+  // Image
+  if (info.image) {
+    el.detailsHeroImgArea.textContent = "";
+    const wrap = document.createElement("div");
+    wrap.className = "details-hero-img-wrap";
+    const img = document.createElement("img");
+    img.src = encodeURI(info.image);
+    img.alt = info.name || entry.name;
+    img.loading = "lazy";
+    const zoomIcon = document.createElement("span");
+    zoomIcon.className = "details-hero-zoom-icon";
+    wrap.appendChild(img);
+    wrap.appendChild(zoomIcon);
+    el.detailsHeroImgArea.appendChild(wrap);
+    wrap.addEventListener("click", () => {
+      openLightbox(info.image, info.name || entry.name, info, head, tail, entry);
+    });
+  }
+
+  // Color band with series + name + game
+  const series = escapeHtml(info.amiiboSeries || info.gameSeries || "");
+  const name = escapeHtml(info.name || entry.name);
+  const game = info.gameSeries && info.gameSeries !== (info.amiiboSeries || "") ? escapeHtml(info.gameSeries) : "";
+  el.detailsHeroBand.innerHTML =
+    (series ? `<div class="details-hero-series" style="color:${textColor}">${series}</div>` : "") +
+    `<div class="details-hero-name" style="color:${textColor}">${name}</div>` +
+    (game ? `<div class="details-hero-game" style="color:${textColor}">${game}</div>` : "");
+  el.detailsHeroBand.style.background = grad;
+  el.detailsHeroBand.hidden = false;
 }
 
 function getBrowserEmptyStateContent() {
@@ -1605,20 +1784,22 @@ function renderFileTable() {
     const isPanelActive = state.drawerEntry && state.drawerEntry.name === entry.name;
     const isSelected = state.selectedNames.has(entry.name);
 
-    const warnIcon = state.truncated && utf8Length(entry.name) > LONG_FILENAME_BYTES
-      ? `<span class="ms-sm warn-icon" title="Filename exceeds ${LONG_FILENAME_BYTES} bytes and contributes to BLE transfer limit">warning</span> `
-      : "";
+    const nameWarn = utf8Length(entry.name) > LONG_FILENAME_BYTES;
+    const iconHtml = isDir
+      ? `<span class="cell-name-icon folder"><span class="ms-sm">folder</span></span>`
+      : `<span class="cell-name-icon file"><span class="ms-sm">insert_drive_file</span></span>`;
     const nameCell = isDir
-      ? `<td class="cell-name folder">${warnIcon}<span class="ms-sm">folder</span> ${escapeHtml(entry.name)}</td>`
-      : `<td class="cell-name">${warnIcon}<span class="ms-sm">insert_drive_file</span> ${escapeHtml(entry.name)}</td>`;
+      ? `<td class="cell-name folder"><span class="cell-name-inner">${iconHtml}${escapeHtml(entry.name)}</span></td>`
+      : `<td class="cell-name"><span class="cell-name-inner">${iconHtml}${escapeHtml(entry.name)}</span></td>`;
 
-    const classes = [isPanelActive ? "panel-active" : "", isSelected ? "selected" : ""].filter(Boolean).join(" ");
+    const classes = [isPanelActive ? "panel-active" : "", isSelected ? "selected" : "", nameWarn ? "row-warn" : ""].filter(Boolean).join(" ");
     rows.push(
       `<tr data-name="${escapeHtml(entry.name)}"${classes ? ` class="${classes}"` : ''}>` +
       `<td class="cell-check"><input type="checkbox"${isSelected ? " checked" : ""}></td>` +
       nameCell +
       `<td class="cell-size">${size}</td>` +
       `<td class="cell-actions">` +
+      (nameWarn ? `<span class="ms-sm warn-icon cell-warn-icon" title="Filename is ${utf8Length(entry.name)} bytes, exceeding the ${LONG_FILENAME_BYTES}-byte firmware limit. Rename to a shorter name before writing to device.">warning</span>` : "") +
       (!isDir ? `<button class="btn-icon ghost" data-action="download" title="Download"><span class="ms-sm">download</span></button>` : "") +
       `<button class="btn-icon ghost" data-action="rename" title="Rename"><span class="ms-sm">edit</span></button>` +
       `<button class="btn-icon ghost" data-action="delete" title="Delete"><span class="ms-sm">delete</span></button>` +
@@ -1640,10 +1821,14 @@ function renderBreadcrumb(path) {
     label: part,
     path: i === 0 ? "E:/" : parts.slice(0, i + 1).join("/"),
   }));
-  el.navBreadcrumb.innerHTML = crumbs.map((c, i) =>
-    (i > 0 ? '<span class="nav-sep">/</span>' : "") +
-    `<button class="nav-crumb${i === crumbs.length - 1 ? " active" : ""}" data-path="${escapeHtml(c.path)}">${escapeHtml(c.label)}</button>`
-  ).join("");
+  el.navBreadcrumb.innerHTML = crumbs.map((c, i) => {
+    const isActive = i === crumbs.length - 1;
+    const label = i === 0
+      ? `<span class="ms nav-home-icon">home</span>`
+      : escapeHtml(c.label);
+    return (i > 0 ? '<span class="nav-sep">›</span>' : "") +
+      `<button class="nav-crumb${isActive ? " active" : ""}" data-path="${escapeHtml(c.path)}">${label}</button>`;
+  }).join("");
 }
 
 // === Selection Bar ===
@@ -1651,10 +1836,8 @@ function renderBreadcrumb(path) {
 function updateSelectionBar() {
   const count = state.selectedNames.size;
   const hasSelection = count > 0;
-  el.selectionCount.hidden = !hasSelection;
+  el.selectionBanner.hidden = !hasSelection;
   el.selectionCount.textContent = `${count} selected`;
-  el.btnDownloadSelected.hidden = !hasSelection;
-  el.btnDeleteSelected.hidden = !hasSelection;
   el.checkAll.checked = state.entries.length > 0 && count === state.entries.length;
   el.checkAll.indeterminate = hasSelection && count < state.entries.length;
 }
@@ -1710,16 +1893,24 @@ el.fileTableBody.addEventListener("click", (e) => {
     return;
   }
 
-  // Folder name click — navigate
+  // Folder/file name click — navigate or open details
   const nameCell = e.target.closest(".cell-name");
   if (nameCell) {
     if (entry.type === "DIR") {
       browseFolder(joinChildPath(state.currentPath, entry.name));
     } else {
       setPanelState("file", entry);
-      if (isMobileViewport()) openSheet();
+      if (isMobileViewport()) openDetailsSheet();
     }
     return;
+  }
+
+  // Click anywhere else on the row (e.g. size cell) — same behaviour
+  if (entry.type === "DIR") {
+    browseFolder(joinChildPath(state.currentPath, entry.name));
+  } else {
+    setPanelState("file", entry);
+    if (isMobileViewport()) openDetailsSheet();
   }
 });
 
@@ -1742,26 +1933,13 @@ el.btnDeleteSelected.addEventListener("click", () => {
   openModal(el.deleteModal);
 });
 
-el.btnDownloadSelected.addEventListener("click", async () => {
-  const selected = state.entries.filter(e => state.selectedNames.has(e.name));
-  const files = selected.filter(e => e.type === "FILE");
-  if (selected.some(e => e.type === "DIR")) showWarningToast("Skipped folders", "Only files can be downloaded");
-  if (files.length === 0) return;
-  for (const entry of files) {
-    const filePath = joinChildPath(state.currentPath, entry.name);
-    const res = await state.client.readFileData(filePath).catch(err => ({ ok: false, error: err.message }));
-    if (!res.ok) { log(`Download failed: ${entry.name}: ${res.error}`); continue; }
-    triggerDownload(res.data, entry.name);
-  }
+el.btnClearSelection.addEventListener("click", () => {
+  state.selectedNames.clear();
+  applySelectionToRows(false);
+  updateSelectionBar();
 });
 
-// Navigation bar
-el.btnNavHome.addEventListener("click", () => browseFolder("E:/"));
-el.btnNavUp.addEventListener("click", () => {
-  if (state.currentPath && state.currentPath !== "E:/") {
-    browseFolder(getParentPath(state.currentPath));
-  }
-});
+// Navigation bar — breadcrumb handles all navigation (including home crumb)
 el.navBreadcrumb.addEventListener("click", (e) => {
   const crumb = e.target.closest(".nav-crumb");
   if (!crumb || !crumb.dataset.path) return;
@@ -1833,26 +2011,37 @@ el.btnSanitizeNoneCancel.addEventListener("click", () => closeModal(el.sanitizeM
 // === Context Panel ===
 
 function setPanelState(mode, entry) {
-  // Hide all states
-  el.panelFolder.hidden = true;
-  el.panelFile.hidden = true;
-  el.panelUpload.hidden = true;
+  // Left panel toggles between folder info and upload
+  el.panelFolder.hidden = (mode === "upload");
+  el.panelUpload.hidden = (mode !== "upload");
+
+  // Right details panel shows only for file mode
+  el.detailsPanel.hidden = (mode !== "file");
 
   if (mode === "upload") {
     state.panelPrevMode = state.panelMode === "upload" ? state.panelPrevMode : state.panelMode;
     state.panelMode = "upload";
-    el.panelUpload.hidden = false;
+    if (isMobileViewport()) closeDetailsSheet();
     return;
   }
 
   if (mode === "file" && entry) {
     state.drawerEntry = entry;
     state.panelMode = "file";
-    el.panelFile.hidden = false;
 
     // Populate file fields
     el.panelFileName.textContent = entry.name;
     el.panelFileSize.textContent = formatBytes(entry.size);
+    el.detailsKind.textContent = entry.type === "FILE" ? "File" : "Folder";
+    const fullPath = joinChildPath(state.currentPath, entry.name);
+    el.detailsFilePath.textContent = fullPath;
+    if (el.detailsPathInRow) el.detailsPathInRow.textContent = fullPath;
+
+    // Reset hero to neutral state
+    el.detailsHeroImgArea.innerHTML = `<span class="ms details-hero-file-icon" id="detailsHeroIcon">insert_drive_file</span>`;
+    el.detailsHeroBand.hidden = true;
+    el.detailsHeroBand.style.background = "";
+    el.detailsHeroBand.innerHTML = "";
 
     // Flags
     const flagDefs = [
@@ -1863,11 +2052,11 @@ function setPanelState(mode, entry) {
     const flags = entry.meta ? entry.meta.flags : 0;
     el.panelFileFlags.innerHTML = flagDefs.map(f => {
       const active = (flags & f.bit) !== 0;
-      return `<div class="drawer-flag-row"><span class="ms-sm drawer-flag-icon${active ? " is-active" : ""}">check</span> ${escapeHtml(f.label)}</div>`;
+      return `<div class="details-flag-row"><span class="ms-sm details-flag-icon${active ? " is-active" : ""}">check</span> ${escapeHtml(f.label)}</div>`;
     }).join("");
 
     // NFC tag section — only for .bin files
-    el.panelFileLabel.textContent = entry.name.toLowerCase().endsWith(".bin") ? "NFC tag" : "File";
+    el.panelFileLabel.textContent = entry.name.toLowerCase().endsWith(".bin") ? "NFC Tag" : "Details";
     const isBin = entry.type === "FILE" && entry.name.toLowerCase().endsWith(".bin");
     el.panelNfcTag.hidden = !isBin;
     if (!isBin) {
@@ -1878,7 +2067,7 @@ function setPanelState(mode, entry) {
       if (metaHead != null) {
         applyNfcTagDisplay(entry, metaHead, metaTail);
       } else if (state.client) {
-        el.panelNfcTagContent.innerHTML = `<span class="drawer-nfc-tag-hex">\u2026</span>`;
+        el.panelNfcTagContent.innerHTML = `<div class="details-nfc-row"><span class="details-nfc-label">Figure ID</span><span class="details-nfc-value" style="color:#9ca3af">Loading\u2026</span></div>`;
         const filePath = joinChildPath(state.currentPath, entry.name);
         state.client.readFileData(filePath).then(res => {
           if (state.drawerEntry !== entry) return;
@@ -1888,13 +2077,13 @@ function setPanelState(mode, entry) {
             const tail = dv.getUint32(88, false);
             applyNfcTagDisplay(entry, head, tail);
           } else {
-            el.panelNfcTagContent.innerHTML = `<span class="drawer-nfc-tag-hex">\u2014</span>`;
+            el.panelNfcTagContent.innerHTML = `<div class="details-nfc-row"><span class="details-nfc-label">Figure ID</span><span class="details-nfc-value" style="color:#9ca3af">Not a valid NFC file</span></div>`;
           }
         }).catch(() => {
-          if (state.drawerEntry === entry) el.panelNfcTagContent.innerHTML = `<span class="drawer-nfc-tag-hex">\u2014</span>`;
+          if (state.drawerEntry === entry) el.panelNfcTagContent.innerHTML = `<div class="details-nfc-row"><span class="details-nfc-label">Error</span><span class="details-nfc-value" style="color:#e11d48">Failed to read file</span></div>`;
         });
       } else {
-        el.panelNfcTagContent.innerHTML = `<span class="drawer-nfc-tag-hex">\u2014</span>`;
+        el.panelNfcTagContent.innerHTML = `<div class="details-nfc-row"><span class="details-nfc-label">Figure ID</span><span class="details-nfc-value" style="color:#9ca3af">Not connected</span></div>`;
       }
     }
 
@@ -1908,7 +2097,7 @@ function setPanelState(mode, entry) {
   // Default: folder state
   state.drawerEntry = null;
   state.panelMode = "folder";
-  el.panelFolder.hidden = false;
+  if (isMobileViewport()) closeDetailsSheet();
 
   // Clear row highlight
   for (const row of el.fileTableBody.querySelectorAll("tr[data-name]")) {
@@ -1917,22 +2106,39 @@ function setPanelState(mode, entry) {
 
   // Populate folder info
   if (state.currentPath) {
-    const name = state.currentPath === "E:/" ? "Pixl.js" : getBaseName(state.currentPath) || state.currentPath;
-    el.panelFolderName.textContent = name;
-    el.panelFolderPath.textContent = state.currentPath;
-    el.panelFolderCount.textContent = `${state.entries.length} item${state.entries.length !== 1 ? "s" : ""}`;
+    el.panelFolderName.textContent = "Pixl.js";
+    el.panelFolderPath.textContent = state.drive ? state.drive.name : "E:/";
+    const folderBaseName = state.currentPath === "E:/" ? "Root" : (getBaseName(state.currentPath) || state.currentPath);
+    el.panelCurrentFolderName.textContent = folderBaseName;
+    const fileCount = state.entries.filter(e => e.type === "FILE").length;
+    const dirCount = state.entries.filter(e => e.type === "DIR").length;
+    const parts = [];
+    if (fileCount) parts.push(`${fileCount} file${fileCount !== 1 ? "s" : ""}`);
+    if (dirCount) parts.push(`${dirCount} folder${dirCount !== 1 ? "s" : ""}`);
+    el.panelFolderCount.textContent = state.entries.length ? parts.join(", ") : "Empty";
+    const totalBytes = state.entries.reduce((sum, e) => sum + (e.size || 0), 0);
+    el.panelFolderSize.textContent = totalBytes > 0 ? formatBytes(totalBytes) + " total" : "";
   } else {
-    el.panelFolderName.textContent = "";
+    el.panelFolderName.textContent = "Pixl.js";
     el.panelFolderPath.textContent = "";
+    el.panelCurrentFolderName.textContent = "—";
     el.panelFolderCount.textContent = "";
+    el.panelFolderSize.textContent = "";
   }
   // Drive bar updated by renderDrive
 }
 
 // Panel rename button — renames the currently displayed file
-el.panelBtnRename.addEventListener("click", () => {
-  if (!state.drawerEntry) return;
-  openRenameModal(state.drawerEntry.name);
+// Details panel close button
+el.btnDetailsClose.addEventListener("click", () => {
+  setPanelState("folder");
+  if (isMobileViewport()) closeDetailsSheet();
+});
+
+// Details sheet backdrop click
+el.detailsSheetBackdrop.addEventListener("click", () => {
+  setPanelState("folder");
+  closeDetailsSheet();
 });
 
 function openRenameModal(name) {
@@ -1944,38 +2150,115 @@ function openRenameModal(name) {
   el.renameInput.select();
 }
 
-// Panel delete button — deletes the currently displayed file
-el.panelBtnDelete.addEventListener("click", () => {
-  if (!state.drawerEntry) return;
-  el.deleteCount.textContent = "1";
-  el.deleteModalMsg.textContent = `Permanently delete "${state.drawerEntry.name}"? This action cannot be undone.`;
-  // Pre-select the entry so the existing delete confirm handler works
-  state.selectedNames.clear();
-  state.selectedNames.add(state.drawerEntry.name);
-  openModal(el.deleteModal);
-});
+// === Log side sheet ===
 
-// === Log overlay ===
+function openLogSheet() { el.logOverlay.classList.add("open"); }
+function closeLogSheet() { el.logOverlay.classList.remove("open"); }
 
 el.btnLogToggle.addEventListener("click", () => {
-  el.logOverlay.classList.toggle("open");
+  el.logOverlay.classList.contains("open") ? closeLogSheet() : openLogSheet();
 });
+el.btnLogClose.addEventListener("click", closeLogSheet);
+el.logSheetBackdrop.addEventListener("click", closeLogSheet);
 
-el.btnLogClose.addEventListener("click", () => {
-  el.logOverlay.classList.remove("open");
-});
+// === Image lightbox ===
 
-document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape") {
-    el.logOverlay.classList.remove("open");
+function openLightbox(src, alt, info, head, tail, entry) {
+  el.imgLightboxImg.src = src;
+  el.imgLightboxImg.alt = alt || "";
+
+  if (info) {
+    const grad = nfcSeriesGradient(info.gameSeries || info.amiiboSeries);
+    const tc = _gradientTextColor(grad);
+    const uid = (head != null && tail != null)
+      ? `${(head >>> 0).toString(16).toUpperCase().padStart(8,"0")}:${(tail >>> 0).toString(16).toUpperCase().padStart(8,"0")}`
+      : null;
+    const rows = [];
+    if (info.name) rows.push(["Character", info.name, false]);
+    if (info.amiiboSeries) rows.push(["Series", info.amiiboSeries, false]);
+    if (info.gameSeries) rows.push(["Game", info.gameSeries, false]);
+    if (info.type) rows.push(["Type", info.type, false]);
+    if (info.release?.na) rows.push(["Released", info.release.na, false]);
+    if (uid) rows.push(["Figure ID", uid, true]);
+    if (entry?.size != null) rows.push(["Size", formatBytes(entry.size), false]);
+    if (entry?.name) rows.push(["File", entry.name, false]);
+
+    const rowsHtml = rows.map(([label, value, mono]) =>
+      `<div class="img-lightbox-row">` +
+      `<span class="img-lightbox-row-label">${escapeHtml(label)}</span>` +
+      `<span class="img-lightbox-row-value${mono ? " img-lightbox-row-mono js-copy-id" : ""}"` +
+      (mono ? ` title="Copy"` : "") +
+      `>${escapeHtml(value)}</span>` +
+      `</div>`
+    ).join("");
+
+    const lbSeries = info.amiiboSeries || info.gameSeries || "";
+    const lbGame = info.gameSeries && info.gameSeries !== (info.amiiboSeries || "") ? info.gameSeries : "";
+    el.imgLightboxSide.innerHTML =
+      `<div class="img-lightbox-band" style="background:${grad}">` +
+        (lbSeries ? `<div class="img-lightbox-series" style="color:${tc}">${escapeHtml(lbSeries)}</div>` : "") +
+        `<div class="img-lightbox-name" style="color:${tc}">${escapeHtml(info.name || alt || "")}</div>` +
+        (lbGame ? `<div class="img-lightbox-game" style="color:${tc}">${escapeHtml(lbGame)}</div>` : "") +
+      `</div>` +
+      `<div class="img-lightbox-rows">${rowsHtml}</div>`;
+  } else {
+    el.imgLightboxSide.innerHTML = "";
   }
+
+  el.imgLightboxSide.querySelectorAll(".js-copy-id").forEach(node => {
+    node.addEventListener("click", () => navigator.clipboard?.writeText(node.textContent || ""));
+  });
+  el.imgLightbox.hidden = false;
+}
+
+function closeLightbox() {
+  el.imgLightbox.hidden = true;
+  el.imgLightboxImg.src = "";
+  el.imgLightboxSide.innerHTML = "";
+}
+
+el.btnLightboxClose.addEventListener("click", closeLightbox);
+el.imgLightbox.addEventListener("click", (e) => {
+  if (e.target === el.imgLightbox || e.target.classList.contains("img-lightbox-inner")) closeLightbox();
 });
 
 // === Upload panel toggle ===
 
-el.btnFolderUpload.addEventListener("click", () => {
+el.sidebarDropZone.addEventListener("click", () => {
+  if (el.sidebarDropZone.getAttribute("aria-disabled") === "true") return;
+  el.filesInput.click();
+});
+
+el.sidebarDropZone.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" || e.key === " ") { e.preventDefault(); el.sidebarDropZone.click(); }
+});
+
+let _dropZoneCounter = 0;
+el.sidebarDropZone.addEventListener("dragenter", (e) => {
+  e.preventDefault();
+  _dropZoneCounter++;
+  el.sidebarDropZone.classList.add("drag-over");
+});
+el.sidebarDropZone.addEventListener("dragleave", () => {
+  _dropZoneCounter--;
+  if (_dropZoneCounter <= 0) { _dropZoneCounter = 0; el.sidebarDropZone.classList.remove("drag-over"); }
+});
+el.sidebarDropZone.addEventListener("dragover", (e) => { e.preventDefault(); });
+el.sidebarDropZone.addEventListener("drop", (e) => {
+  e.preventDefault();
+  _dropZoneCounter = 0;
+  el.sidebarDropZone.classList.remove("drag-over");
+  if (el.sidebarDropZone.getAttribute("aria-disabled") === "true") return;
+  const files = e.dataTransfer.files;
+  if (!files || files.length === 0) return;
+  const collected = collectFromFiles(files);
+  buildUploadPlan(collected.folders, collected.files);
   setPanelState("upload");
 });
+
+// Sidebar shortcut buttons
+el.btnSidebarNew.addEventListener("click", () => el.btnNewFolder.click());
+el.btnSidebarRefresh.addEventListener("click", () => el.btnRefresh.click());
 
 el.btnUploadClose.addEventListener("click", () => {
   if (el.btnUploadClose.getAttribute("aria-disabled") === "true") return;
@@ -2709,6 +2992,7 @@ el.filesInput.addEventListener("change", (e) => {
   if (!e.target.files || e.target.files.length === 0) return;
   const collected = collectFromFiles(e.target.files);
   buildUploadPlan(collected.folders, collected.files);
+  setPanelState("upload");
   e.target.value = "";
 });
 
