@@ -6,10 +6,9 @@ const NUS_CHAR_RX_UUID = "6e400003-b5a3-f393-e0a9-e50e24dcca9e";
 
 const FRAME_HEADER_SIZE = 4;
 const MAX_FILE_NAME_BYTES = 47;
-const MAX_FILE_PATH_BYTES = 65;
-const MAX_FOLDER_PATH_BYTES = 57;
+const MAX_FILE_PATH_BYTES = 63;
+const MAX_FOLDER_PATH_BYTES = 55;
 const LARGE_DIR_THRESHOLD = 80;
-const LONG_FILENAME_BYTES = 15;
 const LARGE_BATCH_THRESHOLD = 200;
 const PIXL_RELEASES_URL = "https://github.com/solosky/pixl.js/releases";
 const PIXL_LATEST_API = "https://api.github.com/repos/solosky/pixl.js/releases/latest";
@@ -783,6 +782,7 @@ const el = {
   btnPickFolder: document.getElementById("btnPickFolder"),
   btnPickFiles: document.getElementById("btnPickFiles"),
   uploadProgressTotal: document.getElementById("uploadProgressTotal"),
+  uploadWarningBanner: document.getElementById("uploadWarningBanner"),
   uploadQueue: document.getElementById("uploadQueue"),
   btnUploadStart: document.getElementById("btnUploadStart"),
   btnUploadAbort: document.getElementById("btnUploadAbort"),
@@ -1021,15 +1021,32 @@ function log(msg, role) {
 // === Bottom Sheet (mobile) ===
 
 function isMobileViewport() { return window.innerWidth <= 900; }
-function openSheet() { el.sheetContainer.classList.add("open"); }
-function closeSheet() { el.sheetContainer.classList.remove("open"); }
-function openDetailsSheet() { el.detailsSheetContainer.classList.add("open"); }
-function closeDetailsSheet() { el.detailsSheetContainer.classList.remove("open"); }
+
+function _lockScroll()   { document.body.classList.add("no-scroll"); }
+function _unlockScroll() { document.body.classList.remove("no-scroll"); }
+
+function openSheet() {
+  el.sheetContainer.classList.add("open");
+  _lockScroll();
+}
+function closeSheet() {
+  el.sheetContainer.classList.remove("open");
+  el.sheetContainer.classList.remove("is-upload");
+  if (!document.body.classList.contains("log-open")) _unlockScroll();
+}
+function openDetailsSheet() {
+  el.detailsSheetContainer.classList.add("open");
+  _lockScroll();
+}
+function closeDetailsSheet() {
+  el.detailsSheetContainer.classList.remove("open");
+  if (!document.body.classList.contains("log-open")) _unlockScroll();
+}
 
 el.sheetBackdrop.addEventListener("click", closeSheet);
 
-el.btnSheetInfo.addEventListener("click", () => { setPanelState("folder"); openSheet(); });
-el.btnSheetUpload.addEventListener("click", () => { setPanelState("upload"); openSheet(); });
+el.btnSheetInfo.addEventListener("click", () => { setPanelState("folder"); el.sheetContainer.classList.remove("is-upload"); openSheet(); });
+el.btnSheetUpload.addEventListener("click", () => { setPanelState("upload"); el.sheetContainer.classList.add("is-upload"); openSheet(); });
 
 // Swipe-down on panel handle dismisses the sheet
 let _sheetTouchY = 0;
@@ -1080,6 +1097,10 @@ function setConnState(newState) {
 
   if (disconnected) {
     clearToasts({ keepErrors: true });
+    closeSheet();
+    closeDetailsSheet();
+    closeLogSheet();
+    _unlockScroll();
     state.drive = null;
     state.entries = [];
     state.selectedNames.clear();
@@ -1783,13 +1804,14 @@ function renderFileTable() {
     const isPanelActive = state.drawerEntry && state.drawerEntry.name === entry.name;
     const isSelected = state.selectedNames.has(entry.name);
 
-    const nameWarn = utf8Length(entry.name) > LONG_FILENAME_BYTES;
+    const nameWarn = utf8Length(entry.name) > MAX_FILE_NAME_BYTES;
     const iconHtml = isDir
       ? `<span class="cell-name-icon folder"><span class="ms-sm">folder</span></span>`
       : `<span class="cell-name-icon file"><span class="ms-sm">insert_drive_file</span></span>`;
+    const warnIcon = nameWarn ? `<span class="ms-sm warn-icon cell-warn-icon" title="Filename is ${utf8Length(entry.name)} bytes, exceeding the ${MAX_FILE_NAME_BYTES}-byte firmware limit. Rename it to avoid issues.">warning</span>` : "";
     const nameCell = isDir
-      ? `<td class="cell-name folder"><span class="cell-name-inner">${iconHtml}${escapeHtml(entry.name)}</span></td>`
-      : `<td class="cell-name"><span class="cell-name-inner">${iconHtml}${escapeHtml(entry.name)}</span></td>`;
+      ? `<td class="cell-name folder"><span class="cell-name-inner">${iconHtml}${escapeHtml(entry.name)}${warnIcon}</span></td>`
+      : `<td class="cell-name"><span class="cell-name-inner">${iconHtml}${escapeHtml(entry.name)}${warnIcon}</span></td>`;
 
     const classes = [isPanelActive ? "panel-active" : "", isSelected ? "selected" : "", nameWarn ? "row-warn" : ""].filter(Boolean).join(" ");
     rows.push(
@@ -1798,7 +1820,6 @@ function renderFileTable() {
       nameCell +
       `<td class="cell-size">${size}</td>` +
       `<td class="cell-actions">` +
-      (nameWarn ? `<span class="ms-sm warn-icon cell-warn-icon" title="Filename is ${utf8Length(entry.name)} bytes, exceeding the ${LONG_FILENAME_BYTES}-byte firmware limit. Rename to a shorter name before writing to device.">warning</span>` : "") +
       (!isDir ? `<button class="btn-icon ghost" data-action="download" title="Download"><span class="ms-sm">download</span></button>` : "") +
       `<button class="btn-icon ghost" data-action="rename" title="Rename"><span class="ms-sm">edit</span></button>` +
       `<button class="btn-icon ghost" data-action="delete" title="Delete"><span class="ms-sm">delete</span></button>` +
@@ -2219,8 +2240,16 @@ function openRenameModal(name) {
 
 // === Log side sheet ===
 
-function openLogSheet() { el.logOverlay.classList.add("open"); }
-function closeLogSheet() { el.logOverlay.classList.remove("open"); }
+function openLogSheet() {
+  el.logOverlay.classList.add("open");
+  document.body.classList.add("log-open");
+  _lockScroll();
+}
+function closeLogSheet() {
+  el.logOverlay.classList.remove("open");
+  document.body.classList.remove("log-open");
+  if (!el.sheetContainer.classList.contains("open") && !el.detailsSheetContainer.classList.contains("open")) _unlockScroll();
+}
 
 el.btnLogToggle.addEventListener("click", () => {
   el.logOverlay.classList.contains("open") ? closeLogSheet() : openLogSheet();
@@ -2286,7 +2315,7 @@ function closeLightbox() {
 
 el.btnLightboxClose.addEventListener("click", closeLightbox);
 el.imgLightbox.addEventListener("click", (e) => {
-  if (e.target === el.imgLightbox || e.target.classList.contains("img-lightbox-inner")) closeLightbox();
+  if (e.target === el.imgLightbox || e.target.classList.contains("img-lightbox-inner") || window.innerWidth <= 767) closeLightbox();
 });
 
 // === Upload panel toggle ===
@@ -2813,14 +2842,16 @@ function renderUploadQueue() {
   // Render upload warnings banner (from checkUploadPlanWarnings)
   if (state.uploadWarnings && state.uploadWarnings.length > 0 && !state.uploadActive) {
     const bannerLines = state.uploadWarnings.map(w => `<li>${escapeHtml(w)}</li>`).join("");
-    const banner = document.createElement("div");
-    banner.className = "queue-warning";
-    banner.innerHTML =
+    el.uploadWarningBanner.className = "queue-warning";
+    el.uploadWarningBanner.innerHTML =
       `<div class="queue-warning-header">` +
       `<span class="ms-sm">warning</span> Upload warnings` +
       `</div>` +
       `<ul>${bannerLines}</ul>`;
-    el.uploadQueue.prepend(banner);
+    el.uploadWarningBanner.hidden = false;
+  } else {
+    el.uploadWarningBanner.hidden = true;
+    el.uploadWarningBanner.innerHTML = "";
   }
 }
 

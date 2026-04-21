@@ -49,8 +49,8 @@
       <span class="topbar-brand-name">Mochi</span>
     </div>
     <div class="topbar-sep"></div>
-    <button id="btnDev" hidden>Mock device</button>
-    <button class="topbar-connect-btn" id="btnConnect" hidden>
+    <button class="dev" id="btnDev" hidden>Mock device</button>
+    <button class="connected" id="btnConnect" hidden>
       <span class="ms-sm">bluetooth</span>
       <span class="topbar-btn-label">Disconnect</span>
     </button>
@@ -125,18 +125,19 @@
           <button class="btn-icon ghost" id="btnUploadClose" title="Close"><span class="ms-sm">close</span></button>
         </div>
         <div class="panel-button-row">
-          <button class="btn-labeled panel-button-grow" id="btnPickFolder"><span class="ms">folder</span> Folder</button>
-          <button class="btn-labeled panel-button-grow" id="btnPickFiles"><span class="ms">upload_file</span> Files</button>
+          <button class="panel-button-grow" id="btnPickFolder"><span class="ms">folder</span> Folder</button>
+          <button class="panel-button-grow" id="btnPickFiles"><span class="ms">upload_file</span> Files</button>
         </div>
         <div class="panel-button-row">
-          <button class="btn-labeled primary panel-button-grow" id="btnUploadStart" disabled><span class="ms">play_arrow</span> Start</button>
-          <button class="btn-labeled danger panel-button-grow" id="btnUploadAbort" disabled><span class="ms">stop</span> Stop</button>
-          <button class="btn-labeled ghost panel-button-grow" id="btnUploadClear" disabled><span class="ms">delete</span> Clear</button>
+          <button class="primary panel-button-grow" id="btnUploadStart" disabled><span class="ms">play_arrow</span> Start</button>
+          <button class="danger panel-button-grow" id="btnUploadAbort" disabled><span class="ms">stop</span> Stop</button>
+          <button class="ghost panel-button-grow" id="btnUploadClear" disabled><span class="ms">delete</span> Clear</button>
         </div>
         <div id="uploadSummary" class="upload-summary">
           <span class="summary-label">Queue summary</span>
           <span id="uploadProgressTotal">No uploads queued</span>
         </div>
+        <div id="uploadWarningBanner" hidden></div>
         <div id="uploadQueue"><div class="queue-empty">No uploads queued</div></div>
         <input id="folderInput" type="file" hidden multiple webkitdirectory directory>
         <input id="filesInput" type="file" hidden multiple>
@@ -172,9 +173,9 @@
         <!-- Spacer pushes actions to the right on mobile -->
         <span class="nav-spacer"></span>
         <button class="btn-icon ghost" id="btnSheetInfo" title="Folder info" hidden><span class="ms">info</span></button>
-        <button class="btn-labeled ghost" id="btnRefresh" title="Refresh" aria-label="Refresh folder" hidden><span class="ms-sm">refresh</span> <span class="nav-btn-label">Refresh</span></button>
-        <button class="btn-labeled ghost" id="btnNewFolder" title="New folder" hidden><span class="ms-sm">create_new_folder</span> <span class="nav-btn-label">New folder</span></button>
-        <button class="btn-labeled" id="btnSheetUpload" title="Upload" hidden><span class="ms-sm">upload</span> <span class="nav-btn-label">Upload</span></button>
+        <button class="ghost" id="btnRefresh" title="Refresh" aria-label="Refresh folder" hidden><span class="ms-sm">refresh</span> <span class="nav-btn-label">Refresh</span></button>
+        <button id="btnNewFolder" title="New folder" hidden><span class="ms-sm">create_new_folder</span> <span class="nav-btn-label">New folder</span></button>
+        <button class="primary" id="btnSheetUpload" title="Upload" hidden><span class="ms-sm">upload</span> <span class="nav-btn-label">Upload</span></button>
       </div>
 
       <!-- Table column header (always visible, above banners) -->

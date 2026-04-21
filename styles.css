@@ -52,6 +52,9 @@
     min-height: 100vh;
   }
 
+/* Scroll lock — applied to body when any overlay/sheet is open on mobile */
+body.no-scroll { overflow: hidden; }
+
 /* --- App shell --- */
 .app {
   display: flex;
@@ -115,26 +118,13 @@
 }
 
 /* Connected pill button */
-.topbar-connect-btn {
-  height: 32px;
-  padding: 0 12px;
-  border-radius: 999px;
-  border: 1px solid #a7f3d0;
+/* Connected state modifier for the disconnect button */
+button.connected {
+  border-color: #a7f3d0;
   background: #ecfdf5;
   color: #065f46;
-  font-size: var(--fs-s);
-  font-weight: 600;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  cursor: pointer;
-  transition: background 0.15s;
-  flex-shrink: 0;
 }
-.topbar-connect-btn:hover:not(:disabled) {
-  background: #d1fae5 !important;
-}
-.topbar-connect-btn .ms-sm { font-size: 14px; }
+button.connected:hover:not(:disabled) { background: #d1fae5; }
 
 /* Device info badge — plain text, not a chip */
 .topbar-badge {
@@ -235,18 +225,12 @@
 .btn-pill[hidden] { display: none; }
 
 /* Topbar button overrides */
-#btnDev {
-  height: 32px;
-  padding: 0 12px;
-  border-radius: 999px;
-  border: 1px solid #fde68a;
+button.dev {
+  border-color: #fde68a;
   background: #fef3c7;
   color: #92400e;
-  font-size: var(--fs-s);
-  font-weight: 600;
-  gap: 6px;
 }
-#btnDev:hover:not(:disabled) { background: #fde68a !important; }
+button.dev:hover:not(:disabled) { background: #fde68a; }
 
 /* All non-pill topbar buttons are ghost icon circles */
 .topbar .btn-icon {
@@ -659,13 +643,11 @@
 
   /* --- Upload queue --- */
   .upload-summary {
-    /* display: flex; */
-    /* flex-wrap: wrap; */
     gap: 4px 6px;
-    padding: 8px 10px;
-    border: 1px solid #ececf2;
-    border-radius: var(--radius);
-    background: #f6f6fb;
+    padding: 8px 16px;
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+    background: #fafafa;
     font-size: var(--fs-s);
     color: #666;
   }
@@ -688,7 +670,7 @@
     flex: 1;
     min-height: 0;
     overflow-y: auto;
-    padding-right: 2px;
+    padding: 0 16px 8px;
   }
 
   .queue-item {
@@ -757,13 +739,16 @@
   }
 
   .queue-warning {
-    background: oklch(0.92 0.08 85);
-    border: 1px solid oklch(0.78 0.12 85);
-    border-radius: 1rem;
-    padding: 6px 8px;
-    margin-bottom: 6px;
+    background: rgba(245,158,11,0.06);
+    border-bottom: 1px solid rgba(245,158,11,0.22);
+    border-left: none;
+    border-right: none;
+    border-top: none;
+    border-radius: 0;
+    padding: 8px 16px;
+    margin-bottom: 0;
     font-size: var(--fs-s);
-    color: oklch(0.35 0.08 60);
+    color: #92400e;
   }
   .queue-warning-header {
     display: flex;
@@ -771,7 +756,7 @@
     gap: 4px;
     font-weight: 700;
   }
-  .queue-warning-header .ms-sm { color: oklch(0.62 0.16 70); }
+  .queue-warning-header .ms-sm { color: #d97706; }
   .queue-warning ul {
     margin: 4px 0 0;
     padding-left: 18px;
@@ -831,12 +816,12 @@
   /* --- Buttons --- */
   button {
     font-family: inherit;
-    font-size: var(--fs-base);
+    font-size: var(--fs-s);
     font-weight: 600;
-    height: 36px;
-    padding: 5px 12px;
+    height: 32px;
+    padding: 0 12px;
     border: 1px solid var(--border);
-    border-radius: var(--radius);
+    border-radius: 8px;
     cursor: pointer;
     background: #fff;
     color: var(--foreground);
@@ -845,6 +830,7 @@
     align-items: center;
     justify-content: center;
     gap: 5px;
+    flex-shrink: 0;
   }
 
   button:hover:not(:disabled):not([aria-disabled="true"]) { background: #f9fafb; }
@@ -887,7 +873,7 @@
   /* --- Table --- */
   /* Shared column widths for header + body tables */
   .col-check  { width: 32px; }
-  .col-size   { width: 72px; }
+  .col-size   { width: 100px; }
   .col-actions { width: 60px; }
   .col-name   { /* auto */ }
 
@@ -926,13 +912,9 @@
   .table-wrap {
     flex: 1;
     min-height: 0;
-    overflow-x: auto;
+    overflow-x: hidden;
     overflow-y: auto;
     background: #fff;
-  }
-
-  @media (max-width: 767px) {
-    .table-wrap { overflow-x: hidden; }
   }
 
   .table-wrap.is-empty {
@@ -1051,7 +1033,6 @@
   }
 
   .cell-name.folder { color: var(--violet); }
-  .cell-name.folder:hover { text-decoration: underline; }
   .warn-icon { color: oklch(0.62 0.16 70); }
   .cell-warn-icon { display: inline-flex; align-items: center; cursor: default; flex-shrink: 0; }
   tr.row-warn { background: rgba(245,158,11,0.06); }
@@ -1070,7 +1051,6 @@
     text-align: right;
     white-space: nowrap;
   }
-  tr.row-warn .cell-actions { width: 84px; }
 
   .cell-actions button {
     opacity: 0;
@@ -1226,18 +1206,6 @@
     line-height: 1;
   }
 
-  /* New folder button — outlined secondary style in nav bar */
-  #btnNewFolder {
-    font-size: var(--fs-s);
-    height: 32px;
-    padding: 0 12px;
-    border-radius: 8px;
-    border-color: var(--border);
-    color: #374151;
-    background: #fff;
-    flex-shrink: 0;
-    gap: 5px;
-  }
   .modal-overlay {
     display: none;
     position: fixed;
@@ -1566,13 +1534,6 @@
   }
 
   /* Upload is the primary nav action — filled on all viewports */
-  #btnSheetUpload {
-    background: #111827;
-    color: #fff;
-    border: none;
-    flex-shrink: 0;
-  }
-  #btnSheetUpload:hover:not(:disabled) { background: #1f2937; }
 
   @media (max-width: 991px) {
     .topbar-breadcrumb { max-width: 160px; }
@@ -1615,7 +1576,8 @@
       bottom: 0; left: 0; right: 0;
       width: 100%;
       min-width: 0;
-      max-height: 70vh;
+      max-height: 100dvh;
+      border-radius: 0;
       border-right: none;
       border-top: 1px solid var(--border);
       border-radius: 1rem 1rem 0 0;
@@ -1640,6 +1602,8 @@
   @media (max-width: 767px) {
     .main-overlay {
       padding-inline: 12px;
+      align-items: center;
+      justify-content: center;
     }
 
     .main-overlay-card {
@@ -1651,6 +1615,8 @@
     .topbar-btn-label { display: none; }
     .nav-btn-label { display: none; }
     .topbar-drive { display: none; }
+    .topbar-badge { font-size: 0; gap: 0; } /* dot only — no text */
+    .sidebar-drop-zone { display: none; }
 
     /* Nav bar layout: back arrow + folder name on left, actions on right */
     .selection-bar { height: 52px; padding: 0 4px; gap: 2px; }
@@ -1683,9 +1649,8 @@
       flex-shrink: 0;
     }
 
-    /* Icons */
-    .ms { font-size: 24px; }
-    .ms-sm { font-size: 24px; }
+    /* Icons inside buttons — keep at 16px */
+    button .ms, button .ms-sm { font-size: 16px; }
 
     /* Touch targets — btn-circle and btn-icon get 44px; labeled buttons stretch naturally */
     .btn-circle, .btn-icon { width: 44px; height: 44px; }
@@ -1716,13 +1681,20 @@
     .toast {
       white-space: normal;
       border-radius: 14px;
-      font-size: var(--fs-xs);
-      padding: 6px 8px 6px 7px;
-      gap: 5px;
+      font-size: var(--fs-s);
+      padding: 10px 12px 10px 10px;
+      gap: 8px;
     }
-    .toast-icon { width: 18px; height: 18px; font-size: 11px; }
+    .toast-icon { width: 24px; height: 24px; font-size: 16px; }
     .toast-close { width: 18px; height: 18px; font-size: 12px; }
     .toast-body { gap: 0; }
+
+    /* Log sheet — full screen on mobile */
+    .log-sheet {
+      width: 100%;
+      max-width: 100%;
+      border-left: none;
+    }
   }
 
 /* ============================================================
@@ -1831,21 +1803,10 @@
   pointer-events: none;
 }
 @media (max-width: 767px) {
-  .img-lightbox { padding: 0; }
+  .img-lightbox { padding: 0; cursor: zoom-out; }
   .img-lightbox-inner { border-radius: 0; flex-direction: column; max-width: 100%; }
   .img-lightbox-img-wrap { min-height: 0; flex: 1; padding: 20px; }
-  .img-lightbox-side {
-    width: 100%;
-    min-width: 0;
-    max-height: 55vh;
-    overflow-y: auto;
-    background: #fff;
-    border-radius: 16px 16px 0 0;
-  }
-  .img-lightbox-row { border-bottom-color: #f3f4f6; }
-  .img-lightbox-row-label { color: #9ca3af; }
-  .img-lightbox-row-value { color: #111827; }
-  .img-lightbox-rows { padding: 0 20px 32px; }
+  .img-lightbox-side { display: none !important; }
 }
 .img-lightbox-side {
   width: 260px;
@@ -2163,10 +2124,10 @@
     bottom: 0; left: 0; right: 0;
     width: 100%;
     min-width: 0;
-    max-height: 80vh;
+    max-height: 100dvh;
+    border-radius: 0;
     border-left: none;
     border-top: 1px solid var(--border);
-    border-radius: 1rem 1rem 0 0;
     transform: translateY(100%);
     transition: transform 0.25s ease;
   }
@@ -2246,15 +2207,15 @@
 .toast.visible { opacity: 1; transform: translateY(0); }
 
 .toast-icon {
-  width: 22px;
-  height: 22px;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
   font-family: 'Material Symbols Rounded';
-  font-size: 13px;
+  font-size: 24px;
   font-weight: 400;
   line-height: 1;
 }
