@@ -1,32 +1,37 @@
-# MochiNest
+# Mochi
 
-Web Bluetooth workspace for Pixl.js. Browse and manage device storage, upload folder trees, and clean up file names — all from the browser, over BLE, without changing the firmware.
+Web Bluetooth workspace for [Pixl.js](https://github.com/solosky/pixl.js). Manage device storage from the browser over BLE, no firmware changes needed.
 
 ## Features
 
-- **File browser** — navigate folders, create folders, rename, delete
-- **Bulk operations** — checkbox selection for multi-delete and multi-download
-- **Tree uploader** — queue a local folder and upload in one shot with a real-time speed readout
-- **Normalize** — rename files to lowercase on the device, recursively or scoped to a folder
-- **NFC tag recognition** — `.bin` files show their tag name and series when known
-- **Mobile-friendly** — responsive layout with a bottom sheet context panel on small screens
-- **Dev mode** — mock BLE client for UI development without a device
+- **File browser** — navigate, create folders, rename, delete, multi-select
+- **Tree uploader** — queue a local folder or files and upload with real-time progress
+- **Normalize** — batch-rename files to lowercase, scoped to current folder or recursive
+- **NFC tag info** — `.bin` files show character name, series, and Figure ID when recognized
+- **Mobile-ready** — full-screen panels, pull-to-refresh, touch-friendly nav
 
 ## Run Locally
 
-No build step. Requires a secure context for Web Bluetooth.
+No build step. Web Bluetooth requires a secure context (HTTPS) and a Chromium-based browser (Chrome, Edge, Opera, Brave).
+
+Generate a self-signed certificate first:
 
 ```bash
-python3 -m venv .venv && source .venv/bin/activate
-pip install -r requirements-dev.txt
-inv serve   # HTTPS on localhost:8443
+mkdir .cert
+openssl req -x509 -newkey rsa:2048 -keyout .cert/key.pem -out .cert/cert.pem -days 365 -nodes -subj "/CN=localhost"
 ```
 
-Reads `.cert/cert.pem` and `.cert/key.pem` for HTTPS.
+Then start the dev server (no dependencies beyond Python 3):
 
-## Upstream
+```bash
+python3 server.py --bind 0.0.0.0 --cert .cert/cert.pem --key .cert/key.pem
+```
 
-Built on [solosky/pixl.js](https://github.com/solosky/pixl.js) (GPL-2.0).
+Open `https://<your-ip>:8443` in a Chromium-based browser.
+
+## Thanks
+
+To the [solosky/pixl.js](https://github.com/solosky/pixl.js) firmware developers for the open BLE protocol and reference implementation.
 
 ## License
 

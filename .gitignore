@@ -3,6 +3,7 @@
 .local/
 .venv/
 tasks.py
+requirements-dev.txt
 .superpowers/
 CLAUDE.md
 .github/copilot-instructions.md
