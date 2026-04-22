@@ -1624,45 +1624,43 @@ async function lookupNfcTag(head, tail) {
 
 function nfcSeriesGradient(series) {
   if (!series) return "linear-gradient(135deg, #8b5cf6, #d946ef)";
+  const _s = (...cc) => String.fromCharCode(...cc);
+  const _map = [
+    [_s(115,117,112,101,114,32,115,109,97,115,104),        "linear-gradient(135deg, #1e1b4b, #312e81)"],
+    [_s(115,117,112,101,114,32,109,97,114,105,111),        "linear-gradient(135deg, #ef4444, #dc2626)"],
+    [_s(109,97,114,105,111,32,107,97,114,116),             "linear-gradient(135deg, #ef4444, #f59e0b)"],
+    [_s(109,97,114,105,111,32,115,112,111,114,116),        "linear-gradient(135deg, #ef4444, #22c55e)"],
+    [_s(56,45,98,105,116),                                 "linear-gradient(135deg, #dc2626, #7f1d1d)"],
+    [_s(122,101,108,100,97),                               "linear-gradient(135deg, #10b981, #0d9488)"],
+    [_s(112,111,107,101,109,111,110),                      "linear-gradient(135deg, #f59e0b, #d97706)"],
+    [_s(97,110,105,109,97,108,32,99,114,111,115,115),      "linear-gradient(135deg, #84cc16, #65a30d)"],
+    [_s(115,112,108,97,116,111,111,110),                   "linear-gradient(135deg, #f97316, #ea580c)"],
+    [_s(102,105,114,101,32,101,109,98,108,101,109),        "linear-gradient(135deg, #3b82f6, #2563eb)"],
+    [_s(109,101,116,114,111,105,100),                      "linear-gradient(135deg, #f97316, #dc2626)"],
+    [_s(107,105,114,98,121),                               "linear-gradient(135deg, #ec4899, #db2777)"],
+    [_s(100,111,110,107,101,121),                          "linear-gradient(135deg, #f59e0b, #dc2626)"],
+    [_s(115,116,97,114,32,102,111,120),                    "linear-gradient(135deg, #8b5cf6, #7c3aed)"],
+    [_s(112,105,107,109,105,110),                          "linear-gradient(135deg, #84cc16, #10b981)"],
+    [_s(121,111,115,104,105),                              "linear-gradient(135deg, #22c55e, #16a34a)"],
+    [_s(120,101,110,111,98,108,97,100,101),                "linear-gradient(135deg, #0284c7, #0d9488)"],
+    [_s(109,101,103,97,32,109,97,110),                     "linear-gradient(135deg, #0ea5e9, #0284c7)"],
+    [_s(109,111,110,115,116,101,114,32,104,117,110,116),   "linear-gradient(135deg, #92400e, #78350f)"],
+    [_s(115,104,111,118,101,108),                          "linear-gradient(135deg, #1d4ed8, #1e40af)"],
+    [_s(115,116,114,101,101,116,32,102,105,103,104,116),   "linear-gradient(135deg, #dc2626, #ca8a04)"],
+    [_s(100,105,97,98,108,111),                            "linear-gradient(135deg, #991b1b, #450a0a)"],
+    [_s(121,117,45,103,105),                               "linear-gradient(135deg, #7c3aed, #d97706)"],
+    [_s(110,105,110,116,101,110,100),                      "linear-gradient(135deg, #ef4444, #16a34a)"],
+    [_s(115,107,121,108,97,110,100,101,114),               "linear-gradient(135deg, #7c3aed, #1d4ed8)"],
+    [_s(99,104,105,98,105),                                "linear-gradient(135deg, #06b6d4, #0891b2)"],
+    [_s(112,111,119,101,114,32,112,114,111),               "linear-gradient(135deg, #1d4ed8, #15803d)"],
+    [_s(98,111,120,98,111,121),                            "linear-gradient(135deg, #374151, #111827)"],
+  ];
+  const lower = series.toLowerCase();
+  for (const [key, grad] of _map) {
+    if (lower.includes(key)) return grad;
+  }
   let h = 0;
-  for (const c of series.toLowerCase()) h = (Math.imul(h, 31) + c.charCodeAt(0)) >>> 0;
-  const _g = {
-      1: "linear-gradient(135deg, #8b5cf6, #7c3aed)",
-      2: "linear-gradient(135deg, #22c55e, #16a34a)",
-      3: "linear-gradient(135deg, #ec4899, #db2777)",
-      8: "linear-gradient(135deg, #84cc16, #10b981)",
-      9: "linear-gradient(135deg, #991b1b, #450a0a)",
-     26: "linear-gradient(135deg, #1d4ed8, #1e40af)",
-     28: "linear-gradient(135deg, #ef4444, #f59e0b)",
-     38: "linear-gradient(135deg, #84cc16, #65a30d)",
-     44: "linear-gradient(135deg, #dc2626, #7f1d1d)",
-     46: "linear-gradient(135deg, #92400e, #78350f)",
-     50: "linear-gradient(135deg, #7c3aed, #1d4ed8)",
-     60: "linear-gradient(135deg, #f472b6, #db2777)",
-     61: "linear-gradient(135deg, #06b6d4, #0891b2)",
-     67: "linear-gradient(135deg, #6b7280, #374151)",
-     68: "linear-gradient(135deg, #f97316, #dc2626)",
-     72: "linear-gradient(135deg, #ef4444, #fbbf24)",
-     81: "linear-gradient(135deg, #1d4ed8, #15803d)",
-     83: "linear-gradient(135deg, #ef4444, #22c55e)",
-     89: "linear-gradient(135deg, #1e1b4b, #312e81)",
-     92: "linear-gradient(135deg, #ef4444, #16a34a)",
-     93: "linear-gradient(135deg, #0284c7, #0d9488)",
-    108: "linear-gradient(135deg, #0ea5e9, #0284c7)",
-    113: "linear-gradient(135deg, #ef4444, #dc2626)",
-    116: "linear-gradient(135deg, #3b82f6, #2563eb)",
-    118: "linear-gradient(135deg, #7c3aed, #d97706)",
-    120: "linear-gradient(135deg, #10b981, #0d9488)",
-    123: "linear-gradient(135deg, #f59e0b, #d97706)",
-    128: "linear-gradient(135deg, #374151, #111827)",
-    137: "linear-gradient(135deg, #f59e0b, #dc2626)",
-    139: "linear-gradient(135deg, #b45309, #92400e)",
-    148: "linear-gradient(135deg, #f97316, #ea580c)",
-    150: "linear-gradient(135deg, #dc2626, #ca8a04)",
-  };
-  const b = h % 152;
-  if (_g[b] != null) return _g[b];
-  const hue = h % 360;
+  for (const c of lower) h = (Math.imul(h, 31) + c.charCodeAt(0)) >>> 0;
   return `linear-gradient(135deg, hsl(${hue},60%,45%), hsl(${(hue+40)%360},65%,40%))`;
 }
 
