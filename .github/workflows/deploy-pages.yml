@@ -40,7 +40,6 @@ jobs:
             --exclude='.gitmodules' \
             --exclude='server.py' \
             --exclude='tasks.py' \
-            --exclude='requirements-dev.txt' \
             ./ "$RUNNER_TEMP/site/"
           touch "$RUNNER_TEMP/site/.nojekyll"
           sed -i "s/content=\"dev\"/content=\"$(git rev-parse --short HEAD)\"/" "$RUNNER_TEMP/site/index.html"
