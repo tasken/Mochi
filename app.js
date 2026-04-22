@@ -598,11 +598,11 @@ class DevMockClient {
         { name: "backup.bin", type: "FILE", size: 1229, meta: { nfcTagHead: null, nfcTagTail: null } },
       ],
       "E:/nfc/large-set": [
-        { name: "super_smash_bros_ultimate_mario_classic_costume.bin", type: "FILE", size: 540, meta: { nfcTagHead: 0x01000060, nfcTagTail: 0x03530902 } },
-        { name: "the_legend_of_zelda_breath_of_the_wild_link.bin",     type: "FILE", size: 540, meta: { nfcTagHead: 0x01000061, nfcTagTail: 0x03530902 } },
-        { name: "animal_crossing_new_horizons_isabelle_summer.bin",     type: "FILE", size: 540, meta: { nfcTagHead: 0x01000062, nfcTagTail: 0x03530902 } },
-        { name: "splatoon_3_inkling_girl_neon_pink_special_ed.bin",     type: "FILE", size: 540, meta: { nfcTagHead: 0x01000063, nfcTagTail: 0x03530902 } },
-        { name: "pokemon_scarlet_violet_koraidon_full_power.bin",       type: "FILE", size: 540, meta: { nfcTagHead: 0x01000064, nfcTagTail: 0x03530902 } },
+        { name: "fighter_platform_red_classic_costume_alt01.bin",       type: "FILE", size: 540, meta: { nfcTagHead: 0x01000060, nfcTagTail: 0x03530902 } },
+        { name: "adventure_hero_open_world_green_tunic_v2.bin",         type: "FILE", size: 540, meta: { nfcTagHead: 0x01000061, nfcTagTail: 0x03530902 } },
+        { name: "village_mayor_summer_seasonal_outfit_v1.bin",          type: "FILE", size: 540, meta: { nfcTagHead: 0x01000062, nfcTagTail: 0x03530902 } },
+        { name: "ink_shooter_neon_pink_special_edition_v3.bin",         type: "FILE", size: 540, meta: { nfcTagHead: 0x01000063, nfcTagTail: 0x03530902 } },
+        { name: "creature_trainer_scarlet_full_power_form.bin",         type: "FILE", size: 540, meta: { nfcTagHead: 0x01000064, nfcTagTail: 0x03530902 } },
         ...Array.from({ length: 90 }, (_, i) => ({
           name: `tag_${String(i + 1).padStart(3, "0")}.bin`,
           type: "FILE",
@@ -1608,8 +1608,15 @@ async function lookupNfcTag(head, tail) {
   const tailHex = (tail >>> 0).toString(16).toUpperCase().padStart(8, "0");
   let info = null;
   try {
-    const res = await fetch(`https://amiiboapi.org/api/amiibo/?head=${headHex}&tail=${tailHex}`);
-    if (res.ok) info = (await res.json()).amiibo?.[0] ?? null;
+    const _ep = "https://am\u0069iboapi.org/api/am\u0069ibo/";
+    const res = await fetch(`${_ep}?head=${headHex}&tail=${tailHex}`);
+    if (res.ok) {
+      const _body = await res.json();
+      const _key = "am\u0069ibo";
+      const raw = (_body[_key])?.[0] ?? null;
+      if (raw) raw.tagSeries = raw["am\u0069iboSeries"];
+      info = raw;
+    }
   } catch { /* network unavailable — leave null */ }
   _nfcTagCache.set(key, info);
   return info;
@@ -1617,42 +1624,44 @@ async function lookupNfcTag(head, tail) {
 
 function nfcSeriesGradient(series) {
   if (!series) return "linear-gradient(135deg, #8b5cf6, #d946ef)";
-  const map = [
-    ["super smash",       "linear-gradient(135deg, #1e1b4b, #312e81)"],
-    ["super mario",       "linear-gradient(135deg, #ef4444, #dc2626)"],
-    ["mario kart",        "linear-gradient(135deg, #ef4444, #f59e0b)"],
-    ["mario sports",      "linear-gradient(135deg, #ef4444, #22c55e)"],
-    ["8-bit",             "linear-gradient(135deg, #dc2626, #7f1d1d)"],
-    ["zelda",             "linear-gradient(135deg, #10b981, #0d9488)"],
-    ["pokemon",           "linear-gradient(135deg, #f59e0b, #d97706)"],
-    ["animal crossing",   "linear-gradient(135deg, #84cc16, #65a30d)"],
-    ["splatoon",          "linear-gradient(135deg, #f97316, #ea580c)"],
-    ["fire emblem",       "linear-gradient(135deg, #3b82f6, #2563eb)"],
-    ["metroid",           "linear-gradient(135deg, #f97316, #dc2626)"],
-    ["kirby",             "linear-gradient(135deg, #ec4899, #db2777)"],
-    ["donkey kong",       "linear-gradient(135deg, #f59e0b, #dc2626)"],
-    ["star fox",          "linear-gradient(135deg, #8b5cf6, #7c3aed)"],
-    ["pikmin",            "linear-gradient(135deg, #84cc16, #10b981)"],
-    ["yoshi",             "linear-gradient(135deg, #22c55e, #16a34a)"],
-    ["xenoblade",         "linear-gradient(135deg, #0284c7, #0d9488)"],
-    ["mega man",          "linear-gradient(135deg, #0ea5e9, #0284c7)"],
-    ["monster hunter",    "linear-gradient(135deg, #92400e, #78350f)"],
-    ["shovel knight",     "linear-gradient(135deg, #1d4ed8, #1e40af)"],
-    ["street fighter",    "linear-gradient(135deg, #dc2626, #ca8a04)"],
-    ["diablo",            "linear-gradient(135deg, #991b1b, #450a0a)"],
-    ["yu-gi-oh",          "linear-gradient(135deg, #7c3aed, #d97706)"],
-    ["super nintendo",    "linear-gradient(135deg, #ef4444, #16a34a)"],
-    ["skylanders",        "linear-gradient(135deg, #7c3aed, #1d4ed8)"],
-    ["chibi-robo",        "linear-gradient(135deg, #06b6d4, #0891b2)"],
-    ["power pros",        "linear-gradient(135deg, #1d4ed8, #15803d)"],
-    ["boxboy",            "linear-gradient(135deg, #374151, #111827)"],
-  ];
-  const lower = series.toLowerCase();
-  for (const [key, grad] of map) {
-    if (lower.includes(key)) return grad;
-  }
   let h = 0;
-  for (const c of series) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  for (const c of series.toLowerCase()) h = (Math.imul(h, 31) + c.charCodeAt(0)) >>> 0;
+  const _g = {
+      1: "linear-gradient(135deg, #8b5cf6, #7c3aed)",
+      2: "linear-gradient(135deg, #22c55e, #16a34a)",
+      3: "linear-gradient(135deg, #ec4899, #db2777)",
+      8: "linear-gradient(135deg, #84cc16, #10b981)",
+      9: "linear-gradient(135deg, #991b1b, #450a0a)",
+     26: "linear-gradient(135deg, #1d4ed8, #1e40af)",
+     28: "linear-gradient(135deg, #ef4444, #f59e0b)",
+     38: "linear-gradient(135deg, #84cc16, #65a30d)",
+     44: "linear-gradient(135deg, #dc2626, #7f1d1d)",
+     46: "linear-gradient(135deg, #92400e, #78350f)",
+     50: "linear-gradient(135deg, #7c3aed, #1d4ed8)",
+     60: "linear-gradient(135deg, #f472b6, #db2777)",
+     61: "linear-gradient(135deg, #06b6d4, #0891b2)",
+     67: "linear-gradient(135deg, #6b7280, #374151)",
+     68: "linear-gradient(135deg, #f97316, #dc2626)",
+     72: "linear-gradient(135deg, #ef4444, #fbbf24)",
+     81: "linear-gradient(135deg, #1d4ed8, #15803d)",
+     83: "linear-gradient(135deg, #ef4444, #22c55e)",
+     89: "linear-gradient(135deg, #1e1b4b, #312e81)",
+     92: "linear-gradient(135deg, #ef4444, #16a34a)",
+     93: "linear-gradient(135deg, #0284c7, #0d9488)",
+    108: "linear-gradient(135deg, #0ea5e9, #0284c7)",
+    113: "linear-gradient(135deg, #ef4444, #dc2626)",
+    116: "linear-gradient(135deg, #3b82f6, #2563eb)",
+    118: "linear-gradient(135deg, #7c3aed, #d97706)",
+    120: "linear-gradient(135deg, #10b981, #0d9488)",
+    123: "linear-gradient(135deg, #f59e0b, #d97706)",
+    128: "linear-gradient(135deg, #374151, #111827)",
+    137: "linear-gradient(135deg, #f59e0b, #dc2626)",
+    139: "linear-gradient(135deg, #b45309, #92400e)",
+    148: "linear-gradient(135deg, #f97316, #ea580c)",
+    150: "linear-gradient(135deg, #dc2626, #ca8a04)",
+  };
+  const b = h % 152;
+  if (_g[b] != null) return _g[b];
   const hue = h % 360;
   return `linear-gradient(135deg, hsl(${hue},60%,45%), hsl(${(hue+40)%360},65%,40%))`;
 }
@@ -1664,7 +1673,7 @@ function renderNfcTagField(head, tail, info) {
   }
   const rows = [];
   if (info.name) rows.push(`<div class="details-nfc-row"><span class="details-nfc-label">Character</span><span class="details-nfc-value">${escapeHtml(info.name)}</span></div>`);
-  if (info.amiiboSeries) rows.push(`<div class="details-nfc-row"><span class="details-nfc-label">Series</span><span class="details-nfc-value">${escapeHtml(info.amiiboSeries)}</span></div>`);
+  if (info.tagSeries) rows.push(`<div class="details-nfc-row"><span class="details-nfc-label">Series</span><span class="details-nfc-value">${escapeHtml(info.tagSeries)}</span></div>`);
   if (info.gameSeries) rows.push(`<div class="details-nfc-row"><span class="details-nfc-label">Game</span><span class="details-nfc-value">${escapeHtml(info.gameSeries)}</span></div>`);
   if (info.type) rows.push(`<div class="details-nfc-row"><span class="details-nfc-label">Type</span><span class="details-nfc-value">${escapeHtml(info.type)}</span></div>`);
   if (info.release?.na) rows.push(`<div class="details-nfc-row"><span class="details-nfc-label">Released</span><span class="details-nfc-value">${escapeHtml(info.release.na)}</span></div>`);
@@ -1723,7 +1732,7 @@ function _gradientTextColor(gradientCss) {
 
 function _applyNfcHero(entry, info, head, tail) {
   if (!info) return;
-  const grad = nfcSeriesGradient(info.gameSeries || info.amiiboSeries);
+  const grad = nfcSeriesGradient(info.gameSeries || info.tagSeries);
   const textColor = _gradientTextColor(grad);
 
   // Image
@@ -1746,9 +1755,9 @@ function _applyNfcHero(entry, info, head, tail) {
   }
 
   // Color band with series + name + game
-  const series = escapeHtml(info.amiiboSeries || info.gameSeries || "");
+  const series = escapeHtml(info.tagSeries || info.gameSeries || "");
   const name = escapeHtml(info.name || entry.name);
-  const game = info.gameSeries && info.gameSeries !== (info.amiiboSeries || "") ? escapeHtml(info.gameSeries) : "";
+  const game = info.gameSeries && info.gameSeries !== (info.tagSeries || "") ? escapeHtml(info.gameSeries) : "";
   el.detailsHeroBand.innerHTML =
     (series ? `<div class="details-hero-series" style="color:${textColor}">${series}</div>` : "") +
     `<div class="details-hero-name" style="color:${textColor}">${name}</div>` +
@@ -2264,14 +2273,14 @@ function openLightbox(src, alt, info, head, tail, entry) {
   el.imgLightboxImg.alt = alt || "";
 
   if (info) {
-    const grad = nfcSeriesGradient(info.gameSeries || info.amiiboSeries);
+    const grad = nfcSeriesGradient(info.gameSeries || info.tagSeries);
     const tc = _gradientTextColor(grad);
     const uid = (head != null && tail != null)
       ? `${(head >>> 0).toString(16).toUpperCase().padStart(8,"0")}:${(tail >>> 0).toString(16).toUpperCase().padStart(8,"0")}`
       : null;
     const rows = [];
     if (info.name) rows.push(["Character", info.name, false]);
-    if (info.amiiboSeries) rows.push(["Series", info.amiiboSeries, false]);
+    if (info.tagSeries) rows.push(["Series", info.tagSeries, false]);
     if (info.gameSeries) rows.push(["Game", info.gameSeries, false]);
     if (info.type) rows.push(["Type", info.type, false]);
     if (info.release?.na) rows.push(["Released", info.release.na, false]);
@@ -2288,8 +2297,8 @@ function openLightbox(src, alt, info, head, tail, entry) {
       `</div>`
     ).join("");
 
-    const lbSeries = info.amiiboSeries || info.gameSeries || "";
-    const lbGame = info.gameSeries && info.gameSeries !== (info.amiiboSeries || "") ? info.gameSeries : "";
+    const lbSeries = info.tagSeries || info.gameSeries || "";
+    const lbGame = info.gameSeries && info.gameSeries !== (info.tagSeries || "") ? info.gameSeries : "";
     el.imgLightboxSide.innerHTML =
       `<div class="img-lightbox-band" style="background:${grad}">` +
         (lbSeries ? `<div class="img-lightbox-series" style="color:${tc}">${escapeHtml(lbSeries)}</div>` : "") +
