@@ -1624,43 +1624,50 @@ async function lookupNfcTag(head, tail) {
 
 function nfcSeriesGradient(series) {
   if (!series) return "linear-gradient(135deg, #8b5cf6, #d946ef)";
-  const _s = (...cc) => String.fromCharCode(...cc);
-  const _map = [
-    [_s(115,117,112,101,114,32,115,109,97,115,104),        "linear-gradient(135deg, #1e1b4b, #312e81)"],
-    [_s(115,117,112,101,114,32,109,97,114,105,111),        "linear-gradient(135deg, #ef4444, #dc2626)"],
-    [_s(109,97,114,105,111,32,107,97,114,116),             "linear-gradient(135deg, #ef4444, #f59e0b)"],
-    [_s(109,97,114,105,111,32,115,112,111,114,116),        "linear-gradient(135deg, #ef4444, #22c55e)"],
-    [_s(56,45,98,105,116),                                 "linear-gradient(135deg, #dc2626, #7f1d1d)"],
-    [_s(122,101,108,100,97),                               "linear-gradient(135deg, #10b981, #0d9488)"],
-    [_s(112,111,107,101,109,111,110),                      "linear-gradient(135deg, #f59e0b, #d97706)"],
-    [_s(97,110,105,109,97,108,32,99,114,111,115,115),      "linear-gradient(135deg, #84cc16, #65a30d)"],
-    [_s(115,112,108,97,116,111,111,110),                   "linear-gradient(135deg, #f97316, #ea580c)"],
-    [_s(102,105,114,101,32,101,109,98,108,101,109),        "linear-gradient(135deg, #3b82f6, #2563eb)"],
-    [_s(109,101,116,114,111,105,100),                      "linear-gradient(135deg, #f97316, #dc2626)"],
-    [_s(107,105,114,98,121),                               "linear-gradient(135deg, #ec4899, #db2777)"],
-    [_s(100,111,110,107,101,121),                          "linear-gradient(135deg, #f59e0b, #dc2626)"],
-    [_s(115,116,97,114,32,102,111,120),                    "linear-gradient(135deg, #8b5cf6, #7c3aed)"],
-    [_s(112,105,107,109,105,110),                          "linear-gradient(135deg, #84cc16, #10b981)"],
-    [_s(121,111,115,104,105),                              "linear-gradient(135deg, #22c55e, #16a34a)"],
-    [_s(120,101,110,111,98,108,97,100,101),                "linear-gradient(135deg, #0284c7, #0d9488)"],
-    [_s(109,101,103,97,32,109,97,110),                     "linear-gradient(135deg, #0ea5e9, #0284c7)"],
-    [_s(109,111,110,115,116,101,114,32,104,117,110,116),   "linear-gradient(135deg, #92400e, #78350f)"],
-    [_s(115,104,111,118,101,108),                          "linear-gradient(135deg, #1d4ed8, #1e40af)"],
-    [_s(115,116,114,101,101,116,32,102,105,103,104,116),   "linear-gradient(135deg, #dc2626, #ca8a04)"],
-    [_s(100,105,97,98,108,111),                            "linear-gradient(135deg, #991b1b, #450a0a)"],
-    [_s(121,117,45,103,105),                               "linear-gradient(135deg, #7c3aed, #d97706)"],
-    [_s(110,105,110,116,101,110,100),                      "linear-gradient(135deg, #ef4444, #16a34a)"],
-    [_s(115,107,121,108,97,110,100,101,114),               "linear-gradient(135deg, #7c3aed, #1d4ed8)"],
-    [_s(99,104,105,98,105),                                "linear-gradient(135deg, #06b6d4, #0891b2)"],
-    [_s(112,111,119,101,114,32,112,114,111),               "linear-gradient(135deg, #1d4ed8, #15803d)"],
-    [_s(98,111,120,98,111,121),                            "linear-gradient(135deg, #374151, #111827)"],
+  // More specific entries appear before their general counterpart to prevent partial clashes.
+  // Keys are lowercase substrings of tagSeries / gameSeries as returned by amiiboapi.org.
+  const map = [
+    ["kirby air rider",         "linear-gradient(135deg, #ec4899, #3b82f6)"],   // Kirby Air Riders
+    ["monster hunter rise",     "linear-gradient(135deg, #ef4444, #f97316)"],   // Monster Hunter Rise
+    ["mario sports superstars", "linear-gradient(135deg, #ef4444, #22c55e)"],   // Mario Sports Superstars
+    ["my mario wooden blocks",  "linear-gradient(135deg, #ef4444, #d97706)"],   // My Mario Wooden Blocks
+    ["super smash bros.",       "linear-gradient(135deg, #1e1b4b, #312e81)"],   // Super Smash Bros.
+    ["super mario bros.",       "linear-gradient(135deg, #ef4444, #dc2626)"],   // Super Mario Bros.
+    ["super nintendo world",    "linear-gradient(135deg, #ef4444, #f59e0b)"],   // Super Nintendo World
+    ["yoshi's woolly world",    "linear-gradient(135deg, #22c55e, #16a34a)"],   // Yoshi's Woolly World
+    ["xenoblade chronicles",    "linear-gradient(135deg, #0284c7, #7c3aed)"],   // Xenoblade Chronicles 3
+    ["legend of zelda",         "linear-gradient(135deg, #16a34a, #ca8a04)"],   // Legend Of Zelda
+    ["street fighter",          "linear-gradient(135deg, #dc2626, #111827)"],   // Street Fighter 6
+    ["animal crossing",         "linear-gradient(135deg, #84cc16, #65a30d)"],   // Animal Crossing
+    ["monster hunter",          "linear-gradient(135deg, #92400e, #78350f)"],   // Monster Hunter
+    ["shovel knight",           "linear-gradient(135deg, #1d4ed8, #1e40af)"],   // Shovel Knight
+    ["donkey kong",             "linear-gradient(135deg, #f59e0b, #dc2626)"],   // Donkey Kong
+    ["fire emblem",             "linear-gradient(135deg, #3b82f6, #2563eb)"],   // Fire Emblem
+    ["mario kart",              "linear-gradient(135deg, #ef4444, #f59e0b)"],   // Mario Kart (gameSeries)
+    ["skylanders",              "linear-gradient(135deg, #7c3aed, #1d4ed8)"],   // Skylanders
+    ["chibi-robo",              "linear-gradient(135deg, #f59e0b, #d97706)"],   // Chibi-Robo!
+    ["yu-gi-oh",                "linear-gradient(135deg, #7c3aed, #d97706)"],   // Yu-Gi-Oh!
+    ["power pros",              "linear-gradient(135deg, #1d4ed8, #15803d)"],   // Power Pros
+    ["star fox",                "linear-gradient(135deg, #8b5cf6, #7c3aed)"],   // Star Fox (gameSeries)
+    ["splatoon",                "linear-gradient(135deg, #f97316, #84cc16)"],   // Splatoon
+    ["mega man",                "linear-gradient(135deg, #0ea5e9, #0284c7)"],   // Mega Man
+    ["metroid",                 "linear-gradient(135deg, #f97316, #dc2626)"],   // Metroid
+    ["pokemon",                 "linear-gradient(135deg, #f59e0b, #ef4444)"],   // Pokemon
+    ["boxboy",                  "linear-gradient(135deg, #374151, #111827)"],   // BoxBoy!
+    ["pikmin",                  "linear-gradient(135deg, #84cc16, #10b981)"],   // Pikmin
+    ["8-bit mario",             "linear-gradient(135deg, #dc2626, #7f1d1d)"],   // 8-bit Mario
+    ["kirby",                   "linear-gradient(135deg, #ec4899, #db2777)"],   // Kirby
+    ["diablo",                  "linear-gradient(135deg, #991b1b, #450a0a)"],   // Diablo
+    ["pragmata",                "linear-gradient(135deg, #06b6d4, #1e1b4b)"],   // Pragmata
+    ["yoshi",                   "linear-gradient(135deg, #22c55e, #16a34a)"],   // Yoshi (gameSeries fallback)
   ];
   const lower = series.toLowerCase();
-  for (const [key, grad] of _map) {
+  for (const [key, grad] of map) {
     if (lower.includes(key)) return grad;
   }
   let h = 0;
   for (const c of lower) h = (Math.imul(h, 31) + c.charCodeAt(0)) >>> 0;
+  const hue = h % 360;
   return `linear-gradient(135deg, hsl(${hue},60%,45%), hsl(${(hue+40)%360},65%,40%))`;
 }
 
