@@ -10,6 +10,7 @@ const MAX_FILE_PATH_BYTES = 63;
 const MAX_FOLDER_PATH_BYTES = 55;
 const LARGE_DIR_THRESHOLD = 80;
 const LARGE_BATCH_THRESHOLD = 200;
+const SYNC_EXCLUDE_PATHS = ["e:/amiibo/fav", "e:/amiibo/data"]; // device paths excluded from sync on both sides
 const PIXL_RELEASES_URL = "https://github.com/solosky/pixl.js/releases";
 const PIXL_LATEST_API = "https://api.github.com/repos/solosky/pixl.js/releases/latest";
 const DEV_MOCK_UPLOAD_BYTES_PER_SECOND = 192 * 1024;
@@ -81,6 +82,12 @@ function escapeHtml(value) {
     .replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 }
 
+function isSyncExcluded(remotePath) {
+  const lower = remotePath.toLowerCase();
+  return SYNC_EXCLUDE_PATHS.some(p => lower === p || lower.startsWith(p + "/"));
+}
+
+
 function getBaseName(path) {
   const parts = path.split("/").filter(Boolean);
   return parts.length === 0 ? "" : parts[parts.length - 1];
@@ -106,10 +113,9 @@ function validateRemotePath(path, kind) {
 }
 
 function sortEntries(entries) {
-  return [...entries].sort((a, b) => {
-    if (a.type !== b.type) return a.type === "DIR" ? -1 : 1;
-    return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" });
-  });
+  return [...entries].sort((a, b) =>
+    a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" })
+  );
 }
 
 function triggerDownload(data, filename) {
@@ -787,9 +793,11 @@ const el = {
   btnUploadStart: document.getElementById("btnUploadStart"),
   btnUploadAbort: document.getElementById("btnUploadAbort"),
   btnUploadClear: document.getElementById("btnUploadClear"),
+  uploadExecuteZone: document.getElementById("uploadExecuteZone"),
   folderInput: document.getElementById("folderInput"),
   filesInput: document.getElementById("filesInput"),
   btnUploadClose: document.getElementById("btnUploadClose"),
+  btnSync: document.getElementById("btnSync"),
 
   // Log side sheet
   imgLightbox: document.getElementById("imgLightbox"),
@@ -834,9 +842,6 @@ const el = {
   btnSheetInfo: document.getElementById("btnSheetInfo"),
   btnSheetUpload: document.getElementById("btnSheetUpload"),
 
-  // Sidebar action buttons
-
-
   // Modals
   formatModal: document.getElementById("formatModal"),
   btnFormatCancel: document.getElementById("btnFormatCancel"),
@@ -865,14 +870,6 @@ const el = {
   uploadWarnMsg: document.getElementById("uploadWarnMsg"),
   btnUploadWarnCancel: document.getElementById("btnUploadWarnCancel"),
   btnUploadWarnConfirm: document.getElementById("btnUploadWarnConfirm"),
-
-  sanitizeModalFiles: document.getElementById("sanitizeModalFiles"),
-  btnSanitizeFilesCancel: document.getElementById("btnSanitizeFilesCancel"),
-  btnSanitizeFilesConfirm: document.getElementById("btnSanitizeFilesConfirm"),
-
-  sanitizeModalFolders: document.getElementById("sanitizeModalFolders"),
-  btnSanitizeFoldersCancel: document.getElementById("btnSanitizeFoldersCancel"),
-  btnSanitizeFoldersConfirm: document.getElementById("btnSanitizeFoldersConfirm"),
 
   sanitizeModalNone: document.getElementById("sanitizeModalNone"),
   sanitizeNonePath: document.getElementById("sanitizeNonePath"),
@@ -939,6 +936,12 @@ const state = {
   folderCache: new Map(),
   truncated: false,
   disconnectToast: null,
+  uploadBase: "E:/",         // path where the upload plan was built — anchors runSync
+  syncState: "idle",         // "idle" | "scanning" | "done" | "error"
+  syncSkippedFiles: [],      // [{ remotePath, size }]
+  syncSkippedFolders: new Set(),  // Set<remotePath>
+  syncOrphans: [],           // [{ remotePath, size, kind, deletable, status }]
+  syncOrphanChecked: new Set(),   // Set<remotePath>
 };
 
 function showInputError(inputEl, errorEl, message) {
@@ -1070,7 +1073,7 @@ function setConnState(newState) {
   el.mainOverlayIcon.hidden = connecting || reconnecting;
   el.mainOverlaySpinner.hidden = !(connecting || reconnecting);
   el.mainOverlayTitle.textContent = reconnecting ? "Reconnecting\u2026" : connecting ? "Connecting to Pixl.js\u2026" : "No device connected";
-  el.mainOverlaySub.textContent = (connecting || reconnecting) ? "" : "Browse and manage files on your Pixl.js over Bluetooth.";
+  el.mainOverlaySub.textContent = (connecting || reconnecting) ? "" : "Connect to browse and manage files on your Pixl.js over Bluetooth.";
   el.btnConnectCta.hidden = connecting || reconnecting;
   el.btnConnectCta.disabled = connecting || reconnecting;
 
@@ -1303,17 +1306,17 @@ async function connectOrDisconnect() {
     const wasReconnecting = state.connState === "reconnecting";
     if (state.disconnectToast) { removeToast(state.disconnectToast); state.disconnectToast = null; }
     if (state.connState !== "disconnected") setConnState("disconnected");
-    if (wasReconnecting) showErrorToast("Reconnection timed out");
+    if (wasReconnecting) showErrorToast("Reconnection timed out", "Try disconnecting and reconnecting.");
   };
   state.client.onReconnecting = () => {
     if (state.abortController) state.abortController.abort();
     setConnState("reconnecting");
-    state.disconnectToast = showErrorToast("Disconnected", "Attempting to reconnect...");
+    state.disconnectToast = showErrorToast("Connection lost", "Reconnecting…");
   };
   state.client.onReconnect = async () => {
     if (state.disconnectToast) { removeToast(state.disconnectToast); state.disconnectToast = null; }
     setConnState("connected");
-    showSuccessToast("Reconnected");
+    showSuccessToast("Back online");
     if (state.currentPath) {
       invalidateCache();
       await browseFolder(state.currentPath);
@@ -1323,7 +1326,7 @@ async function connectOrDisconnect() {
   try {
     await state.client.connect();
     setConnState("connected");
-    showSuccessToast("Connection complete");
+    showSuccessToast("Connected");
 
     // Get version info
     const ver = await state.client.getVersion();
@@ -1361,7 +1364,7 @@ async function devConnect() {
   state.client = new DevMockClient();
   state.client.onDisconnect = () => setConnState("disconnected");
   setConnState("connected");
-  showSuccessToast("Connection complete");
+  showSuccessToast("Connected");
 
   log("\u2192 getVersion()", "cmd");
   const ver = await state.client.getVersion();
@@ -1464,7 +1467,7 @@ el.btnFormatConfirm.addEventListener("click", async () => {
     const res = await state.client.formatDrive("E");
     if (res.ok) {
       log("Drive E: formatted successfully.");
-      showSuccessToast("Format complete");
+      showSuccessToast("Drive formatted");
       invalidateCache();
       // Refresh drive info
       const dr = await state.client.listDrives();
@@ -1487,7 +1490,7 @@ el.btnFormatConfirm.addEventListener("click", async () => {
 
 // Close modals on backdrop click
 for (const modal of [el.formatModal, el.newFolderModal, el.renameModal, el.deleteModal,
-    el.sanitizeModalFiles, el.sanitizeModalFolders, el.sanitizeModalNone]) {
+    el.sanitizeModalNone]) {
   modal.addEventListener("click", (e) => {
     if (e.target === modal) {
       if (modal === el.formatModal) {
@@ -1506,19 +1509,43 @@ function updateControls() {
   const connected = state.connState === "connected";
   const uploading = state.uploadActive;
   const atRoot = !state.currentPath || state.currentPath === "E:/";
+  const syncing = state.syncState === "scanning";
+  const queueHasItems = hasQueuedUploadState();
   el.btnRefresh.disabled = !connected || uploading;
   el.btnNewFolder.disabled = !connected || uploading;
-  el.sidebarDropZone.setAttribute("aria-disabled", String(!connected || uploading));
+  el.sidebarDropZone.setAttribute("aria-disabled", String(!connected || uploading || syncing));
   el.btnNormalize.disabled = !connected || uploading;
   el.btnFormat.disabled = !connected || uploading;
-  el.btnPickFolder.disabled = !connected || uploading;
-  el.btnPickFiles.disabled = !connected || uploading;
-  el.btnUploadStart.disabled = !connected || uploading || state.uploadPlan.length === 0;
+  el.btnPickFolder.disabled = !connected || uploading || syncing;
+  el.btnPickFiles.disabled = !connected || uploading || syncing;
+  el.btnSync.disabled = !connected || uploading || syncing || !queueHasItems;
+  el.btnSync.innerHTML = state.syncState === "done"
+    ? `<span class="ms-sm">sync</span> Rescan`
+    : `<span class="ms-sm">sync</span> Sync with device`;
+
+  // Execute zone: show when queue has items or upload is active
+  el.uploadExecuteZone.style.display = (queueHasItems || uploading) ? "flex" : "none";
+
+  // Start ↔ Stop swap
+  el.btnUploadStart.hidden = uploading;
+  el.btnUploadAbort.hidden = !uploading;
   el.btnUploadAbort.disabled = !uploading;
+
+  if (state.syncState === "done") {
+    el.btnUploadStart.innerHTML = `<span class="ms">upload</span> Upload`;
+    el.btnUploadStart.disabled = !connected || uploading ||
+      (state.uploadPlan.filter(i => i.kind === "file").length === 0 && state.syncOrphanChecked.size === 0);
+  } else {
+    el.btnUploadStart.innerHTML = `<span class="ms">play_arrow</span> Start`;
+    el.btnUploadStart.disabled = !connected || uploading || syncing || state.uploadPlan.length === 0;
+  }
+
   setButtonDisabledState(el.btnUploadClear, {
-    disabled: !uploading && state.uploadPlan.length === 0,
-    pseudoDisabled: uploading,
-    reason: "The queue cannot be cleared while an upload is in progress.",
+    disabled: !uploading && !syncing && !queueHasItems,
+    pseudoDisabled: uploading || syncing,
+    reason: uploading
+      ? "Cannot clear while uploading."
+      : "Cannot clear while scanning.",
   });
   setButtonDisabledState(el.btnUploadClose, {
     disabled: false,
@@ -1543,7 +1570,7 @@ async function browseFolder(path) {
   let entries, truncated = false;
   const cached = state.folderCache.get(path);
   if (cached) {
-    entries = cached.entries;
+    entries = sortEntries(cached.entries);
     truncated = cached.truncated;
   } else {    try {
       let res;
@@ -1576,10 +1603,10 @@ async function browseFolder(path) {
   // Update warning banner for current folder (always, whether cached or fresh)
   if (truncated) {
     el.folderWarningBanner.hidden = false;
-    el.folderWarningText.textContent = "Directory listing may be incomplete. Some entries could not be received over BLE.";
+    el.folderWarningText.textContent = "Listing may be incomplete — some entries couldn't load over Bluetooth.";
   } else if (entries.length >= LARGE_DIR_THRESHOLD) {
     el.folderWarningBanner.hidden = false;
-    el.folderWarningText.textContent = `This folder has ${entries.length} items. Browsing and uploads may be slow or unreliable over BLE.`;
+    el.folderWarningText.textContent = `This folder has ${entries.length} items. Large folders can be slow over Bluetooth.`;
   } else {
     el.folderWarningBanner.hidden = true;
     el.folderWarningText.textContent = "";
@@ -1775,15 +1802,15 @@ function getBrowserEmptyStateContent() {
   if (state.currentPath === "E:/") {
     return {
       icon: "storage",
-      title: "This device is empty",
-      sub: "There are no files or folders to display on this device.",
+      title: "Device is empty",
+      sub: "No files yet — drop some in to get started.",
     };
   }
 
   return {
     icon: "folder_open",
-    title: "This folder is empty",
-    sub: "There are no files or folders to display in this folder.",
+    title: "Folder is empty",
+    sub: "Nothing here yet.",
   };
 }
 
@@ -2044,7 +2071,7 @@ el.btnMobileUp.addEventListener("click", () => {
   el.tableWrap.addEventListener("touchend", () => {
     if (!_ptrActive) return;
     const h = parseFloat(el.ptrIndicator.style.height) || 0;
-    if (h >= PTR_THRESHOLD * 0.45 && state.currentPath && state.connected) {
+    if (h >= PTR_THRESHOLD * 0.45 && state.currentPath && state.connState === "connected") {
       el.ptrIndicator.classList.add("ptr-loading");
       el.ptrIndicator.classList.remove("ptr-ready");
       el.ptrIndicator.querySelector(".ptr-icon").style.transform = "";
@@ -2084,12 +2111,12 @@ el.btnNewFolderConfirm.addEventListener("click", async () => {
     const res = await state.client.createFolder(folderPath);
     if (res.ok) {
       log(`Created folder: ${folderPath}`);
-      showSuccessToast("Successfully created the folder");
+      showSuccessToast("Folder created");
       state.folderCache.delete(state.currentPath);
       await browseFolder(state.currentPath);
     } else {
       log(`Failed to create folder: ${res.error}`, "err");
-      showErrorToast("Could not create the folder");
+      showErrorToast("Folder creation failed");
     }
   } catch (err) {
     log(`Failed to create folder: ${err.message}`, "err");
@@ -2106,13 +2133,27 @@ el.btnNormalize.addEventListener("click", () => {
   openModal(el.sanitizeModalNone);
 });
 
-el.btnSanitizeFilesCancel.addEventListener("click", () => closeModal(el.sanitizeModalFiles));
-el.btnSanitizeFoldersCancel.addEventListener("click", () => closeModal(el.sanitizeModalFolders));
 el.btnSanitizeNoneCancel.addEventListener("click", () => closeModal(el.sanitizeModalNone));
 
 // === Context Panel ===
 
 function setPanelState(mode, entry) {
+  // When upload panel is active, file selection only opens the right details panel —
+  // it does not replace the left upload panel.
+  if (mode === "file" && state.panelMode === "upload") {
+    state.drawerEntry = entry;
+    el.detailsPanel.hidden = false;
+    if (entry) {
+      el.panelFileName.textContent = entry.name;
+      el.panelFileSize.textContent = formatBytes(entry.size);
+      el.detailsKind.textContent = entry.type === "FILE" ? "File" : "Folder";
+      const fullPath = joinChildPath(state.currentPath, entry.name);
+      el.detailsFilePath.textContent = fullPath;
+      if (el.detailsPathInRow) el.detailsPathInRow.textContent = fullPath;
+    }
+    return;
+  }
+
   // Left panel toggles between folder info and upload
   el.panelFolder.hidden = (mode === "upload");
   el.panelUpload.hidden = (mode !== "upload");
@@ -2233,13 +2274,23 @@ function setPanelState(mode, entry) {
 // Panel rename button — renames the currently displayed file
 // Details panel close button
 el.btnDetailsClose.addEventListener("click", () => {
-  setPanelState("folder");
+  if (state.panelMode === "upload") {
+    el.detailsPanel.hidden = true;
+    state.drawerEntry = null;
+  } else {
+    setPanelState("folder");
+  }
   if (isMobileViewport()) closeDetailsSheet();
 });
 
 // Details sheet backdrop click
 el.detailsSheetBackdrop.addEventListener("click", () => {
-  setPanelState("folder");
+  if (state.panelMode === "upload") {
+    el.detailsPanel.hidden = true;
+    state.drawerEntry = null;
+  } else {
+    setPanelState("folder");
+  }
   closeDetailsSheet();
 });
 
@@ -2354,21 +2405,31 @@ el.sidebarDropZone.addEventListener("dragleave", () => {
   if (_dropZoneCounter <= 0) { _dropZoneCounter = 0; el.sidebarDropZone.classList.remove("drag-over"); }
 });
 el.sidebarDropZone.addEventListener("dragover", (e) => { e.preventDefault(); });
-el.sidebarDropZone.addEventListener("drop", (e) => {
+el.sidebarDropZone.addEventListener("drop", async (e) => {
   e.preventDefault();
   _dropZoneCounter = 0;
   el.sidebarDropZone.classList.remove("drag-over");
   if (el.sidebarDropZone.getAttribute("aria-disabled") === "true") return;
-  const files = e.dataTransfer.files;
-  if (!files || files.length === 0) return;
-  const collected = collectFromFiles(files);
-  buildUploadPlan(collected.folders, collected.files);
-  setPanelState("upload");
+  const { items, files } = e.dataTransfer;
+  const hasEntryApi = items && items.length > 0 && typeof items[0].webkitGetAsEntry === "function";
+  if (!hasEntryApi && (!files || files.length === 0)) return;
+  try {
+    const collected = hasEntryApi
+      ? await collectFromDataTransfer(e.dataTransfer)
+      : collectFromFiles(files);
+    if (collected.files.length === 0 && collected.folders.size === 0) return;
+    buildUploadPlan(collected.folders, collected.files);
+    setPanelState("upload");
+  } catch (err) {
+    log(`Drop error: ${err.message}`, "err");
+  }
 });
 
 el.btnUploadClose.addEventListener("click", () => {
   if (el.btnUploadClose.getAttribute("aria-disabled") === "true") return;
-  // Return to previous panel state
+  resetUploadSessionState();
+  renderUploadQueue();
+  updateControls();
   if (state.panelPrevMode === "file" && state.drawerEntry) {
     setPanelState("file", state.drawerEntry);
   } else {
@@ -2429,10 +2490,10 @@ el.btnRenameConfirm.addEventListener("click", async () => {
     const res = await state.client.renamePath(oldPath, newPath);
     if (res.ok) {
       log(`Renamed: ${renameTarget} \u2192 ${newName}`);
-      showSuccessToast("Successfully renamed the item");
+      showSuccessToast("Renamed");
     } else {
       log(`Rename failed: ${res.error}`, "err");
-      showErrorToast("Could not rename the item");
+      showErrorToast("Rename failed");
     }
   } catch (err) {
     log(`Failed to rename: ${err.message}`, "err");
@@ -2477,24 +2538,24 @@ el.btnDeleteConfirm.addEventListener("click", async () => {
         const res = await state.client.removePath(item.path);
         if (res.ok) {
           deleted++;
+          log(`Deleted ${item.path}`, "ok");
         } else {
           failedPaths.push(item.path);
-          log(`Delete failed: ${item.path}: ${res.error}`, "err");
+          log(`Delete failed: ${item.path} — ${res.error}`, "err");
         }
       } catch (err) {
         failedPaths.push(item.path);
-        log(`Failed to delete: ${item.path}: ${err.message}`, "err");
+        log(`Delete failed: ${item.path} — ${err.message}`, "err");
       }
     }
-    log(`Deleted ${deleted} of ${total} ${total === 1 ? "item" : "items"}.`);
     if (deleted === total) {
-      showSuccessToast(`Successfully deleted ${deleted} ${deleted === 1 ? "item" : "items"}`);
+      showSuccessToast(`Deleted ${deleted} ${deleted === 1 ? "item" : "items"}`);
     } else if (deleted > 0) {
       const failedPathText = failedPaths.length > 1 ? `${failedPaths[0]} (+${failedPaths.length - 1} more)` : failedPaths[0];
-      showErrorToast(`Deleted ${deleted} of ${total} ${total === 1 ? "item" : "items"}`, `Failed: ${failedPathText}`);
+      showErrorToast(`Deleted ${deleted} of ${total} — some failed`, failedPathText);
     } else {
       const failedPathText = failedPaths.length > 1 ? `${failedPaths[0]} (+${failedPaths.length - 1} more)` : failedPaths[0];
-      showErrorToast(`Could not delete ${total === 1 ? "the item" : "the selected items"}`, failedPathText ? `Failed: ${failedPathText}` : "No items were deleted");
+      showErrorToast("Delete failed", failedPathText || "Nothing was deleted");
     }
   } finally {
     el.browserLockOverlay.classList.remove("active");
@@ -2573,33 +2634,31 @@ async function executeSanitize(allOps, allSkipped) {
       const res = await state.client.renamePath(op.from, op.to);
       if (res.ok) {
         renamed++;
+        log(`Renamed: ${op.from} → ${op.to}`, "ok");
       } else {
-        log(`Failed to rename: ${op.name}: ${res.error}`, "err");
+        log(`Rename failed: ${op.from} — ${res.error}`, "err");
       }
     } catch (err) {
-      log(`Failed to rename: ${op.name}: ${err.message}`, "err");
+      log(`Rename failed: ${op.from} — ${err.message}`, "err");
     }
   }
 
-  const parts = [`${renamed} renamed`];
   if (allSkipped.length > 0) {
-    parts.push(`${allSkipped.length} skipped`);
     for (const s of allSkipped) {
-      log(`Skipped ${s.name}: ${s.reason}`, "err");
+      log(`Skipped: ${s.name} — ${s.reason}`);
     }
   }
-  log(`Normalized: ${parts.join(", ")}`);
   const renamedText = `${renamed} ${renamed === 1 ? "item" : "items"}`;
   const totalText = `${allOps.length} ${allOps.length === 1 ? "item" : "items"}`;
   const skippedText = allSkipped.length > 0 ? `Skipped ${allSkipped.length} ${allSkipped.length === 1 ? "item" : "items"}` : "";
   if (renamed === allOps.length && renamed > 0) {
-    showSuccessToast(`Successfully normalized ${renamedText}`, skippedText);
+    showSuccessToast(`Renamed ${renamedText}`, skippedText);
   } else if (renamed > 0) {
-    showErrorToast(`Normalized ${renamedText} of ${totalText}`, skippedText);
+    showErrorToast(`Renamed ${renamedText} of ${totalText}`, skippedText);
   } else if (allOps.length > 0) {
-    showErrorToast("Could not normalize any items");
+    showErrorToast("Rename failed");
   } else {
-    showSuccessToast("No items needed normalization", skippedText);
+    showSuccessToast("Already lowercase", skippedText);
   }
 }
 
@@ -2611,7 +2670,7 @@ async function withBrowserLock(title, fn) {
     await fn();
   } catch (err) {
     log(err.message, "err");
-    showErrorToast("Could not normalize the selected items", err.message);
+    showErrorToast("Rename failed", err.message);
   } finally {
     el.browserLockOverlay.classList.remove("active");
     updateControls();
@@ -2619,63 +2678,6 @@ async function withBrowserLock(title, fn) {
     await browseFolder(state.currentPath);
   }
 }
-
-// --- Sanitize: files confirm ---
-
-el.btnSanitizeFilesConfirm.addEventListener("click", async () => {
-  closeModal(el.sanitizeModalFiles);
-  if (!state.client) return;
-  await withBrowserLock("Normalizing…", async () => {
-    const selected = state.entries.filter(e => state.selectedNames.has(e.name) && e.type === "FILE");
-    const { ops, skipped } = buildSanitizeOps(selected, state.currentPath, state.entries);
-    await executeSanitize(ops, skipped);
-  });
-});
-
-// --- Sanitize: folders confirm ---
-
-el.btnSanitizeFoldersConfirm.addEventListener("click", async () => {
-  closeModal(el.sanitizeModalFolders);
-  if (!state.client) return;
-
-  let scope;
-  try {
-    scope = readCheckedRadioValue("sanitizeFolderScope", "Normalize scope");
-  } catch (err) {
-    showErrorToast("Could not start normalization", err.message);
-    return;
-  }
-
-  await withBrowserLock("Normalizing…", async () => {
-    const allOps = [];
-    const allSkipped = [];
-
-    if (scope === "selected") {
-      const selected = state.entries.filter(e => state.selectedNames.has(e.name));
-      const { ops, skipped } = buildSanitizeOps(selected, state.currentPath, state.entries);
-      allOps.push(...ops);
-      allSkipped.push(...skipped);
-    } else {
-      const selectedEntries = state.entries.filter(e => state.selectedNames.has(e.name));
-      const selectedFolders = selectedEntries.filter(e => e.type === "DIR");
-      for (const folder of selectedFolders) {
-        const folderPath = joinChildPath(state.currentPath, folder.name);
-        const snapshots = await collectEntriesRecursive(folderPath);
-        for (const snap of snapshots) {
-          const { ops, skipped } = buildSanitizeOps(snap.entries, snap.parentPath);
-          allOps.push(...ops);
-          allSkipped.push(...skipped);
-        }
-      }
-      // Also rename the selected items themselves (shallower than contents, renamed last by executeSanitize sort)
-      const { ops, skipped } = buildSanitizeOps(selectedEntries, state.currentPath, state.entries);
-      allOps.push(...ops);
-      allSkipped.push(...skipped);
-    }
-
-    await executeSanitize(allOps, allSkipped);
-  });
-});
 
 // --- Sanitize: none confirm ---
 
@@ -2687,7 +2689,7 @@ el.btnSanitizeNoneConfirm.addEventListener("click", async () => {
   try {
     scope = readCheckedRadioValue("sanitizeNoneScope", "Normalize scope");
   } catch (err) {
-    showErrorToast("Could not start normalization", err.message);
+    showErrorToast("Rename failed", err.message);
     return;
   }
 
@@ -2764,6 +2766,54 @@ function collectFromFiles(fileList) {
   };
 }
 
+async function collectFromDataTransfer(dataTransfer) {
+  const folders = new Set();
+  const files = [];
+
+  // Capture entries synchronously before any await (items list clears after event)
+  const entries = Array.from(dataTransfer.items)
+    .filter(item => item.kind === "file")
+    .map(item => item.webkitGetAsEntry?.())
+    .filter(Boolean);
+
+  function readAllEntries(reader) {
+    return new Promise((resolve, reject) => {
+      const all = [];
+      function next() {
+        reader.readEntries(batch => {
+          if (batch.length === 0) resolve(all);
+          else { all.push(...batch); next(); }
+        }, reject);
+      }
+      next();
+    });
+  }
+
+  function fileFromEntry(entry) {
+    return new Promise((resolve, reject) => entry.file(resolve, reject));
+  }
+
+  async function walk(entry, pfx) {
+    if (entry.isDirectory) {
+      if (pfx) folders.add(pfx);
+      const children = await readAllEntries(entry.createReader());
+      for (const child of children) {
+        await walk(child, pfx ? `${pfx}/${child.name}` : child.name);
+      }
+    } else {
+      const f = await fileFromEntry(entry);
+      files.push({ relativePath: pfx, file: f });
+      collectFoldersFromPath(pfx, folders);
+    }
+  }
+
+  for (const entry of entries) {
+    await walk(entry, entry.name);
+  }
+
+  return { folders, files };
+}
+
 // --- Upload queue rendering ---
 
 function getQueueStatusIcon(status) {
@@ -2775,6 +2825,26 @@ function getQueueStatusIcon(status) {
     case "aborted": return '<span class="ms-sm queue-icon aborted">block</span>';
     default: return '';
   }
+}
+
+function hasQueuedUploadState() {
+  return state.uploadPlan.length > 0 ||
+    state.syncState === "scanning" ||
+    state.syncSkippedFiles.length > 0 ||
+    state.syncOrphans.length > 0;
+}
+
+function resetUploadSessionState() {
+  state.uploadPlan = [];
+  state.uploadWarnings = [];
+  state.uploadBase = "E:/";
+  state.syncState = "idle";
+  state.syncSkippedFiles = [];
+  state.syncSkippedFolders = new Set();
+  state.syncOrphans = [];
+  state.syncOrphanChecked = new Set();
+  state.transferSpeed = "";
+  resetUploadProgress([]);
 }
 
 function resetUploadProgress(plan = state.uploadPlan) {
@@ -2792,8 +2862,27 @@ function consumeCompletedUploadItem(item) {
 }
 
 function renderUploadSummary() {
+  if (!hasQueuedUploadState()) {
+    el.uploadProgressTotal.textContent = "Nothing queued";
+    return;
+  }
+
+  if (state.syncState === "done") {
+    const uploadCount = state.uploadPlan.filter(i => i.kind === "file").length;
+    const deleteCount = state.syncOrphanChecked.size;
+    if (uploadCount === 0 && deleteCount === 0) {
+      el.uploadProgressTotal.textContent = "Everything is in sync";
+    } else {
+      const parts = [];
+      if (uploadCount > 0) parts.push(`${uploadCount} file${uploadCount !== 1 ? "s" : ""} to upload`);
+      if (deleteCount > 0) parts.push(`${deleteCount} to delete`);
+      el.uploadProgressTotal.textContent = parts.join(" · ");
+    }
+    return;
+  }
+
   if (state.uploadTotalCount === 0) {
-    el.uploadProgressTotal.textContent = "No uploads queued";
+    el.uploadProgressTotal.textContent = "Nothing queued";
     return;
   }
 
@@ -2813,12 +2902,107 @@ function renderUploadSummary() {
     `<span>${totalPct}% (${escapeHtml(formatBytes(visibleBytes))} / ${escapeHtml(formatBytes(state.uploadTotalBytes))})${speedStr}</span>`;
 }
 
+function renderSyncQueue() {
+  const uploadFiles = state.uploadPlan.filter(i => i.kind === "file");
+  const unchangedCount = state.syncSkippedFiles.length;
+  const orphanCount = state.syncOrphans.length;
+  let html = "";
+
+  // Summary chips
+  const chipParts = [];
+  if (uploadFiles.length > 0) chipParts.push(`<span class="sync-chip sync-chip-upload">↑ ${uploadFiles.length} new</span>`);
+  if (unchangedCount > 0) chipParts.push(`<span class="sync-chip sync-chip-unchanged">${unchangedCount} up to date</span>`);
+  if (orphanCount > 0) chipParts.push(`<span class="sync-chip sync-chip-orphan">\u{1F5D1} ${orphanCount} orphaned</span>`);
+  html += `<div class="sync-chips">${chipParts.join("")}</div>`;
+
+  // Upload section — only render header when there are files
+  if (uploadFiles.length === 0) {
+    html += `<div class="queue-empty">Everything is in sync.</div>`;
+  } else {
+    html += `<div class="sync-section-header sync-header-upload">TO UPLOAD · ${uploadFiles.length}</div>`;
+    for (const item of uploadFiles) {
+      const icon = getQueueStatusIcon(item.status);
+      const baseName = escapeHtml(getBaseName(item.remotePath));
+      const title = escapeHtml(item.remotePath);
+      html += `<div class="queue-item">` +
+        `${icon}` +
+        `<span class="queue-name" title="${title}">${baseName}</span>` +
+        `<span class="queue-status">${escapeHtml(formatBytes(item.size))}</span>` +
+        `</div>`;
+    }
+  }
+
+  // Orphan section
+  if (orphanCount > 0) {
+    html += `<div class="sync-section-header sync-header-orphan">` +
+      `ON DEVICE ONLY · ${orphanCount}` +
+      `<button class="sync-delete-all-btn" type="button">Delete all</button>` +
+      `</div>`;
+    for (const orphan of state.syncOrphans) {
+      const baseName = escapeHtml(getBaseName(orphan.remotePath));
+      const title = escapeHtml(orphan.remotePath);
+      const suffix = orphan.kind === "folder" ? "/" : "";
+      if (!orphan.deletable) {
+        html += `<div class="queue-item queue-orphan-item">` +
+          `<span class="queue-name" title="${title}">${baseName}${suffix}</span>` +
+          `<em class="queue-orphan-nondeletable">folder has contents</em>` +
+          `</div>`;
+      } else if (orphan.status === "deleting") {
+        html += `<div class="queue-item queue-orphan-item">` +
+          `<span class="ms-sm spin queue-icon active">sync</span>` +
+          `<span class="queue-name" title="${title}">${baseName}${suffix}</span>` +
+          `<span class="queue-status active">deleting…</span>` +
+          `</div>`;
+      } else if (orphan.status === "deleted") {
+        html += `<div class="queue-item queue-orphan-item">` +
+          `<span class="ms-sm queue-icon done">check_circle</span>` +
+          `<span class="queue-name" title="${title}">${baseName}${suffix}</span>` +
+          `<span class="queue-status done">deleted</span>` +
+          `</div>`;
+      } else if (orphan.status === "error") {
+        html += `<div class="queue-item queue-orphan-item">` +
+          `<span class="ms-sm queue-icon error">error</span>` +
+          `<span class="queue-name" title="${title}">${baseName}${suffix}</span>` +
+          `<span class="queue-status error">error</span>` +
+          `</div>`;
+      } else {
+        // pending — checkbox
+        const checked = state.syncOrphanChecked.has(orphan.remotePath) ? " checked" : "";
+        html += `<div class="queue-item queue-orphan-item">` +
+          `<input type="checkbox" class="orphan-checkbox" data-path="${escapeHtml(orphan.remotePath)}"${checked}>` +
+          `<span class="queue-name" title="${title}">${baseName}${suffix}</span>` +
+          `<span class="queue-status">${escapeHtml(formatBytes(orphan.size))}</span>` +
+          `</div>`;
+      }
+    }
+  }
+
+  el.uploadQueue.innerHTML = html;
+}
+
 function renderUploadQueue() {
   renderUploadSummary();
 
+  if (state.syncState === "scanning") {
+    el.uploadQueue.innerHTML =
+      `<div class="sync-scanning"><span class="ms spin">sync</span><span class="sync-scanning-text"> Scanning device…</span></div>`;
+    el.uploadWarningBanner.hidden = true;
+    el.uploadWarningBanner.innerHTML = "";
+    return;
+  }
+
+  if (state.syncState === "done") {
+    renderSyncQueue();
+    el.uploadWarningBanner.hidden = true;
+    el.uploadWarningBanner.innerHTML = "";
+    return;
+  }
+
   if (state.uploadPlan.length === 0) {
-    const emptyText = state.uploadTotalCount > 0 ? "No remaining uploads" : "No uploads queued";
+    const emptyText = state.uploadTotalCount > 0 ? "Upload complete" : "Nothing queued yet";
     el.uploadQueue.innerHTML = `<div class="queue-empty">${emptyText}</div>`;
+    el.uploadWarningBanner.hidden = true;
+    el.uploadWarningBanner.innerHTML = "";
     return;
   }
 
@@ -2855,13 +3039,32 @@ function renderUploadQueue() {
 
   // Render upload warnings banner (from checkUploadPlanWarnings)
   if (state.uploadWarnings && state.uploadWarnings.length > 0 && !state.uploadActive) {
-    const bannerLines = state.uploadWarnings.map(w => `<li>${escapeHtml(w)}</li>`).join("");
+    const wasOpen = !!el.uploadWarningBanner.querySelector("details")?.open;
+    // Summary line (collapsed state)
+    const summaryParts = [];
+    for (const w of state.uploadWarnings) {
+      if (w.type === "large-dirs") summaryParts.push(`${w.dirs.length} crowded folder${w.dirs.length !== 1 ? "s" : ""}`);
+      else if (w.type === "large-batch") summaryParts.push(`~${w.mins} min upload`);
+    }
+    // Detail body (expanded state) — one block per problem, paths listed once
+    let bodyHtml = "";
+    for (const w of state.uploadWarnings) {
+      if (w.type === "large-dirs") {
+        const pathList = w.dirs.map(({ dir }) => `<li>${escapeHtml(dir)}</li>`).join("");
+        bodyHtml += `<p>${w.dirs.length} folder${w.dirs.length !== 1 ? "s" : ""} with many files — these may transfer slowly or stall:</p><ul>${pathList}</ul>`;
+      } else if (w.type === "large-batch") {
+        bodyHtml += `<p>${w.count} files total. Expect ${w.mins}+ minutes — keep the device nearby and the screen on to avoid drops.</p>`;
+      }
+    }
     el.uploadWarningBanner.className = "queue-warning";
     el.uploadWarningBanner.innerHTML =
-      `<div class="queue-warning-header">` +
-      `<span class="ms-sm">warning</span> Upload warnings` +
-      `</div>` +
-      `<ul>${bannerLines}</ul>`;
+      `<details${wasOpen ? " open" : ""}>` +
+      `<summary class="queue-warning-header">` +
+      `<span class="ms-sm">warning</span> ${escapeHtml(summaryParts.join(" · "))}` +
+      `<span class="ms-sm queue-warning-toggle">keyboard_arrow_down</span>` +
+      `</summary>` +
+      `<div class="queue-warning-body">${bodyHtml}</div>` +
+      `</details>`;
     el.uploadWarningBanner.hidden = false;
   } else {
     el.uploadWarningBanner.hidden = true;
@@ -2874,7 +3077,14 @@ function renderUploadQueue() {
 let planSeed = 0;
 
 function buildUploadPlan(folders, files) {
+  state.syncState = "idle";
+  state.syncSkippedFiles = [];
+  state.syncSkippedFolders = new Set();
+  state.syncOrphans = [];
+  state.syncOrphanChecked = new Set();
+
   const base = state.currentPath || "E:/";
+  state.uploadBase = base;
   const sortedFolders = [...folders].sort((a, b) => {
     const d = a.split("/").length - b.split("/").length;
     return d !== 0 ? d : a.localeCompare(b);
@@ -2883,7 +3093,8 @@ function buildUploadPlan(folders, files) {
   const skipped = [];
 
   for (const rel of sortedFolders) {
-    const remote = joinChildPath(base, rel);
+    const remote = joinChildPath(base, rel.toLowerCase());
+    if (isSyncExcluded(remote)) continue;
     try {
       validateRemotePath(remote, "folder");
     } catch (err) {
@@ -2895,7 +3106,8 @@ function buildUploadPlan(folders, files) {
   }
 
   for (const entry of files) {
-    const remote = joinChildPath(base, entry.relativePath);
+    const remote = joinChildPath(base, entry.relativePath.toLowerCase());
+    if (isSyncExcluded(remote)) continue;
     try {
       validateRemotePath(remote, "file");
     } catch (err) {
@@ -2914,9 +3126,9 @@ function buildUploadPlan(folders, files) {
 
   if (plan.length === 0) {
     if (skipped.length > 0) {
-      showErrorToast("Could not add any upload items", formatUploadInputFeedback(skipped));
+      showErrorToast("No files added to queue", formatUploadInputFeedback(skipped));
     } else {
-      showWarningToast("No upload items were added");
+      showWarningToast("No files added to queue");
     }
     return;
   }
@@ -2930,31 +3142,44 @@ function buildUploadPlan(folders, files) {
 function checkUploadPlanWarnings(plan) {
   const warnings = [];
   // Per-directory density check
+  const largeDirs = [];
   const perDir = new Map();
   for (const item of plan) {
     const parent = getParentPath(item.remotePath);
     perDir.set(parent, (perDir.get(parent) || 0) + 1);
   }
-  // Add cached entry counts for existing items
   for (const [dir, planned] of perDir) {
     const cached = state.folderCache.get(dir);
     const existing = cached ? cached.entries.length : 0;
     const total = planned + existing;
-    if (total >= LARGE_DIR_THRESHOLD) {
-      warnings.push(`${dir} will have ${total} items (${existing} existing + ${planned} new), which may cause slow or unreliable BLE directory reads`);
-    }
+    if (total >= LARGE_DIR_THRESHOLD) largeDirs.push({ dir, total });
   }
+  if (largeDirs.length > 0) warnings.push({ type: "large-dirs", dirs: largeDirs });
   // Total batch size check
   if (plan.length >= LARGE_BATCH_THRESHOLD) {
     const mins = Math.ceil(plan.length * 0.75 / 60);
-    warnings.push(`This upload has ${plan.length} items. Protocol overhead alone may take ${mins}+ minutes, and long transfers risk connection drops`);
+    warnings.push({ type: "large-batch", count: plan.length, mins });
   }
   return warnings;
 }
 
+function warningsToStrings(warnings) {
+  const lines = [];
+  for (const w of warnings) {
+    if (w.type === "large-dirs") {
+      for (const { dir } of w.dirs) {
+        lines.push(`${dir} has many files and may transfer slowly or stall`);
+      }
+    } else if (w.type === "large-batch") {
+      lines.push(`${w.count} files total — expect ${w.mins}+ minutes. Keep the device nearby and screen on to avoid drops`);
+    }
+  }
+  return lines;
+}
+
 function showUploadWarningModal(warnings) {
   return new Promise(resolve => {
-    const lines = warnings.map(w => `<li>${escapeHtml(w)}</li>`).join("");
+    const lines = warningsToStrings(warnings).map(w => `<li>${escapeHtml(w)}</li>`).join("");
     el.uploadWarnMsg.innerHTML =
       `<ul class="modal-list">${lines}</ul>` +
       `<p class="modal-note">You can still proceed, but the upload may be slow or fail partway through.</p>`;
@@ -2971,10 +3196,159 @@ function showUploadWarningModal(warnings) {
   });
 }
 
+// --- Sync ---
+
+async function runSync() {
+  if (!state.client || state.connState !== "connected") return;
+  if (state.syncState === "scanning") return;
+
+  state.syncState = "scanning";
+  state.syncSkippedFiles = [];
+  state.syncSkippedFolders = new Set();
+  state.syncOrphans = [];
+  state.syncOrphanChecked = new Set();
+  updateControls();
+  renderUploadQueue();
+
+  const deviceTree = new Map(); // remotePath → { size, kind }
+  let scanCount = 0;
+
+  function setScanText(msg) {
+    const span = el.uploadQueue.querySelector(".sync-scanning-text");
+    if (span) span.textContent = " " + msg;
+  }
+
+  async function walk(path) {
+    const res = await state.client.readFolder(path);
+    if (!res.ok) throw new Error(`readFolder(${path}): ${res.error}`);
+    if (res.truncated) throw new Error(`Directory listing truncated at ${path}`);
+    state.folderCache.set(path, { entries: sortEntries(res.data), truncated: false });
+    scanCount++;
+    setScanText(`Scanning device… · ${scanCount} folder${scanCount !== 1 ? "s" : ""}`);
+    for (const entry of res.data) {
+      const entryPath = joinChildPath(path, entry.name);
+      if (isSyncExcluded(entryPath)) continue;
+      const kind = entry.type === "DIR" ? "folder" : "file";
+      deviceTree.set(entryPath, { size: entry.size, kind });
+      if (kind === "folder") await walk(entryPath);
+    }
+  }
+
+  el.browserLockOverlay.classList.add("active");
+  el.browserLockTitle.textContent = "Scanning device…";
+
+  try {
+    const base = state.uploadBase || "E:/";
+    const normBase = base.endsWith("/") ? base : base + "/";
+
+    // Compute scan roots from the upload plan
+    const scanRoots = new Set();
+    for (const item of state.uploadPlan) {
+      if (!item.remotePath.startsWith(normBase)) continue;
+      const topSeg = item.remotePath.slice(normBase.length).split("/")[0];
+      if (!topSeg) continue;
+      const rootPath = normBase + topSeg;
+      const isFolder = state.uploadPlan.some(i => i.remotePath === rootPath && i.kind === "folder");
+      const hasNested = item.remotePath.slice(normBase.length).includes("/");
+      if (isFolder || hasNested) scanRoots.add(rootPath);
+    }
+    for (const root of scanRoots) {
+      try { await walk(root); }
+      catch (err) { if (!err.message.includes("Not found")) throw err; }
+    }
+  } catch (err) {
+    el.browserLockOverlay.classList.remove("active");
+    log(`Sync scan failed: ${err.message}`, "err");
+    showErrorToast("Scan failed", err.message);
+    state.syncState = "error";
+    updateControls();
+    renderUploadQueue();
+    return;
+  }
+
+  el.browserLockOverlay.classList.remove("active");
+
+  // Snapshot original plan paths (pre-filter) to detect orphans
+  const localPaths = new Set(state.uploadPlan.map(i => i.remotePath));
+
+  // Filter plan: remove items already on device at same size
+  const skippedFiles = [];
+  const skippedFolders = new Set();
+  const filteredPlan = [];
+  for (const item of state.uploadPlan) {
+    if (item.kind === "file") {
+      const remote = deviceTree.get(item.remotePath);
+      if (remote && remote.kind === "file" && remote.size === item.size) {
+        skippedFiles.push({ remotePath: item.remotePath, size: item.size });
+        continue;
+      }
+    } else if (item.kind === "folder" && deviceTree.has(item.remotePath)) {
+      skippedFolders.add(item.remotePath);
+      continue;
+    }
+    filteredPlan.push(item);
+  }
+
+  // Find orphans: device entries absent from the original local plan
+  const orphans = [];
+  for (const [remotePath, { size, kind }] of deviceTree) {
+    if (localPaths.has(remotePath)) continue;
+    let deletable = kind === "file";
+    if (kind === "folder") {
+      const prefix = remotePath.endsWith("/") ? remotePath : remotePath + "/";
+      deletable = ![...deviceTree.keys()].some(p => p.startsWith(prefix));
+    }
+    orphans.push({ remotePath, size, kind, deletable, status: "pending" });
+  }
+
+  state.syncSkippedFiles = skippedFiles;
+  state.syncSkippedFolders = skippedFolders;
+  state.syncOrphans = orphans;
+  state.uploadPlan = filteredPlan;
+  state.uploadWarnings = checkUploadPlanWarnings(filteredPlan);
+  state.syncState = "done";
+  resetUploadProgress(filteredPlan);
+  renderUploadQueue();
+  updateControls();
+}
+
+async function runOrphanDeletion() {
+  const toDelete = state.syncOrphans.filter(
+    o => o.deletable && o.status === "pending" && state.syncOrphanChecked.has(o.remotePath)
+  );
+  let deletedCount = 0;
+  let errorCount = 0;
+  for (const orphan of toDelete) {
+    orphan.status = "deleting";
+    renderUploadQueue();
+    try {
+      const res = await state.client.removePath(orphan.remotePath);
+      if (!res.ok) throw new Error(res.error);
+      orphan.status = "deleted";
+      deletedCount++;
+      log(`Removed ${orphan.remotePath}`, "ok");
+      state.folderCache.delete(getParentPath(orphan.remotePath));
+    } catch (err) {
+      log(`Remove failed: ${orphan.remotePath} — ${err.message}`, "err");
+      orphan.status = "error";
+      errorCount++;
+    }
+    renderUploadQueue();
+  }
+  if (errorCount > 0) {
+    showWarningToast(`Removed ${deletedCount} of ${deletedCount + errorCount} from device (${errorCount} failed)`);
+  } else if (deletedCount > 0) {
+    showSuccessToast(`Removed ${deletedCount} ${deletedCount !== 1 ? "files" : "file"} from device`);
+  }
+}
+
 // --- Upload execution ---
 
 async function runUpload() {
-  if (!state.client || state.connState !== "connected" || state.uploadActive || state.uploadPlan.length === 0) return;
+  const hasUploads = state.uploadPlan.filter(i => i.kind === "file").length > 0;
+  const hasOrphanDeletions = state.syncOrphanChecked.size > 0;
+  if (!state.client || state.connState !== "connected" || state.uploadActive) return;
+  if (!hasUploads && !hasOrphanDeletions) return;
 
   if (state.uploadWarnings && state.uploadWarnings.length > 0) {
     const confirmed = await showUploadWarningModal(state.uploadWarnings);
@@ -3034,21 +3408,28 @@ async function runUpload() {
         renderUploadQueue();
       }, state.abortController.signal);
       item.transferred = item.size;
+      log(`Uploaded ${item.remotePath} (${formatBytes(item.size)})`, "ok");
       consumeCompletedUploadItem(item);
       renderUploadQueue();
     }
-    const uploadedFileText = fileItems.length === 1 ? "1 file" : `${fileItems.length} files`;
-    log(`Successfully uploaded ${uploadedFileText}.`);
-    showSuccessToast(`Successfully uploaded ${uploadedFileText}`);
+    // Phase 2: Orphan deletion
+    if (!state.abortController.signal.aborted && state.syncOrphanChecked.size > 0) {
+      await runOrphanDeletion();
+    }
+
+    if (fileItems.length > 0) {
+      const uploadedFileText = fileItems.length === 1 ? "1 file" : `${fileItems.length} files`;
+      showSuccessToast(`Uploaded ${uploadedFileText}`);
+    }
   } catch (err) {
     log(`Upload error: ${err.message}`, "err");
     const isReconnecting = state.connState === "reconnecting";
     const isConnectionLoss = !isReconnecting && /GATT|NetworkError|disconnected/i.test(err.message);
     const isUserAbort = !isReconnecting && !isConnectionLoss && state.abortController && state.abortController.signal.aborted;
     if (isUserAbort) {
-      showErrorToast("Upload was cancelled");
+      showErrorToast("Upload cancelled");
     } else if (!isReconnecting && !isConnectionLoss) {
-      showErrorToast("Could not complete the upload");
+      showErrorToast("Upload failed");
     }
     const active = state.uploadPlan.find(i => i.status === "active");
     if (active) active.status = isUserAbort ? "aborted" : "error";
@@ -3057,10 +3438,16 @@ async function runUpload() {
     }
     renderUploadQueue();
   } finally {
+    state.syncState = "idle";
+    state.syncSkippedFiles = [];
+    state.syncSkippedFolders = new Set();
+    state.syncOrphans = [];
+    state.syncOrphanChecked = new Set();
     state.uploadActive = false;
     state.abortController = null;
     state.transferSpeed = "";
     el.browserLockOverlay.classList.remove("active");
+    renderUploadQueue();
     updateControls();
     if (state.connState === "connected" && state.client && state.client.device) {
       invalidateCache();
@@ -3106,6 +3493,35 @@ el.filesInput.addEventListener("change", (e) => {
 
 el.btnUploadStart.addEventListener("click", runUpload);
 
+el.btnSync.addEventListener("click", runSync);
+
+// Orphan checkbox toggle (event delegation — survives innerHTML re-renders)
+el.uploadQueue.addEventListener("change", (e) => {
+  if (!e.target.classList.contains("orphan-checkbox")) return;
+  const path = e.target.dataset.path;
+  if (e.target.checked) {
+    state.syncOrphanChecked.add(path);
+  } else {
+    state.syncOrphanChecked.delete(path);
+  }
+  renderUploadSummary();
+  updateControls();
+});
+
+// "Delete all" button in orphan section header (event delegation)
+el.uploadQueue.addEventListener("click", (e) => {
+  const btn = e.target.closest(".sync-delete-all-btn");
+  if (!btn) return;
+  for (const orphan of state.syncOrphans) {
+    if (orphan.deletable && orphan.status === "pending") {
+      state.syncOrphanChecked.add(orphan.remotePath);
+    }
+  }
+  renderSyncQueue();
+  renderUploadSummary();
+  updateControls();
+});
+
 el.btnUploadAbort.addEventListener("click", () => {
   if (state.abortController) {
     state.abortController.abort();
@@ -3115,9 +3531,7 @@ el.btnUploadAbort.addEventListener("click", () => {
 
 el.btnUploadClear.addEventListener("click", () => {
   if (el.btnUploadClear.getAttribute("aria-disabled") === "true") return;
-  state.uploadPlan = [];
-  state.uploadWarnings = [];
-  resetUploadProgress([]);
+  resetUploadSessionState();
   renderUploadQueue();
   updateControls();
 });
