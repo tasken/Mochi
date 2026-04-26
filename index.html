@@ -111,8 +111,8 @@
         </div>
         <div class="sidebar-drop-zone" id="sidebarDropZone" role="button" tabindex="0" aria-label="Drop files to upload, or click to browse">
           <span class="ms sidebar-drop-icon">cloud_upload</span>
-          <span class="sidebar-drop-title">Drop files here</span>
-          <span class="sidebar-drop-sub">or click to browse your computer</span>
+          <span class="sidebar-drop-title">Drop files or folders here</span>
+          <span class="sidebar-drop-sub">or click to browse</span>
         </div>
       </div>
 
@@ -124,21 +124,29 @@
           <span class="panel-label">Upload</span>
           <button class="btn-icon ghost" id="btnUploadClose" title="Close"><span class="ms-sm">close</span></button>
         </div>
+
+        <!-- Zone 1: source pickers -->
         <div class="panel-button-row">
           <button class="panel-button-grow" id="btnPickFolder"><span class="ms">folder</span> Folder</button>
           <button class="panel-button-grow" id="btnPickFiles"><span class="ms">upload_file</span> Files</button>
         </div>
-        <div class="panel-button-row">
+        <button class="upload-sync-btn ghost" id="btnSync" disabled>
+          <span class="ms-sm">sync</span> Sync with device
+        </button>
+
+        <!-- Zone 2: execute (shown when queue has items or uploading) -->
+        <div class="upload-execute-zone" id="uploadExecuteZone" style="display:none">
           <button class="primary panel-button-grow" id="btnUploadStart" disabled><span class="ms">play_arrow</span> Start</button>
-          <button class="danger panel-button-grow" id="btnUploadAbort" disabled><span class="ms">stop</span> Stop</button>
-          <button class="ghost panel-button-grow" id="btnUploadClear" disabled><span class="ms">delete</span> Clear</button>
+          <button class="danger panel-button-grow upload-stop-btn" id="btnUploadAbort" disabled hidden><span class="ms">stop</span> Stop</button>
+          <button class="btn-icon ghost" id="btnUploadClear" disabled title="Clear queue" aria-label="Clear queue"><span class="ms">delete</span></button>
         </div>
+
         <div id="uploadSummary" class="upload-summary">
-          <span class="summary-label">Queue summary</span>
-          <span id="uploadProgressTotal">No uploads queued</span>
+          <span class="summary-label">Summary</span>
+          <span id="uploadProgressTotal">Nothing queued</span>
         </div>
         <div id="uploadWarningBanner" hidden></div>
-        <div id="uploadQueue"><div class="queue-empty">No uploads queued</div></div>
+        <div id="uploadQueue"><div class="queue-empty">Nothing queued yet</div></div>
         <input id="folderInput" type="file" hidden multiple webkitdirectory directory>
         <input id="filesInput" type="file" hidden multiple>
       </div>
@@ -147,7 +155,7 @@
       <div class="panel-footer">
         <span id="navCommit"></span>
         <span class="panel-footer-sep">&middot;</span>
-        <a href="https://github.com/tasken/MochiNest" target="_blank" rel="noopener">GitHub</a>
+        <a href="https://github.com/tasken/Mochi" target="_blank" rel="noopener">GitHub</a>
       </div>
     </aside>
     </div><!-- end sheet-container -->
@@ -158,8 +166,8 @@
       <div class="browser-lock-overlay" id="browserLockOverlay">
         <div class="browser-lock-card">
           <span class="ms">lock</span>
-          <span class="browser-lock-title" id="browserLockTitle">Operation in progress</span>
-          <span class="browser-lock-sub">File browsing is paused until this finishes.</span>
+          <span class="browser-lock-title" id="browserLockTitle">Working…</span>
+          <span class="browser-lock-sub">File browsing is paused.</span>
         </div>
       </div>
 
@@ -221,7 +229,7 @@
           <div class="browser-empty-card">
             <span class="ms browser-empty-icon" id="browserEmptyIcon">folder_open</span>
             <span class="browser-empty-title" id="browserEmptyTitle">This folder is empty</span>
-            <span class="browser-empty-sub" id="browserEmptySub">There are no files or folders to display here.</span>
+            <span class="browser-empty-sub" id="browserEmptySub">Nothing here yet.</span>
           </div>
         </div>
         <table id="fileTable">
@@ -320,8 +328,8 @@
     </div>
     <div class="modal-body">
       <div class="modal-icon-badge warning"><span class="ms">warning</span></div>
-      <div class="modal-body-title">Erase all files on Pixl.js?</div>
-      <p id="formatModalMsg">Formatting permanently removes every file and folder on the device. Firmware is not affected. This action cannot be undone.</p>
+      <div class="modal-body-title">Erase everything on Pixl.js?</div>
+      <p id="formatModalMsg">This will permanently erase all files and folders on the device. Firmware is not affected. This cannot be undone.</p>
       <div class="modal-actions">
         <button class="btn-labeled ghost" id="btnFormatCancel">Cancel</button>
         <button class="btn-labeled danger" id="btnFormatConfirm"><span class="ms">diamond</span> Format drive</button>
@@ -373,12 +381,12 @@
 <div id="deleteModal" class="modal-overlay">
   <div class="modal-box">
     <div class="modal-header">
-      <span class="modal-header-title">Delete items</span>
+      <span class="modal-header-title">Delete</span>
       <button class="modal-close" data-modal-close aria-label="Close"><span class="ms">close</span></button>
     </div>
     <div class="modal-body">
       <div class="modal-icon-badge danger"><span class="ms">delete</span></div>
-      <div class="modal-body-title">Permanently delete <span id="deleteCount">0</span> item?</div>
+      <div class="modal-body-title">Delete <span id="deleteCount">0</span> item?</div>
       <p id="deleteModalMsg"></p>
       <div class="modal-actions">
         <button class="btn-labeled ghost" id="btnDeleteCancel">Cancel</button>
@@ -392,57 +400,14 @@
 <div id="uploadWarnModal" class="modal-overlay">
   <div class="modal-box">
     <div class="modal-header">
-      <span class="modal-header-title">Upload warnings</span>
+      <span class="modal-header-title">Before you continue</span>
       <button class="modal-close" data-modal-close aria-label="Close"><span class="ms">close</span></button>
     </div>
     <div class="modal-body">
       <div id="uploadWarnMsg"></div>
       <div class="modal-actions">
         <button class="btn-labeled ghost" id="btnUploadWarnCancel">Cancel</button>
-        <button class="btn-labeled primary" id="btnUploadWarnConfirm">Upload anyway</button>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- Sanitize names modal — files selected -->
-<div id="sanitizeModalFiles" class="modal-overlay sanitize-modal">
-  <div class="modal-box">
-    <div class="modal-header">
-      <span class="modal-header-title">Normalize names</span>
-      <button class="modal-close" data-modal-close aria-label="Close"><span class="ms">close</span></button>
-    </div>
-    <div class="modal-body">
-      <p>Normalize <strong id="sanitizeFilesCount">0 selected files</strong> to lowercase?</p>
-      <p id="sanitizeFilesList" class="modal-helper-copy"></p>
-      <div class="modal-actions">
-        <button class="btn-labeled ghost" id="btnSanitizeFilesCancel">Cancel</button>
-        <button class="btn-labeled primary" id="btnSanitizeFilesConfirm">Normalize</button>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- Sanitize names modal — folders selected -->
-<div id="sanitizeModalFolders" class="modal-overlay sanitize-modal">
-  <div class="modal-box">
-    <div class="modal-header">
-      <span class="modal-header-title">Normalize names</span>
-      <button class="modal-close" data-modal-close aria-label="Close"><span class="ms">close</span></button>
-    </div>
-    <div class="modal-body">
-      <p>Selection includes folders. How deep should this go?</p>
-      <div class="modal-choice-list">
-        <label class="modal-choice-option">
-          <input type="radio" name="sanitizeFolderScope" value="selected" checked> Only the selected items
-        </label>
-        <label class="modal-choice-option">
-          <input type="radio" name="sanitizeFolderScope" value="recursive"> Recursive, includes all contents
-        </label>
-      </div>
-      <div class="modal-actions">
-        <button class="btn-labeled ghost" id="btnSanitizeFoldersCancel">Cancel</button>
-        <button class="btn-labeled primary" id="btnSanitizeFoldersConfirm">Normalize</button>
+        <button class="btn-labeled primary" id="btnUploadWarnConfirm">Continue</button>
       </div>
     </div>
   </div>
@@ -456,7 +421,7 @@
       <button class="modal-close" data-modal-close aria-label="Close"><span class="ms">close</span></button>
     </div>
     <div class="modal-body">
-      <p>What should be renamed in <strong class="modal-inline-mono" id="sanitizeNonePath"></strong>?</p>
+      <p>What should be renamed to lowercase in <strong class="modal-inline-mono" id="sanitizeNonePath"></strong>?</p>
       <div class="modal-choice-list">
         <label class="modal-choice-option">
           <input type="radio" name="sanitizeNoneScope" value="files" checked> Files in this folder only
@@ -470,7 +435,7 @@
       </div>
       <div class="modal-actions">
         <button class="btn-labeled ghost" id="btnSanitizeNoneCancel">Cancel</button>
-        <button class="btn-labeled primary" id="btnSanitizeNoneConfirm">Rename</button>
+        <button class="btn-labeled primary" id="btnSanitizeNoneConfirm">Rename all</button>
       </div>
     </div>
   </div>
