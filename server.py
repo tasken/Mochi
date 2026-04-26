@@ -1,4 +1,4 @@
-"""Dev HTTPS server for MochiNest local development.
+"""Dev HTTPS server for Mochi local development.
 
 Usage (via invoke):
     inv serve
