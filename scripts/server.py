@@ -4,30 +4,27 @@ Usage (via invoke):
     inv serve
 
 Direct usage:
-    python3 server.py [--bind 0.0.0.0] [--port 8443] [--cert F] [--key F] [--host DISPLAY]
+    python3 scripts/server.py [--bind 0.0.0.0] [--port 8443] [--cert F] [--key F] [--host DISPLAY] [--directory DIR]
 """
 import argparse
+import functools
 import http.server
-import os
 import ssl
 import subprocess
 
 
 def _port_owner(port):
-    """Return a human-readable description of what is using *port*, or None."""
     try:
         out = subprocess.check_output(
             ["ss", "-tlnp", f"sport = :{port}"],
             stderr=subprocess.DEVNULL,
             text=True,
         )
-        # ss output: State  Recv-Q  Send-Q  Local Address:Port  ...  users:(("name",pid=N,...))
         for line in out.splitlines():
             if f":{port}" in line and "users:" in line:
                 return line.strip()
     except Exception:
         pass
-    # Fallback: lsof
     try:
         out = subprocess.check_output(
             ["lsof", "-nP", "-iTCP", f"-i:{port}", "-sTCP:LISTEN"],
@@ -42,9 +39,10 @@ def _port_owner(port):
     return None
 
 
-def run(bind, port, certfile=None, keyfile=None, display_host=None):
+def run(bind, port, certfile=None, keyfile=None, display_host=None, directory="app"):
+    handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory=directory)
     try:
-        httpd = http.server.ThreadingHTTPServer((bind, port), http.server.SimpleHTTPRequestHandler)
+        httpd = http.server.ThreadingHTTPServer((bind, port), handler)
     except OSError as exc:
         if exc.errno == 98:  # Address already in use
             info = _port_owner(port)
@@ -61,7 +59,7 @@ def run(bind, port, certfile=None, keyfile=None, display_host=None):
     else:
         scheme = "http"
     host = display_host or (bind if bind != "0.0.0.0" else "localhost")
-    print(f"Serving {scheme}://{host}:{port}/")
+    print(f"Serving {scheme}://{host}:{port}/ from {directory}/")
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:
@@ -78,5 +76,6 @@ if __name__ == "__main__":
     ap.add_argument("--cert", default=None)
     ap.add_argument("--key", default=None)
     ap.add_argument("--host", default=None, help="Display hostname in the startup URL")
+    ap.add_argument("--directory", default="app", help="Directory to serve (default: app)")
     args = ap.parse_args()
-    run(args.bind, args.port, args.cert, args.key, args.host)
+    run(args.bind, args.port, args.cert, args.key, args.host, args.directory)
