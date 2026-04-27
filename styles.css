@@ -1240,17 +1240,14 @@ button.dev:hover:not(:disabled) { background: #fde68a; }
   #selectionCount { font-weight: 600; font-size: var(--fs-s); color: #374151; }
 
   /* --- Selection banner (appears below nav bar when rows are selected) --- */
-  .selection-banner[hidden] { display: none; }
+  /* Nav / selection state swap inside the same bar */
+  .sb-nav { display: flex; flex: 1; align-items: center; gap: 4px; min-width: 0; }
+  .sb-sel { display: none; }
 
-  .selection-banner {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 0 12px;
-    height: 44px;
-    background: rgba(139,92,246,0.07);
-    border-bottom: 1px solid rgba(139,92,246,0.15);
-    flex-shrink: 0;
+  .selection-bar.has-selection { background: rgba(139,92,246,0.07); border-bottom-color: rgba(139,92,246,0.18); }
+  .selection-bar.has-selection .sb-nav { display: none; }
+  .selection-bar.has-selection .sb-sel {
+    display: flex; flex: 1; align-items: center; gap: 6px;
   }
 
   .selection-banner-count {
@@ -1269,8 +1266,10 @@ button.dev:hover:not(:disabled) { background: #fde68a; }
     border-radius: 6px;
   }
 
-  .selection-banner #btnDeleteSelected {
-    margin-left: auto;
+  .selection-banner-spacer { flex: 1; }
+
+  .sb-sel #btnDownloadSelected,
+  .sb-sel #btnDeleteSelected {
     height: 28px;
     padding: 0 12px;
     font-size: var(--fs-s);
@@ -1754,6 +1753,18 @@ button.dev:hover:not(:disabled) { background: #fde68a; }
 
     /* Nav bar layout: back arrow + folder name on left, actions on right */
     .selection-bar { height: 52px; padding: 0 4px; gap: 2px; }
+    .selection-bar.has-selection { padding: 0 12px; gap: 6px; }
+
+    /* Selection action buttons — icon-only, full touch target */
+    .sb-sel #btnDownloadSelected,
+    .sb-sel #btnDeleteSelected {
+      width: 44px;
+      height: 44px;
+      padding: 0;
+      border-radius: 999px;
+      justify-content: center;
+      flex-shrink: 0;
+    }
     .nav-breadcrumb { display: none; }
     .mobile-up-btn { display: inline-flex; flex-shrink: 0; }
     .mobile-folder-name { display: block;
