@@ -35,5 +35,4 @@ To the [solosky/pixl.js](https://github.com/solosky/pixl.js) firmware developers
 
 ## License
 
-- GPL-2.0-only.
-- This project is provided as-is for educational and fan purposes. Check the repository license file for details before redistribution.
+MIT — see [LICENSE](LICENSE).
