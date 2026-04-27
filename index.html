@@ -175,17 +175,25 @@
 
       <!-- Navigation bar -->
       <div id="selectionBar" class="selection-bar">
-        <!-- Mobile: back button + current folder name (hidden on desktop) -->
-        <button class="btn-icon ghost mobile-up-btn" id="btnMobileUp" title="Go up" aria-label="Go up one level" hidden><span class="ms">arrow_back</span></button>
-        <span class="mobile-folder-name" id="mobileFolderName" aria-hidden="true"></span>
-        <!-- Desktop: full breadcrumb (hidden on mobile) -->
-        <nav class="nav-breadcrumb" id="navBreadcrumb"></nav>
-        <!-- Spacer pushes actions to the right on mobile -->
-        <span class="nav-spacer"></span>
-        <button class="btn-icon ghost" id="btnSheetInfo" title="Folder info" hidden><span class="ms">info</span></button>
-        <button class="ghost" id="btnRefresh" title="Refresh" aria-label="Refresh folder" hidden><span class="ms-sm">refresh</span> <span class="nav-btn-label">Refresh</span></button>
-        <button id="btnNewFolder" title="New folder" hidden><span class="ms-sm">create_new_folder</span> <span class="nav-btn-label">New folder</span></button>
-        <button class="primary" id="btnSheetUpload" title="Upload" hidden><span class="ms-sm">upload</span> <span class="nav-btn-label">Upload</span></button>
+        <!-- Nav state -->
+        <div class="sb-nav">
+          <button class="btn-icon ghost mobile-up-btn" id="btnMobileUp" title="Go up" aria-label="Go up one level" hidden><span class="ms">arrow_back</span></button>
+          <span class="mobile-folder-name" id="mobileFolderName" aria-hidden="true"></span>
+          <nav class="nav-breadcrumb" id="navBreadcrumb"></nav>
+          <span class="nav-spacer"></span>
+          <button class="btn-icon ghost" id="btnSheetInfo" title="Folder info" hidden><span class="ms">info</span></button>
+          <button class="ghost" id="btnRefresh" title="Refresh" aria-label="Refresh folder" hidden><span class="ms-sm">refresh</span> <span class="nav-btn-label">Refresh</span></button>
+          <button id="btnNewFolder" title="New folder" hidden><span class="ms-sm">create_new_folder</span> <span class="nav-btn-label">New folder</span></button>
+          <button class="primary" id="btnSheetUpload" title="Upload" hidden><span class="ms-sm">upload</span> <span class="nav-btn-label">Upload</span></button>
+        </div>
+        <!-- Selection state -->
+        <div class="sb-sel">
+          <span id="selectionCount" class="selection-banner-count"></span>
+          <button class="btn-labeled ghost selection-banner-clear" id="btnClearSelection">Clear</button>
+          <span class="selection-banner-spacer"></span>
+          <button class="btn-labeled ghost" id="btnDownloadSelected" hidden><span class="ms-sm">download</span> <span class="nav-btn-label">Download</span></button>
+          <button class="btn-labeled danger" id="btnDeleteSelected"><span class="ms-sm">delete</span> <span class="nav-btn-label">Delete</span></button>
+        </div>
       </div>
 
       <!-- Table column header (always visible, above banners) -->
@@ -212,13 +220,6 @@
       <div id="folderWarningBanner" class="folder-warning-banner" hidden>
         <span class="ms-sm folder-warning-icon">warning</span>
         <span class="folder-warning-text" id="folderWarningText"></span>
-      </div>
-
-      <!-- Selection banner (visible only when rows are selected) -->
-      <div id="selectionBanner" class="selection-banner" hidden>
-        <span id="selectionCount" class="selection-banner-count"></span>
-        <button class="btn-labeled ghost selection-banner-clear" id="btnClearSelection">Clear</button>
-        <button class="btn-labeled danger" id="btnDeleteSelected"><span class="ms-sm">delete</span> <span class="nav-btn-label">Delete</span></button>
       </div>
 
       <!-- File table -->

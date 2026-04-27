@@ -840,9 +840,10 @@ const el = {
   checkAll: document.getElementById("checkAll"),
 
   // Multi-select bar
-  selectionBanner: document.getElementById("selectionBanner"),
+  selectionBar: document.getElementById("selectionBar"),
   selectionCount: document.getElementById("selectionCount"),
   btnClearSelection: document.getElementById("btnClearSelection"),
+  btnDownloadSelected: document.getElementById("btnDownloadSelected"),
   btnDeleteSelected: document.getElementById("btnDeleteSelected"),
   folderWarningBanner: document.getElementById("folderWarningBanner"),
   folderWarningText: document.getElementById("folderWarningText"),
@@ -1929,10 +1930,12 @@ function renderBreadcrumb(path) {
 function updateSelectionBar() {
   const count = state.selectedNames.size;
   const hasSelection = count > 0;
-  el.selectionBanner.hidden = !hasSelection;
+  el.selectionBar.classList.toggle("has-selection", hasSelection);
   el.selectionCount.textContent = `${count} selected`;
   el.checkAll.checked = state.entries.length > 0 && count === state.entries.length;
   el.checkAll.indeterminate = hasSelection && count < state.entries.length;
+  const fileCount = state.entries.filter(e => state.selectedNames.has(e.name) && e.type === "FILE").length;
+  el.btnDownloadSelected.hidden = fileCount === 0;
 }
 
 function applySelectionToRows(checked) {
@@ -2030,6 +2033,34 @@ el.btnClearSelection.addEventListener("click", () => {
   state.selectedNames.clear();
   applySelectionToRows(false);
   updateSelectionBar();
+});
+
+el.btnDownloadSelected.addEventListener("click", async () => {
+  const files = state.entries.filter(e => state.selectedNames.has(e.name) && e.type === "FILE");
+  if (files.length === 0) return;
+  const toast = showSuccessToast(`Downloading ${files.length} file${files.length > 1 ? "s" : ""}…`);
+  let failed = 0;
+  for (const entry of files) {
+    try {
+      const res = await state.client.readFileData(joinChildPath(state.currentPath, entry.name));
+      if (res.ok) {
+        triggerDownload(res.data, entry.name);
+        await new Promise(r => setTimeout(r, 150));
+      } else {
+        log(`Download failed: ${entry.name}: ${res.error}`, "err");
+        failed++;
+      }
+    } catch (err) {
+      log(`Download failed: ${entry.name}: ${err.message}`, "err");
+      failed++;
+    }
+  }
+  if (toast) removeToast(toast);
+  if (failed > 0) {
+    showErrorToast(`${failed} file${failed > 1 ? "s" : ""} failed to download`);
+  } else {
+    showSuccessToast(`Downloaded ${files.length} file${files.length > 1 ? "s" : ""}`);
+  }
 });
 
 // Navigation bar — breadcrumb handles all navigation (including home crumb)
