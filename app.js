@@ -113,9 +113,12 @@ function validateRemotePath(path, kind) {
 }
 
 function sortEntries(entries) {
-  return [...entries].sort((a, b) =>
-    a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" })
-  );
+  return [...entries].sort((a, b) => {
+    const aDir = a.type === "DIR" ? 0 : 1;
+    const bDir = b.type === "DIR" ? 0 : 1;
+    if (aDir !== bDir) return aDir - bDir;
+    return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" });
+  });
 }
 
 function triggerDownload(data, filename) {
@@ -150,6 +153,7 @@ class PixlToolsClient {
     this.chunking = false;
     this.rxParts = [];
     this.createdFolders = new Set();
+    this.folderCache = new Map();
     this._pendingTimer = null;
     this._intentionalDisconnect = false;
     this._reconnecting = false;
@@ -259,6 +263,12 @@ class PixlToolsClient {
       try {
         this._log("Reconnecting...");
         await this._setupGatt(device);
+        if (this._abortReconnect) {
+          this._reconnecting = false;
+          this._abortReconnect = false;
+          if (this.device && this.device.gatt.connected) this.device.gatt.disconnect();
+          return;
+        }
         this._reconnecting = false;
         if (this.onReconnect) this.onReconnect();
         return;
@@ -555,13 +565,16 @@ class PixlToolsClient {
 class DevMockClient {
   constructor() {
     this.onDisconnect = null;
-    this.createdFolders = new Set(); // populated externally by browseFolder(); cleared by invalidateCache()
+    this.createdFolders = new Set();
+    this.folderCache = new Map();
     this.isDriveFormatted = false;
   }
 
   async connect() {}
 
   disconnect() {
+    this.folderCache.clear();
+    this.createdFolders.clear();
     this.onDisconnect?.();
   }
 
@@ -617,7 +630,7 @@ class DevMockClient {
         })),
       ],
     };
-    return { ok: true, data: fs[path] ?? [] };
+    return { ok: true, data: sortEntries(fs[path] ?? []) };
   }
 
   // Mutations always succeed but are not reflected in readFolder (static mock).
@@ -933,7 +946,6 @@ const state = {
   uploadTotalBytes: 0,
   uploadCompletedCount: 0,
   uploadCompletedBytes: 0,
-  folderCache: new Map(),
   truncated: false,
   disconnectToast: null,
   uploadBase: "E:/",         // path where the upload plan was built — anchors runSync
@@ -1292,8 +1304,11 @@ async function checkFirmwareVersion(deviceVersion) {
 }
 
 async function connectOrDisconnect() {
+  if (state.connState === "connecting") return;
   if (state.connState === "connected" || state.connState === "reconnecting") {
+    if (state.disconnectToast) { removeToast(state.disconnectToast); state.disconnectToast = null; }
     if (state.client) state.client.disconnect();
+    invalidateCache();
     setConnState("disconnected");
     return;
   }
@@ -1307,6 +1322,7 @@ async function connectOrDisconnect() {
     if (state.disconnectToast) { removeToast(state.disconnectToast); state.disconnectToast = null; }
     if (state.connState !== "disconnected") setConnState("disconnected");
     if (wasReconnecting) showErrorToast("Reconnection timed out", "Try disconnecting and reconnecting.");
+    invalidateCache();
   };
   state.client.onReconnecting = () => {
     if (state.abortController) state.abortController.abort();
@@ -1557,8 +1573,10 @@ function updateControls() {
 // === Cache ===
 
 function invalidateCache() {
-  state.folderCache.clear();
-  if (state.client) state.client.createdFolders.clear();
+  if (state.client) {
+    state.client.folderCache.clear();
+    state.client.createdFolders.clear();
+  }
 }
 
 // === File Browser ===
@@ -1568,7 +1586,7 @@ async function browseFolder(path) {
 
   // Check cache first
   let entries, truncated = false;
-  const cached = state.folderCache.get(path);
+  const cached = state.client.folderCache.get(path);
   if (cached) {
     entries = sortEntries(cached.entries);
     truncated = cached.truncated;
@@ -1585,7 +1603,7 @@ async function browseFolder(path) {
       }
       entries = sortEntries(res.data);
       truncated = res.truncated || false;
-      state.folderCache.set(path, { entries, truncated });
+      state.client.folderCache.set(path, { entries, truncated });
       for (const e of entries) {
         if (e.type === "DIR") state.client.createdFolders.add(joinChildPath(path, e.name));
       }
@@ -2024,7 +2042,7 @@ el.navBreadcrumb.addEventListener("click", (e) => {
 // Toolbar buttons
 el.btnRefresh.addEventListener("click", () => {
   if (state.currentPath) {
-    state.folderCache.delete(state.currentPath);
+    state.client.folderCache.delete(state.currentPath);
     browseFolder(state.currentPath);
   }
 });
@@ -2075,7 +2093,7 @@ el.btnMobileUp.addEventListener("click", () => {
       el.ptrIndicator.classList.add("ptr-loading");
       el.ptrIndicator.classList.remove("ptr-ready");
       el.ptrIndicator.querySelector(".ptr-icon").style.transform = "";
-      state.folderCache.delete(state.currentPath);
+      state.client.folderCache.delete(state.currentPath);
       browseFolder(state.currentPath).finally(() => _ptrReset());
     } else {
       _ptrReset();
@@ -2112,7 +2130,7 @@ el.btnNewFolderConfirm.addEventListener("click", async () => {
     if (res.ok) {
       log(`Created folder: ${folderPath}`);
       showSuccessToast("Folder created");
-      state.folderCache.delete(state.currentPath);
+      state.client.folderCache.delete(state.currentPath);
       await browseFolder(state.currentPath);
     } else {
       log(`Failed to create folder: ${res.error}`, "err");
@@ -3149,7 +3167,7 @@ function checkUploadPlanWarnings(plan) {
     perDir.set(parent, (perDir.get(parent) || 0) + 1);
   }
   for (const [dir, planned] of perDir) {
-    const cached = state.folderCache.get(dir);
+    const cached = state.client.folderCache.get(dir);
     const existing = cached ? cached.entries.length : 0;
     const total = planned + existing;
     if (total >= LARGE_DIR_THRESHOLD) largeDirs.push({ dir, total });
@@ -3222,7 +3240,7 @@ async function runSync() {
     const res = await state.client.readFolder(path);
     if (!res.ok) throw new Error(`readFolder(${path}): ${res.error}`);
     if (res.truncated) throw new Error(`Directory listing truncated at ${path}`);
-    state.folderCache.set(path, { entries: sortEntries(res.data), truncated: false });
+    state.client.folderCache.set(path, { entries: sortEntries(res.data), truncated: false });
     scanCount++;
     setScanText(`Scanning device… · ${scanCount} folder${scanCount !== 1 ? "s" : ""}`);
     for (const entry of res.data) {
@@ -3327,7 +3345,7 @@ async function runOrphanDeletion() {
       orphan.status = "deleted";
       deletedCount++;
       log(`Removed ${orphan.remotePath}`, "ok");
-      state.folderCache.delete(getParentPath(orphan.remotePath));
+      state.client.folderCache.delete(getParentPath(orphan.remotePath));
     } catch (err) {
       log(`Remove failed: ${orphan.remotePath} — ${err.message}`, "err");
       orphan.status = "error";
