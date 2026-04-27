@@ -15,7 +15,7 @@ requirements-dev.txt
 upstream/
 
 # Personal dev task config (contains local IP, ports, etc.)
-scripts/tasks.py
+tasks.py
 
 # Editor / AI tooling
 .superpowers/
