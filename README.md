@@ -24,7 +24,7 @@ openssl req -x509 -newkey rsa:2048 -keyout .cert/key.pem -out .cert/cert.pem -da
 Then start the dev server (no dependencies beyond Python 3):
 
 ```bash
-python3 server.py --bind 0.0.0.0 --cert .cert/cert.pem --key .cert/key.pem
+python3 scripts/server.py --bind 0.0.0.0 --cert .cert/cert.pem --key .cert/key.pem
 ```
 
 Open `https://<your-ip>:8443` in a Chromium-based browser.
