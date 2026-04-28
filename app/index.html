@@ -78,6 +78,13 @@
         <span class="sub" id="mainOverlaySub"></span>
         <button class="btn-labeled primary" id="btnConnectCta"><span class="ms">bluetooth</span> Connect to Pixl.js</button>
       </div>
+      <div class="main-overlay-footer panel-footer">
+        <span id="navCommitOverlay"></span>
+        <span class="panel-footer-sep">&middot;</span>
+        <a href="https://github.com/tasken/Mochi" target="_blank" rel="noopener">Mochi &copy; 2026 Nimbo</a>
+        <span class="panel-footer-sep">&middot;</span>
+        <a href="https://github.com/tasken/Mochi/blob/main/LICENSE" target="_blank" rel="noopener">MIT</a>
+      </div>
     </div>
 
     <!-- Context panel (bottom sheet on mobile) -->
@@ -88,6 +95,10 @@
 
       <!-- State 1: Drive / Folder (sidebar) -->
       <div class="panel-state" id="panelFolder">
+        <div class="panel-header panel-header-mobile-only">
+          <span class="panel-label">Drive</span>
+          <button class="btn-icon ghost" id="btnFolderSheetClose" title="Close" aria-label="Close"><span class="ms-sm">close</span></button>
+        </div>
         <div class="sidebar-module">
           <div class="sidebar-section-label">Drive</div>
           <div class="sidebar-drive-row">
@@ -244,6 +255,15 @@
           </colgroup>
           <tbody id="fileTableBody"></tbody>
         </table>
+      </div>
+
+      <!-- Mobile footer (visible on mobile only when connected) -->
+      <div class="mobile-app-footer panel-footer">
+        <span id="navCommitMobile"></span>
+        <span class="panel-footer-sep">&middot;</span>
+        <a href="https://github.com/tasken/Mochi" target="_blank" rel="noopener">Mochi &copy; 2026 Nimbo</a>
+        <span class="panel-footer-sep">&middot;</span>
+        <a href="https://github.com/tasken/Mochi/blob/main/LICENSE" target="_blank" rel="noopener">MIT</a>
       </div>
     </div><!-- end browser-wrap -->
 

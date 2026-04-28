@@ -255,8 +255,8 @@ button.dev:hover:not(:disabled) { background: #fde68a; }
 
 /* --- Context panel (left sidebar) --- */
 .context-panel {
-  width: 272px;
-  min-width: 272px;
+  width: 280px;
+  min-width: 280px;
   display: flex;
   flex-direction: column;
   border-right: 1px solid var(--border);
@@ -421,6 +421,9 @@ button.dev:hover:not(:disabled) { background: #fde68a; }
 }
 .panel-footer a:hover { color: #6b7280; }
 .panel-footer-sep { user-select: none; }
+
+/* Mobile footer — shown below file table on mobile, hidden on desktop */
+.mobile-app-footer { display: none; margin-top: 0; justify-content: center; flex-shrink: 0; }
 
 .panel-state[hidden] { display: none; }
 .panel-state {
@@ -598,6 +601,7 @@ button.dev:hover:not(:disabled) { background: #fde68a; }
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
+.panel-header-mobile-only { display: none; }
 
 /* --- File browser area --- */
 .browser-wrap {
@@ -1588,6 +1592,15 @@ button.dev:hover:not(:disabled) { background: #fde68a; }
   .main-overlay-card .title { font-weight: 600; font-size: var(--fs-xl); color: var(--foreground); }
   .main-overlay-card .sub  { font-size: var(--fs-base); color: #6b7280; max-width: 28ch; }
 
+  .main-overlay-footer {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    border-top: 1px solid var(--border);
+    justify-content: center;
+  }
+
   /* --- Browser lock overlay --- */
   .browser-lock-overlay {
     display: none;
@@ -1669,6 +1682,10 @@ button.dev:hover:not(:disabled) { background: #fde68a; }
   /* Upload is the primary nav action — filled on all viewports */
 
   @media (max-width: 991px) {
+    .mobile-app-footer { display: flex; }
+    .context-panel .panel-footer { display: none; }
+    .panel-header-mobile-only { display: flex; }
+
     .topbar-breadcrumb { max-width: 160px; }
 
     .panel-nfc-tag-content {
@@ -1855,8 +1872,8 @@ button.dev:hover:not(:disabled) { background: #fde68a; }
 .details-panel[hidden] { display: none; }
 
 .details-panel {
-  width: 300px;
-  min-width: 300px;
+  width: 280px;
+  min-width: 280px;
   display: flex;
   flex-direction: column;
   border-left: 1px solid var(--border);
@@ -1954,8 +1971,8 @@ button.dev:hover:not(:disabled) { background: #fde68a; }
   .img-lightbox-side { display: none !important; }
 }
 .img-lightbox-side {
-  width: 260px;
-  min-width: 260px;
+  width: 280px;
+  min-width: 280px;
   background: #18181b;
   display: flex;
   flex-direction: column;
