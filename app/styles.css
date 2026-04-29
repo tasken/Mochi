@@ -188,16 +188,6 @@ button.connected:hover:not(:disabled) { background: #d1fae5; }
   flex-shrink: 0;
 }
 
-.topbar-breadcrumb {
-  font-family: "IBM Plex Mono", monospace;
-  font-size: var(--fs-s);
-  color: #6b7280;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 320px;
-}
-
 .topbar-spacer { flex: 1; }
 
 .topbar-error {
@@ -209,8 +199,8 @@ button.connected:hover:not(:disabled) { background: #d1fae5; }
   text-overflow: ellipsis;
 }
 
-/* Circle (icon-only) buttons */
-.btn-icon, .btn-circle {
+/* Icon-only buttons */
+.btn-icon {
   width: 36px;
   height: 36px;
   padding: 0;
@@ -220,22 +210,7 @@ button.connected:hover:not(:disabled) { background: #d1fae5; }
   border-radius: 999px;
   flex-shrink: 0;
 }
-.btn-circle.sm { width: 24px; height: 24px; }
-.btn-circle.lg { width: 40px; height: 40px; }
-.btn-icon[hidden], .btn-circle[hidden] { display: none; }
-
-/* Pill buttons */
-.btn-pill {
-  padding: 0 12px;
-  height: 32px;
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  border-radius: 999px;
-  flex-shrink: 0;
-  font-size: var(--fs-s);
-}
-.btn-pill[hidden] { display: none; }
+.btn-icon[hidden] { display: none; }
 
 /* Topbar button overrides */
 button.dev {
@@ -347,11 +322,6 @@ button.dev:hover:not(:disabled) { background: #fde68a; }
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.sidebar-storage-label {
-  font-size: var(--fs-s);
-  color: #6b7280;
 }
 
 .sidebar-storage-count {
@@ -521,25 +491,6 @@ button.dev:hover:not(:disabled) { background: #fde68a; }
   font-weight: 800;
   letter-spacing: 0.02em;
   color: #bbb;
-}
-
-.panel-nfc-tag-content {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 6px 8px;
-  background: #f0f0f4;
-  border-radius: var(--radius);
-  min-height: 2rem;
-  margin-top: 4px;
-}
-
-.panel-nfc-tag-content img {
-  width: 100%;
-  height: auto;
-  object-fit: contain;
-  border-radius: calc(var(--radius) / 2);
-  display: block;
 }
 
 .panel-actions {
@@ -1479,26 +1430,6 @@ button.dev:hover:not(:disabled) { background: #fde68a; }
     margin-bottom: 6px;
   }
 
-  .modal-title {
-    font-size: var(--fs-xl);
-    font-weight: 600;
-    margin-bottom: 10px;
-  }
-
-  .modal-title-danger { color: var(--destructive); }
-  .modal-title-neutral { color: var(--foreground); }
-  .modal-title-warning { color: #d97706; }
-
-  .modal-title-with-icon {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-  }
-
-  .modal-title-icon {
-    flex-shrink: 0;
-  }
-
   .modal-box p {
     font-size: var(--fs-md);
     color: #555;
@@ -1519,15 +1450,6 @@ button.dev:hover:not(:disabled) { background: #fde68a; }
     font-size: var(--fs-s);
     color: #9ca3af;
     margin-bottom: 14px;
-  }
-
-  .modal-helper-copy {
-    font-size: var(--fs-base);
-    color: #888;
-  }
-
-  .modal-helper-copy:empty {
-    display: none;
   }
 
   .modal-choice-list {
@@ -1732,20 +1654,6 @@ button.dev:hover:not(:disabled) { background: #fde68a; }
     .context-panel .panel-footer { display: none; }
     .panel-header-mobile-only { display: flex; }
 
-    .topbar-breadcrumb { max-width: 160px; }
-
-    .panel-nfc-tag-content {
-      flex-direction: row;
-      align-items: flex-start;
-    }
-
-    .panel-nfc-tag-content img {
-      width: auto;
-      max-width: 45%;
-      max-height: 150px;
-      flex-shrink: 0;
-    }
-
     /* Sheet container — fixed overlay */
     .sheet-container {
       position: fixed;
@@ -1860,9 +1768,9 @@ button.dev:hover:not(:disabled) { background: #fde68a; }
     /* Icons inside buttons — keep at 16px */
     button .ms, button .ms-sm { font-size: 16px; }
 
-    /* Touch targets — btn-circle and btn-icon get 44px; labeled buttons stretch naturally */
-    .btn-circle, .btn-icon { width: 44px; height: 44px; }
-    button:not(.btn-circle):not(.nav-crumb-home), .nav-crumb:not(.nav-crumb-home) { min-height: 44px; }
+    /* Touch targets — btn-icon gets 44px; labeled buttons stretch naturally */
+    .btn-icon { width: 44px; height: 44px; }
+    button:not(.nav-crumb-home), .nav-crumb:not(.nav-crumb-home) { min-height: 44px; }
     .nav-crumb-home { width: 44px; height: 44px; }
 
     /* Hide size column */
