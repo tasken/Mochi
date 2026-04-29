@@ -1557,6 +1557,12 @@ function setPanelState(mode, entry) {
       const fullPath = joinChildPath(state.currentPath, entry.name);
       el.detailsFilePath.textContent = fullPath;
       if (el.detailsPathInRow) el.detailsPathInRow.textContent = fullPath;
+      el.detailsHeroImgArea.innerHTML = `<span class="ms details-hero-file-icon" id="detailsHeroIcon">insert_drive_file</span>`;
+      el.detailsHeroBand.hidden = true;
+      el.detailsHeroBand.style.background = "";
+      el.detailsHeroBand.innerHTML = "";
+      el.panelNfcTag.hidden = true;
+      el.panelNfcTagContent.innerHTML = "";
     }
     return;
   }
