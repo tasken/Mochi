@@ -151,13 +151,8 @@ export class PixlToolsClient {
     const server = await device.gatt.connect();
     try {
       const service = await server.getPrimaryService(NUS_SERVICE_UUID);
-      const chars = await service.getCharacteristics();
-      this.txChar = null; this.rxChar = null;
-      for (const c of chars) {
-        if (c.uuid === NUS_CHAR_TX_UUID) this.txChar = c;
-        else if (c.uuid === NUS_CHAR_RX_UUID) this.rxChar = c;
-      }
-      if (!this.txChar || !this.rxChar) throw new Error("NUS characteristics not found.");
+      this.txChar = await service.getCharacteristic(NUS_CHAR_TX_UUID);
+      this.rxChar = await service.getCharacteristic(NUS_CHAR_RX_UUID);
       this.device = device;
       await this.rxChar.startNotifications();
       this.rxChar.addEventListener("characteristicvaluechanged", this._onNotification);
@@ -449,20 +444,18 @@ export class PixlToolsClient {
     return this.queue;
   }
 
-  async _performCommand(cmd, payload, cmdName) {
-    if (!this.txChar) throw new Error("Not connected.");
+  _performCommand(cmd, payload, cmdName) {
+    if (!this.txChar) return Promise.reject(new Error("Not connected."));
     this._log(`→ ${cmdName}${payload.length > 0 ? ` (${payload.length}B)` : ""}`);
-    return new Promise(async (resolve, reject) => {
+    return new Promise((resolve, reject) => {
       this.pending = { resolve, reject, cmd };
-      try {
-        const frame = new Uint8Array(FRAME_HEADER_SIZE + payload.length);
-        frame[0] = cmd; frame[1] = 0; frame[2] = 0; frame[3] = 0;
-        frame.set(payload, FRAME_HEADER_SIZE);
-        if (typeof this.txChar.writeValueWithResponse === "function") {
-          await this.txChar.writeValueWithResponse(frame);
-        } else {
-          await this.txChar.writeValue(frame);
-        }
+      const frame = new Uint8Array(FRAME_HEADER_SIZE + payload.length);
+      frame[0] = cmd; frame[1] = 0; frame[2] = 0; frame[3] = 0;
+      frame.set(payload, FRAME_HEADER_SIZE);
+      const write = typeof this.txChar.writeValueWithResponse === "function"
+        ? this.txChar.writeValueWithResponse(frame)
+        : this.txChar.writeValue(frame);
+      write.then(() => {
         const pendingRef = this.pending;
         this._pendingTimer = setTimeout(() => {
           if (this.pending === pendingRef) {
@@ -471,22 +464,18 @@ export class PixlToolsClient {
             reject(new Error("Command timed out"));
           }
         }, 15000);
-      } catch (err) {
+      }).catch(err => {
         this.pending = null;
         reject(err);
-      }
+      });
     });
   }
 
   _onNotification(event) {
     if (!this.pending) return;
     try {
-      const incoming = new Uint8Array(
-        event.target.value.buffer.slice(
-          event.target.value.byteOffset,
-          event.target.value.byteOffset + event.target.value.byteLength
-        )
-      );
+      const dv = event.target.value;
+      const incoming = new Uint8Array(dv.buffer.slice(dv.byteOffset, dv.byteOffset + dv.byteLength));
       const chunk = incoming[2] | (incoming[3] << 8);
       const hasMore = (chunk & 0x8000) !== 0;
       if (hasMore) {
@@ -568,30 +557,36 @@ export class DevMockClient {
 
     const fs = {
       "E:/": [
-        { name: "nfc",        type: "DIR" },
+        { name: "amiibo",     type: "DIR" },
         { name: "save",       type: "DIR" },
         { name: "README.txt", type: "FILE", size: 312, meta: { nfcTagHead: null, nfcTagTail: null } },
       ],
-      "E:/nfc": [
-        { name: "figures",    type: "DIR" },
+      "E:/amiibo": [
+        { name: "data",      type: "DIR" },
+        { name: "fav",       type: "DIR" },
+        { name: "figures",   type: "DIR" },
         { name: "large-set", type: "DIR" },
-        { name: "alpha.bin", type: "FILE", size: 540, meta: { nfcTagHead: 0x00000000, nfcTagTail: 0x00000002 } },
-        { name: "bravo.bin", type: "FILE", size: 540, meta: { nfcTagHead: 0x05C00000, nfcTagTail: 0x04121302 } },
+        { name: "tag_001.bin", type: "FILE", size: 540, meta: { nfcTagHead: 0x00000000, nfcTagTail: 0x00000002 } },
+        { name: "tag_002.bin", type: "FILE", size: 540, meta: { nfcTagHead: 0x05C00000, nfcTagTail: 0x04121302 } },
       ],
-      "E:/nfc/figures": [
-        { name: "charlie.bin", type: "FILE", size: 540, meta: { nfcTagHead: 0x01000000, nfcTagTail: 0x03530902 } },
-        { name: "delta.bin",   type: "FILE", size: 540, meta: { nfcTagHead: 0x01000000, nfcTagTail: 0x03540902 } },
+      "E:/amiibo/data": [
+        { name: "00.bin", type: "FILE", size: 540, meta: { nfcTagHead: 0x05C00000, nfcTagTail: 0x04121302 } },
+        { name: "01.bin", type: "FILE", size: 540, meta: { nfcTagHead: 0x01000000, nfcTagTail: 0x03530902 } },
+        { name: "02.bin", type: "FILE", size: 540, meta: { nfcTagHead: 0x00000000, nfcTagTail: 0x00000002 } },
+      ],
+      "E:/amiibo/fav": [
+        { name: "tag_001.bin", type: "FILE", size: 540, meta: { nfcTagHead: 0x00000000, nfcTagTail: 0x00000002 } },
+        { name: "tag_002.bin", type: "FILE", size: 540, meta: { nfcTagHead: 0x01000000, nfcTagTail: 0x03530902 } },
+      ],
+      "E:/amiibo/figures": [
+        { name: "tag_001.bin", type: "FILE", size: 540, meta: { nfcTagHead: 0x01000000, nfcTagTail: 0x03530902 } },
+        { name: "tag_002.bin", type: "FILE", size: 540, meta: { nfcTagHead: 0x01000000, nfcTagTail: 0x03540902 } },
       ],
       "E:/save": [
         { name: "backup.bin", type: "FILE", size: 1229, meta: { nfcTagHead: null, nfcTagTail: null } },
       ],
-      "E:/nfc/large-set": [
-        { name: "fighter_platform_red_classic_costume_alt01.bin",       type: "FILE", size: 540, meta: { nfcTagHead: 0x01000060, nfcTagTail: 0x03530902 } },
-        { name: "adventure_hero_open_world_green_tunic_v2.bin",         type: "FILE", size: 540, meta: { nfcTagHead: 0x01000061, nfcTagTail: 0x03530902 } },
-        { name: "village_mayor_summer_seasonal_outfit_v1.bin",          type: "FILE", size: 540, meta: { nfcTagHead: 0x01000062, nfcTagTail: 0x03530902 } },
-        { name: "ink_shooter_neon_pink_special_edition_v3.bin",         type: "FILE", size: 540, meta: { nfcTagHead: 0x01000063, nfcTagTail: 0x03530902 } },
-        { name: "creature_trainer_scarlet_full_power_form.bin",         type: "FILE", size: 540, meta: { nfcTagHead: 0x01000064, nfcTagTail: 0x03530902 } },
-        ...Array.from({ length: 90 }, (_, i) => ({
+      "E:/amiibo/large-set": [
+        ...Array.from({ length: 95 }, (_, i) => ({
           name: `tag_${String(i + 1).padStart(3, "0")}.bin`,
           type: "FILE",
           size: 540,
@@ -622,14 +617,19 @@ export class DevMockClient {
   async readFileData(path) {
     const mockFiles = {
       "E:/README.txt":                    { size: 312,  nfcTagHead: null,       nfcTagTail: null },
-      "E:/nfc/alpha.bin":                  { size: 540,  nfcTagHead: 0x00000000, nfcTagTail: 0x00000002 },
-      "E:/nfc/bravo.bin":                  { size: 540,  nfcTagHead: 0x05C00000, nfcTagTail: 0x04121302 },
-      "E:/nfc/figures/charlie.bin":         { size: 540,  nfcTagHead: 0x01000000, nfcTagTail: 0x03530902 },
-      "E:/nfc/figures/delta.bin":           { size: 540,  nfcTagHead: 0x01000000, nfcTagTail: 0x03540902 },
-      "E:/save/backup.bin":                { size: 1229, nfcTagHead: null,       nfcTagTail: null },
+      "E:/amiibo/data/00.bin":            { size: 540,  nfcTagHead: 0x05C00000, nfcTagTail: 0x04121302 },
+      "E:/amiibo/data/01.bin":            { size: 540,  nfcTagHead: 0x01000000, nfcTagTail: 0x03530902 },
+      "E:/amiibo/data/02.bin":            { size: 540,  nfcTagHead: 0x00000000, nfcTagTail: 0x00000002 },
+      "E:/amiibo/fav/tag_001.bin":         { size: 540,  nfcTagHead: 0x00000000, nfcTagTail: 0x00000002 },
+      "E:/amiibo/fav/tag_002.bin":         { size: 540,  nfcTagHead: 0x01000000, nfcTagTail: 0x03530902 },
+      "E:/amiibo/tag_001.bin":            { size: 540,  nfcTagHead: 0x00000000, nfcTagTail: 0x00000002 },
+      "E:/amiibo/tag_002.bin":            { size: 540,  nfcTagHead: 0x05C00000, nfcTagTail: 0x04121302 },
+      "E:/amiibo/figures/tag_001.bin":    { size: 540,  nfcTagHead: 0x01000000, nfcTagTail: 0x03530902 },
+      "E:/amiibo/figures/tag_002.bin":    { size: 540,  nfcTagHead: 0x01000000, nfcTagTail: 0x03540902 },
+      "E:/save/backup.bin":               { size: 1229, nfcTagHead: null,       nfcTagTail: null },
     };
     // Generate mock entries for large-set files
-    const largeMatch = path.match(/^E:\/nfc\/large-set\/tag_(\d+)\.bin$/);
+    const largeMatch = path.match(/^E:\/amiibo\/large-set\/tag_(\d+)\.bin$/);
     if (largeMatch) {
       const idx = parseInt(largeMatch[1], 10) - 1;
       const data = new Uint8Array(540);
@@ -650,30 +650,11 @@ export class DevMockClient {
   }
   async ensureFolder()    {}
 
-  ensureUploadNotAborted(abortSignal) {
-    if (abortSignal && abortSignal.aborted) throw new Error("Upload aborted by user.");
-  }
-
   waitForMockUploadDelay(ms, abortSignal) {
     return new Promise((resolve, reject) => {
-      const onAbort = () => {
-        clearTimeout(timer);
-        abortSignal.removeEventListener("abort", onAbort);
-        reject(new Error("Upload aborted by user."));
-      };
-
-      if (abortSignal) {
-        if (abortSignal.aborted) {
-          reject(new Error("Upload aborted by user."));
-          return;
-        }
-        abortSignal.addEventListener("abort", onAbort, { once: true });
-      }
-
-      const timer = setTimeout(() => {
-        abortSignal?.removeEventListener("abort", onAbort);
-        resolve();
-      }, ms);
+      if (abortSignal?.aborted) { reject(new Error("Upload aborted by user.")); return; }
+      const timer = setTimeout(resolve, ms);
+      abortSignal?.addEventListener("abort", () => { clearTimeout(timer); reject(new Error("Upload aborted by user.")); }, { once: true });
     });
   }
 
@@ -694,7 +675,7 @@ export class DevMockClient {
     );
     const updateIntervalMs = Math.max(70, Math.round(simulatedDurationMs / progressUpdates));
 
-    this.ensureUploadNotAborted(abortSignal);
+    if (abortSignal?.aborted) throw new Error("Upload aborted by user.");
     for (let step = 1; step <= progressUpdates; step++) {
       await this.waitForMockUploadDelay(updateIntervalMs, abortSignal);
       const written = step === progressUpdates
