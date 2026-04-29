@@ -992,8 +992,8 @@ button.dev:hover:not(:disabled) { background: #fde68a; }
   /* --- Table --- */
   /* Shared column widths for header + body tables */
   .col-check  { width: 32px; }
-  .col-size   { width: 100px; }
-  .col-actions { width: 60px; }
+  .col-size   { width: 72px; }
+  .col-actions { width: 108px; }
   .col-name   { /* auto */ }
 
   .table-head-wrap {
@@ -1168,12 +1168,20 @@ button.dev:hover:not(:disabled) { background: #fde68a; }
     font-size: var(--fs-s);
     color: #6b7280;
     white-space: nowrap;
+    text-align: right;
+  }
+  .file-table-head th.cell-size {
+    text-align: right;
   }
 
   .cell-actions {
-    width: 60px;
+    padding: 0 8px 0 0;
     text-align: right;
     white-space: nowrap;
+  }
+  .cell-actions .btn-icon {
+    width: 32px;
+    height: 32px;
   }
 
   .cell-actions button {
