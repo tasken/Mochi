@@ -8,6 +8,34 @@ const SYNC_EXCLUDE_PATHS = ["e:/amiibo/fav", "e:/amiibo/data"]; // device paths 
 const PIXL_RELEASES_URL = "https://github.com/solosky/pixl.js/releases";
 const PIXL_LATEST_API = "https://api.github.com/repos/solosky/pixl.js/releases/latest";
 
+const FAVICON_PATH = `<path d="M225.5-82.5Q120-125 120-200q0-32 20-57.5t56-45.5l65 58q-24 8-42.5 20.5T200-200q0 26 81 53t199 27q118 0 199-27t81-53q0-12-18.5-24.5T699-245l65-58q36 20 56 45.5t20 57.5q0 75-105.5 117.5T480-40q-149 0-254.5-42.5Zm212-125Q417-215 400-230L148-453q-13-11-20.5-27t-7.5-33v-80q0-17 6.5-33t19.5-27l252-235q17-16 38-24t44-8q23 0 44 8t38 24l252 235q13 11 19.5 27t6.5 33v80q0 17-7.5 33T812-453L560-230q-17 15-37.5 22.5T480-200q-22 0-42.5-7.5Zm-42-357Q410-579 410-600t-14.5-35.5Q381-650 360-650t-35.5 14.5Q310-621 310-600t14.5 35.5Q339-550 360-550t35.5-14.5ZM410-496q43 21 90.5 13.5T584-522q34-29 44.5-73T618-678L410-496Zm105.5-188.5Q530-699 530-720t-14.5-35.5Q501-770 480-770t-35.5 14.5Q430-741 430-720t14.5 35.5Q459-670 480-670t35.5-14.5Z"/>`;
+const FAVICON_COLORS = {
+  disconnected: "#9ca3af",
+  connecting:   "#f59e0b",
+  connected:    "#10b981",
+  reconnecting: "#fb923c",
+  mock:         "#7878cc",
+};
+
+const BRAND_GRADIENTS = {
+  disconnected: ["#9ca3af", "#cbd5e1"],
+  connecting:   ["#f59e0b", "#fde68a"],
+  connected:    ["#059669", "#34d399"],
+  reconnecting: ["#f97316", "#fbbf24"],
+  mock:         ["#7c3aed", "#d946ef"],
+};
+
+function setStateColors(connState, isMock) {
+  const key = isMock ? "mock" : connState;
+  const faviconColor = FAVICON_COLORS[key] ?? FAVICON_COLORS.disconnected;
+  const [gradFrom, gradTo] = BRAND_GRADIENTS[key] ?? BRAND_GRADIENTS.disconnected;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" width="32" height="32" fill="${faviconColor}">${FAVICON_PATH}</svg>`;
+  const link = document.querySelector('link[rel="icon"]');
+  if (link) link.href = "data:image/svg+xml," + encodeURIComponent(svg);
+  document.documentElement.style.setProperty("--brand-grad-from", gradFrom);
+  document.documentElement.style.setProperty("--brand-grad-to", gradTo);
+}
+
 // === Utilities ===
 
 function formatBytes(bytes) {
@@ -122,7 +150,6 @@ const el = {
   panelFileLabel: document.getElementById("panelFileLabel"),
   panelFileName: document.getElementById("panelFileName"),
   panelFileSize: document.getElementById("panelFileSize"),
-  panelFileFlags: document.getElementById("panelFileFlags"),
   panelNfcTag: document.getElementById("panelNfcTag"),
   panelNfcTagContent: document.getElementById("panelNfcTagContent"),
 
@@ -277,12 +304,10 @@ const state = {
   uploadTotalBytes: 0,
   uploadCompletedCount: 0,
   uploadCompletedBytes: 0,
-  truncated: false,
   disconnectToast: null,
   uploadBase: "E:/",         // path where the upload plan was built — anchors runSync
   syncState: "idle",         // "idle" | "scanning" | "done" | "error"
   syncSkippedFiles: [],      // [{ remotePath, size }]
-  syncSkippedFolders: new Set(),  // Set<remotePath>
   syncOrphans: [],           // [{ remotePath, size, kind, deletable, status }]
   syncOrphanChecked: new Set(),   // Set<remotePath>
 };
@@ -457,6 +482,8 @@ function setConnState(newState) {
   }
 
   updateControls();
+
+  setStateColors(newState, connected && state.client instanceof DevMockClient);
 }
 
 function showConnError(msg) {
@@ -670,7 +697,6 @@ async function connectOrDisconnect() {
     setConnState("connected");
     showSuccessToast("Connected");
 
-    // Get version info
     const ver = await state.client.getVersion();
     if (ver.ok) {
       const parts = [];
@@ -682,14 +708,12 @@ async function connectOrDisconnect() {
       el.topbarBadge.textContent = "Pixl.js";
     }
 
-    // List drives
     const dr = await state.client.listDrives();
     if (dr.ok && dr.data.length > 0) {
       state.drive = dr.data[0];
       renderDrive(state.drive);
     }
 
-    // Browse root
     await browseFolder("E:/");
 
   } catch (err) {
@@ -758,6 +782,7 @@ function closeModal(modalEl) {
   if (modalEl === el.newFolderModal) clearInputError(el.newFolderInput, el.newFolderError);
   if (modalEl === el.renameModal) clearInputError(el.renameInput, el.renameError);
   modalEl.classList.remove("open");
+  modalEl.dispatchEvent(new Event("modal:close"));
 }
 
 let _formatCountdown = null;
@@ -821,7 +846,6 @@ el.btnFormatConfirm.addEventListener("click", async () => {
       log("Drive E: formatted successfully.");
       showSuccessToast("Drive formatted");
       invalidateCache();
-      // Refresh drive info
       const dr = await state.client.listDrives();
       if (dr.ok && dr.data.length > 0) {
         state.drive = dr.data[0];
@@ -968,7 +992,6 @@ async function browseFolder(path) {
 
   state.currentPath = path;
   state.entries = entries;
-  state.truncated = truncated;
   state.selectedNames.clear();
   renderBreadcrumb(path);
   renderFileTable();
@@ -1245,8 +1268,11 @@ function renderBreadcrumb(path) {
     const label = i === 0
       ? `<span class="ms nav-home-icon">home</span>`
       : escapeHtml(c.label);
+    const cls = i === 0
+      ? `nav-crumb nav-crumb-home${isActive ? " active" : ""}`
+      : `nav-crumb${isActive ? " active" : ""}`;
     return (i > 0 ? '<span class="nav-sep">›</span>' : "") +
-      `<button class="nav-crumb${isActive ? " active" : ""}" data-path="${escapeHtml(c.path)}">${label}</button>`;
+      `<button class="${cls}" data-path="${escapeHtml(c.path)}">${label}</button>`;
   }).join("");
 
   // Mobile: show current folder name; swap icon between home (root) and arrow_back (subfolder)
@@ -1287,7 +1313,6 @@ el.fileTableBody.addEventListener("click", (e) => {
   const entry = state.entries.find(en => en.name === name);
   if (!entry) return;
 
-  // Checkbox click
   const checkbox = e.target.closest("input[type=checkbox]");
   if (checkbox) {
     if (checkbox.checked) {
@@ -1556,7 +1581,6 @@ function setPanelState(mode, entry) {
     state.drawerEntry = entry;
     state.panelMode = "file";
 
-    // Populate file fields
     el.panelFileName.textContent = entry.name;
     el.panelFileSize.textContent = formatBytes(entry.size);
     el.detailsKind.textContent = entry.type === "FILE" ? "File" : "Folder";
@@ -1564,23 +1588,10 @@ function setPanelState(mode, entry) {
     el.detailsFilePath.textContent = fullPath;
     if (el.detailsPathInRow) el.detailsPathInRow.textContent = fullPath;
 
-    // Reset hero to neutral state
     el.detailsHeroImgArea.innerHTML = `<span class="ms details-hero-file-icon" id="detailsHeroIcon">insert_drive_file</span>`;
     el.detailsHeroBand.hidden = true;
     el.detailsHeroBand.style.background = "";
     el.detailsHeroBand.innerHTML = "";
-
-    // Flags
-    const flagDefs = [
-      { bit: 0x02, label: "Hidden" },
-      { bit: 0x04, label: "System" },
-      { bit: 0x01, label: "Read-only" },
-    ];
-    const flags = entry.meta ? entry.meta.flags : 0;
-    el.panelFileFlags.innerHTML = flagDefs.map(f => {
-      const active = (flags & f.bit) !== 0;
-      return `<div class="details-flag-row"><span class="ms-sm details-flag-icon${active ? " is-active" : ""}">check</span> ${escapeHtml(f.label)}</div>`;
-    }).join("");
 
     // NFC tag section — only for .bin files
     el.panelFileLabel.textContent = entry.name.toLowerCase().endsWith(".bin") ? "NFC Tag" : "Details";
@@ -1626,12 +1637,10 @@ function setPanelState(mode, entry) {
   state.panelMode = "folder";
   if (isMobileViewport()) closeDetailsSheet();
 
-  // Clear row highlight
   for (const row of el.fileTableBody.querySelectorAll("tr[data-name]")) {
     row.classList.remove("panel-active");
   }
 
-  // Populate folder info
   if (state.currentPath) {
     el.panelFolderName.textContent = "Pixl.js";
     el.panelFolderPath.textContent = state.drive ? state.drive.name : "E:/";
@@ -1800,6 +1809,7 @@ el.sidebarDropZone.addEventListener("drop", async (e) => {
       ? await collectFromDataTransfer(e.dataTransfer)
       : collectFromFiles(files);
     if (collected.files.length === 0 && collected.folders.size === 0) return;
+    if (!await checkSystemFolderWarning(collected)) return;
     buildUploadPlan(collected.folders, collected.files);
     setPanelState("upload");
   } catch (err) {
@@ -1901,10 +1911,10 @@ el.btnDeleteConfirm.addEventListener("click", async () => {
   }));
 
   // Sort: deepest-first by "/" count, files before folders at same depth
+  const depthOf = new Map(paths.map(p => [p, (p.path.match(/\//g) || []).length]));
   paths.sort((a, b) => {
-    const depthA = (a.path.match(/\//g) || []).length;
-    const depthB = (b.path.match(/\//g) || []).length;
-    if (depthA !== depthB) return depthB - depthA;
+    const d = depthOf.get(b) - depthOf.get(a);
+    if (d !== 0) return d;
     if (a.type !== b.type) return a.type === "FILE" ? -1 : 1;
     return 0;
   });
@@ -2219,7 +2229,6 @@ function resetUploadSessionState() {
   state.uploadBase = "E:/";
   state.syncState = "idle";
   state.syncSkippedFiles = [];
-  state.syncSkippedFolders = new Set();
   state.syncOrphans = [];
   state.syncOrphanChecked = new Set();
   state.transferSpeed = "";
@@ -2296,7 +2305,7 @@ function renderSyncQueue() {
 
   // Upload section — only render header when there are files
   if (uploadFiles.length === 0) {
-    html += `<div class="queue-empty">Everything is in sync.</div>`;
+    html += `<div class="queue-empty"><span class="ms queue-empty-icon done">check_circle</span><span class="queue-empty-title">Everything is in sync</span></div>`;
   } else {
     html += `<div class="sync-section-header sync-header-upload">TO UPLOAD · ${uploadFiles.length}</div>`;
     for (const item of uploadFiles) {
@@ -2378,8 +2387,10 @@ function renderUploadQueue() {
   }
 
   if (state.uploadPlan.length === 0) {
-    const emptyText = state.uploadTotalCount > 0 ? "Upload complete" : "Nothing queued yet";
-    el.uploadQueue.innerHTML = `<div class="queue-empty">${emptyText}</div>`;
+    const [icon, title, sub] = state.uploadTotalCount > 0
+      ? ["task_alt", "Upload complete", ""]
+      : ["inbox", "Queue is empty", `<span class="queue-empty-sub">Pick files or a folder above</span>`];
+    el.uploadQueue.innerHTML = `<div class="queue-empty"><span class="ms queue-empty-icon${state.uploadTotalCount > 0 ? " done" : ""}">${icon}</span><span class="queue-empty-title">${title}</span>${sub}</div>`;
     el.uploadWarningBanner.hidden = true;
     el.uploadWarningBanner.innerHTML = "";
     return;
@@ -2417,7 +2428,7 @@ function renderUploadQueue() {
   el.uploadQueue.innerHTML = items.join("");
 
   // Render upload warnings banner (from checkUploadPlanWarnings)
-  if (state.uploadWarnings && state.uploadWarnings.length > 0 && !state.uploadActive) {
+  if (state.uploadWarnings.length > 0 && !state.uploadActive) {
     const wasOpen = !!el.uploadWarningBanner.querySelector("details")?.open;
     // Summary line (collapsed state)
     const summaryParts = [];
@@ -2458,7 +2469,6 @@ let planSeed = 0;
 function buildUploadPlan(folders, files) {
   state.syncState = "idle";
   state.syncSkippedFiles = [];
-  state.syncSkippedFolders = new Set();
   state.syncOrphans = [];
   state.syncOrphanChecked = new Set();
 
@@ -2473,10 +2483,6 @@ function buildUploadPlan(folders, files) {
 
   for (const rel of sortedFolders) {
     const remote = joinChildPath(base, rel.toLowerCase());
-    if (isSyncExcluded(remote)) {
-      skipped.push({ path: rel, reason: "Path is excluded from sync" });
-      continue;
-    }
     try {
       validateRemotePath(remote, "folder");
     } catch (err) {
@@ -2489,10 +2495,6 @@ function buildUploadPlan(folders, files) {
 
   for (const entry of files) {
     const remote = joinChildPath(base, entry.relativePath.toLowerCase());
-    if (isSyncExcluded(remote)) {
-      skipped.push({ path: entry.relativePath, reason: "Path is excluded from sync" });
-      continue;
-    }
     try {
       validateRemotePath(remote, "file");
     } catch (err) {
@@ -2561,23 +2563,51 @@ function warningsToStrings(warnings) {
   return lines;
 }
 
-function showUploadWarningModal(warnings) {
+function detectSystemFolderWarnings(folders, files) {
+  const base = (state.currentPath || "E:/").toLowerCase();
+  const affected = new Set();
+  const check = rel => {
+    const remote = joinChildPath(base, rel.toLowerCase());
+    if (remote === "e:/amiibo/data" || remote.startsWith("e:/amiibo/data/")) affected.add("data");
+    if (remote === "e:/amiibo/fav"  || remote.startsWith("e:/amiibo/fav/"))  affected.add("fav");
+  };
+  for (const rel of folders) check(rel);
+  for (const entry of files) check(entry.relativePath);
+  return affected;
+}
+
+// Shared confirm modal: sets innerHTML, opens uploadWarnModal, returns Promise<boolean>.
+// AbortController + modal:close event ensure listeners always clean up (Cancel, X, Escape).
+function showUploadWarnModal(htmlContent) {
   return new Promise(resolve => {
-    const lines = warningsToStrings(warnings).map(w => `<li>${escapeHtml(w)}</li>`).join("");
-    el.uploadWarnMsg.innerHTML =
-      `<ul class="modal-list">${lines}</ul>` +
-      `<p class="modal-note">You can still proceed, but the upload may be slow or fail partway through.</p>`;
+    el.uploadWarnMsg.innerHTML = htmlContent;
     openModal(el.uploadWarnModal);
-    const onConfirm = () => { cleanup(); resolve(true); };
-    const onCancel = () => { cleanup(); resolve(false); };
-    const cleanup = () => {
-      el.btnUploadWarnConfirm.removeEventListener("click", onConfirm);
-      el.btnUploadWarnCancel.removeEventListener("click", onCancel);
-      closeModal(el.uploadWarnModal);
-    };
-    el.btnUploadWarnConfirm.addEventListener("click", onConfirm);
-    el.btnUploadWarnCancel.addEventListener("click", onCancel);
+    const ac = new AbortController();
+    const { signal } = ac;
+    const done = (result) => { ac.abort(); closeModal(el.uploadWarnModal); resolve(result); };
+    el.btnUploadWarnConfirm.addEventListener("click", () => done(true), { signal });
+    el.btnUploadWarnCancel.addEventListener("click", () => done(false), { signal });
+    el.uploadWarnModal.addEventListener("modal:close", () => { ac.abort(); resolve(false); }, { signal, once: true });
   });
+}
+
+function buildSystemFolderWarnHtml(affected) {
+  const parts = [];
+  if (affected.has("data")) parts.push(
+    `<p><strong>My Tags (amiibo/data)</strong> — files here must be named ` +
+    `<strong>00.bin, 01.bin</strong>… to appear as slots in the AmiiDB app.</p>`
+  );
+  if (affected.has("fav")) parts.push(
+    `<p><strong>My Favorites (amiibo/fav)</strong> — this folder uses an internal ` +
+    `format managed by AmiiDB. Uploaded files won't be visible in the app.</p>`
+  );
+  return parts.join("") + `<p class="modal-note">You can still upload, but files may not appear as expected.</p>`;
+}
+
+async function checkSystemFolderWarning(collected) {
+  const affected = detectSystemFolderWarnings(collected.folders, collected.files);
+  if (affected.size === 0) return true;
+  return showUploadWarnModal(buildSystemFolderWarnHtml(affected));
 }
 
 // --- Sync ---
@@ -2588,7 +2618,6 @@ async function runSync() {
 
   state.syncState = "scanning";
   state.syncSkippedFiles = [];
-  state.syncSkippedFolders = new Set();
   state.syncOrphans = [];
   state.syncOrphanChecked = new Set();
   updateControls();
@@ -2657,7 +2686,6 @@ async function runSync() {
 
   // Filter plan: remove items already on device at same size
   const skippedFiles = [];
-  const skippedFolders = new Set();
   const filteredPlan = [];
   for (const item of state.uploadPlan) {
     if (item.kind === "file") {
@@ -2667,7 +2695,6 @@ async function runSync() {
         continue;
       }
     } else if (item.kind === "folder" && deviceTree.has(item.remotePath)) {
-      skippedFolders.add(item.remotePath);
       continue;
     }
     filteredPlan.push(item);
@@ -2686,7 +2713,6 @@ async function runSync() {
   }
 
   state.syncSkippedFiles = skippedFiles;
-  state.syncSkippedFolders = skippedFolders;
   state.syncOrphans = orphans;
   state.uploadPlan = filteredPlan;
   state.uploadWarnings = checkUploadPlanWarnings(filteredPlan);
@@ -2734,9 +2760,11 @@ async function runUpload() {
   if (!state.client || state.connState !== "connected" || state.uploadActive) return;
   if (!hasUploads && !hasOrphanDeletions) return;
 
-  if (state.uploadWarnings && state.uploadWarnings.length > 0) {
-    const confirmed = await showUploadWarningModal(state.uploadWarnings);
-    if (!confirmed) return;
+  if (state.uploadWarnings.length > 0) {
+    const lines = warningsToStrings(state.uploadWarnings).map(w => `<li>${escapeHtml(w)}</li>`).join("");
+    const html = `<ul class="modal-list">${lines}</ul>` +
+      `<p class="modal-note">You can still proceed, but the upload may be slow or fail partway through.</p>`;
+    if (!await showUploadWarnModal(html)) return;
   }
 
   state.uploadActive = true;
@@ -2748,7 +2776,6 @@ async function runUpload() {
 
   resetUploadProgress(state.uploadPlan);
 
-  // Reset statuses
   for (const item of state.uploadPlan) { item.transferred = 0; item.status = "pending"; }
   renderUploadQueue();
 
@@ -2756,7 +2783,6 @@ async function runUpload() {
   const fileItems = state.uploadPlan.filter(i => i.kind === "file");
 
   try {
-    // Create folders (shallow-first)
     for (const item of folderItems) {
       if (state.abortController.signal.aborted) throw new Error("Aborted.");
       item.status = "active";
@@ -2767,7 +2793,6 @@ async function runUpload() {
       renderUploadQueue();
     }
 
-    // Upload files
     for (const item of fileItems) {
       if (state.abortController.signal.aborted) throw new Error("Aborted.");
       item.status = "active";
@@ -2823,7 +2848,6 @@ async function runUpload() {
   } finally {
     state.syncState = "idle";
     state.syncSkippedFiles = [];
-    state.syncSkippedFolders = new Set();
     state.syncOrphans = [];
     state.syncOrphanChecked = new Set();
     state.uploadActive = false;
@@ -2848,6 +2872,7 @@ el.btnPickFolder.addEventListener("click", async () => {
     if (typeof window.showDirectoryPicker === "function") {
       const handle = await window.showDirectoryPicker({ mode: "read" });
       const collected = await collectFromDirHandle(handle);
+      if (!await checkSystemFolderWarning(collected)) return;
       buildUploadPlan(collected.folders, collected.files);
       setPanelState("upload");
     } else {
@@ -2860,20 +2885,32 @@ el.btnPickFolder.addEventListener("click", async () => {
 
 el.folderInput.addEventListener("change", async (e) => {
   if (!e.target.files || e.target.files.length === 0) return;
-  const collected = await collectFromWebkitDir(e.target.files);
-  buildUploadPlan(collected.folders, collected.files);
-  setPanelState("upload");
+  const snapshot = Array.from(e.target.files);
   e.target.value = "";
+  try {
+    const collected = await collectFromWebkitDir(snapshot);
+    if (!await checkSystemFolderWarning(collected)) return;
+    buildUploadPlan(collected.folders, collected.files);
+    setPanelState("upload");
+  } catch (err) {
+    showErrorToast("Upload failed", err.message);
+  }
 });
 
 el.btnPickFiles.addEventListener("click", () => el.filesInput.click());
 
-el.filesInput.addEventListener("change", (e) => {
+el.filesInput.addEventListener("change", async (e) => {
   if (!e.target.files || e.target.files.length === 0) return;
-  const collected = collectFromFiles(e.target.files);
-  buildUploadPlan(collected.folders, collected.files);
-  setPanelState("upload");
+  const snapshot = Array.from(e.target.files);
   e.target.value = "";
+  try {
+    const collected = collectFromFiles(snapshot);
+    if (!await checkSystemFolderWarning(collected)) return;
+    buildUploadPlan(collected.folders, collected.files);
+    setPanelState("upload");
+  } catch (err) {
+    showErrorToast("Upload failed", err.message);
+  }
 });
 
 el.btnUploadStart.addEventListener("click", runUpload);
@@ -2944,3 +2981,20 @@ if (isDevMode) {
 
 setConnState("disconnected");
 updateControls();
+
+if (!navigator.bluetooth) {
+  const [summary, detail, overlaySub] = window.isSecureContext
+    ? [
+        "Chrome or Edge required",
+        "Your browser doesn't support device connections. Switch to Chrome or Edge to use Mochi.",
+        "Open Mochi in Chrome or Edge to connect to your Pixl.js.",
+      ]
+    : [
+        "Secure connection required",
+        "Mochi needs to be opened over HTTPS to connect to your device.",
+        "Open this page over HTTPS to connect to your Pixl.js.",
+      ];
+  el.mainOverlaySub.textContent = overlaySub;
+  el.btnConnectCta.disabled = true;
+  showErrorToast(summary, detail);
+}
