@@ -45,7 +45,7 @@
   <!-- Top bar -->
   <header class="topbar" id="topbar">
     <div class="topbar-brand">
-      <div class="topbar-brand-icon"><span class="ms">auto_awesome</span></div>
+      <div class="topbar-brand-icon"><span class="ms">ar_stickers</span></div>
       <span class="topbar-brand-name">Mochi</span>
     </div>
     <div class="topbar-sep"></div>
@@ -121,7 +121,9 @@
           <div class="sidebar-folder-size" id="panelFolderSize"></div>
         </div>
         <div class="sidebar-drop-zone" id="sidebarDropZone" role="button" tabindex="0" aria-label="Drop files to upload, or click to browse">
-          <span class="ms sidebar-drop-icon">cloud_upload</span>
+          <div class="sidebar-drop-icon-bubble">
+            <span class="ms sidebar-drop-icon">cloud_upload</span>
+          </div>
           <span class="sidebar-drop-title">Drop files or folders here</span>
           <span class="sidebar-drop-sub">or click to browse</span>
         </div>
@@ -157,7 +159,11 @@
           <span id="uploadProgressTotal">Nothing queued</span>
         </div>
         <div id="uploadWarningBanner" hidden></div>
-        <div id="uploadQueue"><div class="queue-empty">Nothing queued yet</div></div>
+        <div id="uploadQueue"><div class="queue-empty">
+          <span class="ms queue-empty-icon">inbox</span>
+          <span class="queue-empty-title">Queue is empty</span>
+          <span class="queue-empty-sub">Pick files or a folder above</span>
+        </div></div>
         <input id="folderInput" type="file" hidden multiple webkitdirectory directory>
         <input id="filesInput" type="file" hidden multiple>
       </div>
@@ -309,10 +315,6 @@
                 <span id="detailsPathInRow" class="details-info-value details-info-mono"></span>
               </div>
             </div>
-          </div>
-          <div class="sidebar-module">
-            <div class="sidebar-section-label">Flags</div>
-            <div id="panelFileFlags" class="details-flags"></div>
           </div>
         </div>
       </aside>
