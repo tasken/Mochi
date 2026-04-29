@@ -996,20 +996,7 @@ async function browseFolder(path) {
   state.selectedNames.clear();
   renderBreadcrumb(path);
   renderFileTable();
-  if (state.panelMode !== "upload") {
-    const prevEntry = state.drawerEntry;
-    const freshEntry = prevEntry && entries.find(e => e.name === prevEntry.name);
-    if (freshEntry) {
-      // Same selection — just update the reference, no re-render.
-      state.drawerEntry = freshEntry;
-      if (prevEntry.meta?.nfcTagHead != null && freshEntry.meta) {
-        freshEntry.meta.nfcTagHead = prevEntry.meta.nfcTagHead;
-        freshEntry.meta.nfcTagTail = prevEntry.meta.nfcTagTail;
-      }
-    } else {
-      setPanelState("folder");
-    }
-  }
+  if (state.panelMode !== "upload") setPanelState("folder");
   if (isMobileViewport()) { closeSheet(); closeDetailsSheet(); }
   updateControls();
 }
@@ -1443,11 +1430,10 @@ el.navBreadcrumb.addEventListener("click", (e) => {
 
 // Toolbar buttons
 el.btnRefresh.addEventListener("click", () => {
-  if (!state.currentPath) return;
-  const icon = el.btnRefresh.querySelector(".ms-sm");
-  icon?.classList.add("spin");
-  state.client.folderCache.delete(state.currentPath);
-  browseFolder(state.currentPath).finally(() => icon?.classList.remove("spin"));
+  if (state.currentPath) {
+    state.client.folderCache.delete(state.currentPath);
+    browseFolder(state.currentPath);
+  }
 });
 
 // Mobile back button — navigate up one level
@@ -1558,60 +1544,26 @@ el.btnSanitizeNoneCancel.addEventListener("click", () => closeModal(el.sanitizeM
 
 // === Context Panel ===
 
-function populateFileDetails(entry) {
-  el.panelFileName.textContent = entry.name;
-  el.panelFileSize.textContent = formatBytes(entry.size);
-  el.detailsKind.textContent = entry.type === "FILE" ? "File" : "Folder";
-  const fullPath = joinChildPath(state.currentPath, entry.name);
-  el.detailsFilePath.textContent = fullPath;
-  if (el.detailsPathInRow) el.detailsPathInRow.textContent = fullPath;
-
-  el.detailsHeroImgArea.innerHTML = `<span class="ms details-hero-file-icon" id="detailsHeroIcon">insert_drive_file</span>`;
-  el.detailsHeroBand.hidden = true;
-  el.detailsHeroBand.style.background = "";
-  el.detailsHeroBand.innerHTML = "";
-
-  el.panelFileLabel.textContent = entry.name.toLowerCase().endsWith(".bin") ? "NFC Tag" : "Details";
-  const isBin = entry.type === "FILE" && entry.name.toLowerCase().endsWith(".bin");
-  el.panelNfcTag.hidden = !isBin;
-  if (!isBin) {
-    el.panelNfcTagContent.innerHTML = "";
-  } else {
-    const metaHead = entry.meta ? entry.meta.nfcTagHead : null;
-    const metaTail = entry.meta ? entry.meta.nfcTagTail : null;
-    if (metaHead != null) {
-      applyNfcTagDisplay(entry, metaHead, metaTail);
-    } else if (state.client) {
-      el.panelNfcTagContent.innerHTML = `<div class="details-nfc-row"><span class="details-nfc-label">Figure ID</span><span class="details-nfc-value" style="color:#9ca3af">Loading\u2026</span></div>`;
-      const filePath = joinChildPath(state.currentPath, entry.name);
-      state.client.readFileData(filePath).then(res => {
-        if (state.drawerEntry !== entry) return;
-        if (res.ok && res.data.length >= 92) {
-          const dv = new DataView(res.data.buffer, res.data.byteOffset);
-          const head = dv.getUint32(84, false);
-          const tail = dv.getUint32(88, false);
-          // Cache on the entry so a same-file refresh doesn't re-read from device.
-          if (entry.meta) { entry.meta.nfcTagHead = head; entry.meta.nfcTagTail = tail; }
-          applyNfcTagDisplay(entry, head, tail);
-        } else {
-          el.panelNfcTagContent.innerHTML = `<div class="details-nfc-row"><span class="details-nfc-label">Figure ID</span><span class="details-nfc-value" style="color:#9ca3af">Not a valid NFC file</span></div>`;
-        }
-      }).catch(() => {
-        if (state.drawerEntry === entry) el.panelNfcTagContent.innerHTML = `<div class="details-nfc-row"><span class="details-nfc-label">Error</span><span class="details-nfc-value" style="color:#e11d48">Failed to read file</span></div>`;
-      });
-    } else {
-      el.panelNfcTagContent.innerHTML = `<div class="details-nfc-row"><span class="details-nfc-label">Figure ID</span><span class="details-nfc-value" style="color:#9ca3af">Not connected</span></div>`;
-    }
-  }
-}
-
 function setPanelState(mode, entry) {
-  // When upload panel is active, file selection only updates the right details panel —
-  // it does not touch the left upload panel.
+  // When upload panel is active, file selection only opens the right details panel —
+  // it does not replace the left upload panel.
   if (mode === "file" && state.panelMode === "upload") {
     state.drawerEntry = entry;
     el.detailsPanel.hidden = false;
-    if (entry) populateFileDetails(entry);
+    if (entry) {
+      el.panelFileName.textContent = entry.name;
+      el.panelFileSize.textContent = formatBytes(entry.size);
+      el.detailsKind.textContent = entry.type === "FILE" ? "File" : "Folder";
+      const fullPath = joinChildPath(state.currentPath, entry.name);
+      el.detailsFilePath.textContent = fullPath;
+      if (el.detailsPathInRow) el.detailsPathInRow.textContent = fullPath;
+      el.detailsHeroImgArea.innerHTML = `<span class="ms details-hero-file-icon" id="detailsHeroIcon">insert_drive_file</span>`;
+      el.detailsHeroBand.hidden = true;
+      el.detailsHeroBand.style.background = "";
+      el.detailsHeroBand.innerHTML = "";
+      el.panelNfcTag.hidden = true;
+      el.panelNfcTagContent.innerHTML = "";
+    }
     return;
   }
 
@@ -1636,7 +1588,49 @@ function setPanelState(mode, entry) {
     state.drawerEntry = entry;
     state.panelMode = "file";
 
-    populateFileDetails(entry);
+    el.panelFileName.textContent = entry.name;
+    el.panelFileSize.textContent = formatBytes(entry.size);
+    el.detailsKind.textContent = entry.type === "FILE" ? "File" : "Folder";
+    const fullPath = joinChildPath(state.currentPath, entry.name);
+    el.detailsFilePath.textContent = fullPath;
+    if (el.detailsPathInRow) el.detailsPathInRow.textContent = fullPath;
+
+    el.detailsHeroImgArea.innerHTML = `<span class="ms details-hero-file-icon" id="detailsHeroIcon">insert_drive_file</span>`;
+    el.detailsHeroBand.hidden = true;
+    el.detailsHeroBand.style.background = "";
+    el.detailsHeroBand.innerHTML = "";
+
+    // NFC tag section — only for .bin files
+    el.panelFileLabel.textContent = entry.name.toLowerCase().endsWith(".bin") ? "NFC Tag" : "Details";
+    const isBin = entry.type === "FILE" && entry.name.toLowerCase().endsWith(".bin");
+    el.panelNfcTag.hidden = !isBin;
+    if (!isBin) {
+      el.panelNfcTagContent.innerHTML = "";
+    } else {
+      const metaHead = entry.meta ? entry.meta.nfcTagHead : null;
+      const metaTail = entry.meta ? entry.meta.nfcTagTail : null;
+      if (metaHead != null) {
+        applyNfcTagDisplay(entry, metaHead, metaTail);
+      } else if (state.client) {
+        el.panelNfcTagContent.innerHTML = `<div class="details-nfc-row"><span class="details-nfc-label">Figure ID</span><span class="details-nfc-value" style="color:#9ca3af">Loading\u2026</span></div>`;
+        const filePath = joinChildPath(state.currentPath, entry.name);
+        state.client.readFileData(filePath).then(res => {
+          if (state.drawerEntry !== entry) return;
+          if (res.ok && res.data.length >= 92) {
+            const dv = new DataView(res.data.buffer, res.data.byteOffset);
+            const head = dv.getUint32(84, false);
+            const tail = dv.getUint32(88, false);
+            applyNfcTagDisplay(entry, head, tail);
+          } else {
+            el.panelNfcTagContent.innerHTML = `<div class="details-nfc-row"><span class="details-nfc-label">Figure ID</span><span class="details-nfc-value" style="color:#9ca3af">Not a valid NFC file</span></div>`;
+          }
+        }).catch(() => {
+          if (state.drawerEntry === entry) el.panelNfcTagContent.innerHTML = `<div class="details-nfc-row"><span class="details-nfc-label">Error</span><span class="details-nfc-value" style="color:#e11d48">Failed to read file</span></div>`;
+        });
+      } else {
+        el.panelNfcTagContent.innerHTML = `<div class="details-nfc-row"><span class="details-nfc-label">Figure ID</span><span class="details-nfc-value" style="color:#9ca3af">Not connected</span></div>`;
+      }
+    }
 
     // Highlight active row
     for (const row of el.fileTableBody.querySelectorAll("tr[data-name]")) {
