@@ -1591,18 +1591,12 @@ function populateFileDetails(entry) {
 }
 
 function setPanelState(mode, entry) {
-  // When upload panel is active, file selection only opens the right details panel —
-  // it does not replace the left upload panel.
-  if (mode === "file" && state.panelMode === "upload") {
-    state.drawerEntry = entry;
-    el.detailsPanel.hidden = false;
-    if (entry) populateFileDetails(entry);
-    return;
+  // Left panel: only toggle between folder info and upload — never on file selection.
+  // The upload panel and file details panel are independent on desktop.
+  if (mode !== "file") {
+    el.panelFolder.hidden = (mode === "upload");
+    el.panelUpload.hidden = (mode !== "upload");
   }
-
-  // Left panel toggles between folder info and upload
-  el.panelFolder.hidden = (mode === "upload");
-  el.panelUpload.hidden = (mode !== "upload");
 
   // Right details panel: on desktop the two columns are independent, so only
   // touch it when not entering upload mode (mobile dismisses via closeDetailsSheet).
@@ -1619,7 +1613,8 @@ function setPanelState(mode, entry) {
 
   if (mode === "file" && entry) {
     state.drawerEntry = entry;
-    state.panelMode = "file";
+    // Keep panelMode as "upload" if upload panel is open — the two panels are independent.
+    if (state.panelMode !== "upload") state.panelMode = "file";
 
     populateFileDetails(entry);
 
