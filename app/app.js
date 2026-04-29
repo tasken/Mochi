@@ -1829,15 +1829,21 @@ el.btnUploadClose.addEventListener("click", () => {
   resetUploadSessionState();
   renderUploadQueue();
   updateControls();
-  // Reset panelMode before calling setPanelState so the upload early-return guard
-  // doesn't intercept the call and leave the upload panel visible.
-  state.panelMode = state.panelPrevMode || "folder";
-  if (state.panelMode === "file" && state.drawerEntry) {
-    setPanelState("file", state.drawerEntry);
+  state.panelMode = "folder";
+  if (isMobileViewport()) {
+    // Mobile: panels are unified — restore to file or folder as appropriate.
+    if (state.panelPrevMode === "file" && state.drawerEntry) {
+      setPanelState("file", state.drawerEntry);
+    } else {
+      setPanelState("folder");
+      closeSheet();
+    }
   } else {
-    setPanelState("folder");
+    // Desktop: left and right panels are independent. Only swap the left panel;
+    // leave the right details panel exactly as it is.
+    el.panelFolder.hidden = false;
+    el.panelUpload.hidden = true;
   }
-  if (isMobileViewport()) closeSheet();
 });
 
 // === Connect button ===
