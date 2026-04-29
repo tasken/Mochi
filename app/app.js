@@ -1829,7 +1829,10 @@ el.btnUploadClose.addEventListener("click", () => {
   resetUploadSessionState();
   renderUploadQueue();
   updateControls();
-  if (state.panelPrevMode === "file" && state.drawerEntry) {
+  // Reset panelMode before calling setPanelState so the upload early-return guard
+  // doesn't intercept the call and leave the upload panel visible.
+  state.panelMode = state.panelPrevMode || "folder";
+  if (state.panelMode === "file" && state.drawerEntry) {
     setPanelState("file", state.drawerEntry);
   } else {
     setPanelState("folder");
