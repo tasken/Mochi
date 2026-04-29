@@ -996,7 +996,20 @@ async function browseFolder(path) {
   state.selectedNames.clear();
   renderBreadcrumb(path);
   renderFileTable();
-  if (state.panelMode !== "upload") setPanelState("folder");
+  if (state.panelMode !== "upload") {
+    const prevEntry = state.drawerEntry;
+    const freshEntry = prevEntry && entries.find(e => e.name === prevEntry.name);
+    if (freshEntry) {
+      // Same selection — just update the reference, no re-render.
+      state.drawerEntry = freshEntry;
+      if (prevEntry.meta?.nfcTagHead != null && freshEntry.meta) {
+        freshEntry.meta.nfcTagHead = prevEntry.meta.nfcTagHead;
+        freshEntry.meta.nfcTagTail = prevEntry.meta.nfcTagTail;
+      }
+    } else {
+      setPanelState("folder");
+    }
+  }
   if (isMobileViewport()) { closeSheet(); closeDetailsSheet(); }
   updateControls();
 }
@@ -1430,10 +1443,11 @@ el.navBreadcrumb.addEventListener("click", (e) => {
 
 // Toolbar buttons
 el.btnRefresh.addEventListener("click", () => {
-  if (state.currentPath) {
-    state.client.folderCache.delete(state.currentPath);
-    browseFolder(state.currentPath);
-  }
+  if (!state.currentPath) return;
+  const icon = el.btnRefresh.querySelector(".ms-sm");
+  icon?.classList.add("spin");
+  state.client.folderCache.delete(state.currentPath);
+  browseFolder(state.currentPath).finally(() => icon?.classList.remove("spin"));
 });
 
 // Mobile back button — navigate up one level
@@ -1576,6 +1590,8 @@ function populateFileDetails(entry) {
           const dv = new DataView(res.data.buffer, res.data.byteOffset);
           const head = dv.getUint32(84, false);
           const tail = dv.getUint32(88, false);
+          // Cache on the entry so a same-file refresh doesn't re-read from device.
+          if (entry.meta) { entry.meta.nfcTagHead = head; entry.meta.nfcTagTail = tail; }
           applyNfcTagDisplay(entry, head, tail);
         } else {
           el.panelNfcTagContent.innerHTML = `<div class="details-nfc-row"><span class="details-nfc-label">Figure ID</span><span class="details-nfc-value" style="color:#9ca3af">Not a valid NFC file</span></div>`;
