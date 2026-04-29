@@ -781,6 +781,12 @@ function openModal(modalEl) { modalEl.classList.add("open"); }
 function closeModal(modalEl) {
   if (modalEl === el.newFolderModal) clearInputError(el.newFolderInput, el.newFolderError);
   if (modalEl === el.renameModal) clearInputError(el.renameInput, el.renameError);
+  if (modalEl === el.formatModal) {
+    clearInterval(_formatCountdown);
+    _formatCountdown = null;
+    el.btnFormatConfirm.textContent = "Format drive";
+    el.btnFormatConfirm.disabled = false;
+  }
   modalEl.classList.remove("open");
   modalEl.dispatchEvent(new Event("modal:close"));
 }
@@ -829,12 +835,7 @@ document.addEventListener("keydown", e => {
   if (el.sheetContainer.classList.contains("open")) { e.preventDefault(); closeSheet(); }
 });
 
-el.btnFormatCancel.addEventListener("click", () => {
-  clearInterval(_formatCountdown);
-  _formatCountdown = null;
-  el.btnFormatConfirm.textContent = "Format drive";
-  closeModal(el.formatModal);
-});
+el.btnFormatCancel.addEventListener("click", () => closeModal(el.formatModal));
 
 el.btnFormatConfirm.addEventListener("click", async () => {
   closeModal(el.formatModal);
