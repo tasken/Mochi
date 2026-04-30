@@ -214,37 +214,28 @@ const el = {
   btnSheetUpload: document.getElementById("btnSheetUpload"),
 
   // Modals
-  formatModal: document.getElementById("formatModal"),
-  btnFormatCancel: document.getElementById("btnFormatCancel"),
-  btnFormatConfirm: document.getElementById("btnFormatConfirm"),
+  confirmModal: document.getElementById("confirmModal"),
+  confirmTitle: document.getElementById("confirmTitle"),
+  confirmBadge: document.getElementById("confirmBadge"),
+  confirmIcon: document.getElementById("confirmIcon"),
+  confirmBodyTitle: document.getElementById("confirmBodyTitle"),
+  confirmMessage: document.getElementById("confirmMessage"),
+  btnConfirmOk: document.getElementById("btnConfirmOk"),
 
-  newFolderModal: document.getElementById("newFolderModal"),
-  newFolderPath: document.getElementById("newFolderPath"),
-  newFolderInput: document.getElementById("newFolderInput"),
-  newFolderError: document.getElementById("newFolderError"),
-  btnNewFolderCancel: document.getElementById("btnNewFolderCancel"),
-  btnNewFolderConfirm: document.getElementById("btnNewFolderConfirm"),
-
-  renameModal: document.getElementById("renameModal"),
-  renameInput: document.getElementById("renameInput"),
-  renameError: document.getElementById("renameError"),
-  btnRenameCancel: document.getElementById("btnRenameCancel"),
-  btnRenameConfirm: document.getElementById("btnRenameConfirm"),
-
-  deleteModal: document.getElementById("deleteModal"),
-  deleteCount: document.getElementById("deleteCount"),
-  deleteModalMsg: document.getElementById("deleteModalMsg"),
-  btnDeleteCancel: document.getElementById("btnDeleteCancel"),
-  btnDeleteConfirm: document.getElementById("btnDeleteConfirm"),
+  inputModal: document.getElementById("inputModal"),
+  inputTitle: document.getElementById("inputTitle"),
+  inputLabel: document.getElementById("inputLabel"),
+  inputField: document.getElementById("inputField"),
+  inputError: document.getElementById("inputError"),
+  inputHelper: document.getElementById("inputHelper"),
+  btnInputOk: document.getElementById("btnInputOk"),
 
   uploadWarnModal: document.getElementById("uploadWarnModal"),
   uploadWarnMsg: document.getElementById("uploadWarnMsg"),
-  btnUploadWarnCancel: document.getElementById("btnUploadWarnCancel"),
   btnUploadWarnConfirm: document.getElementById("btnUploadWarnConfirm"),
 
   sanitizeModalNone: document.getElementById("sanitizeModalNone"),
   sanitizeNonePath: document.getElementById("sanitizeNonePath"),
-  btnSanitizeNoneCancel: document.getElementById("btnSanitizeNoneCancel"),
   btnSanitizeNoneConfirm: document.getElementById("btnSanitizeNoneConfirm"),
 };
 
@@ -442,7 +433,7 @@ function setConnState(newState) {
   el.mainOverlayIcon.hidden = connecting || reconnecting;
   el.mainOverlaySpinner.hidden = !(connecting || reconnecting);
   el.mainOverlayTitle.textContent = reconnecting ? "Reconnecting\u2026" : connecting ? "Connecting to Pixl.js\u2026" : "No device connected";
-  el.mainOverlaySub.textContent = (connecting || reconnecting) ? "" : "Connect to browse and manage files on your Pixl.js over Bluetooth.";
+  el.mainOverlaySub.textContent = (connecting || reconnecting) ? "" : "Connect your Pixl.js to browse and manage files.";
   el.btnConnectCta.hidden = connecting || reconnecting;
   el.btnConnectCta.disabled = connecting || reconnecting;
 
@@ -674,7 +665,7 @@ async function connectOrDisconnect() {
     const wasReconnecting = state.connState === "reconnecting";
     if (state.disconnectToast) { removeToast(state.disconnectToast); state.disconnectToast = null; }
     if (state.connState !== "disconnected") setConnState("disconnected");
-    if (wasReconnecting) showErrorToast("Reconnection timed out", "Try disconnecting and reconnecting.");
+    if (wasReconnecting) showErrorToast("Reconnection timed out", "Disconnect and try again.");
     invalidateCache();
   };
   state.client.onReconnecting = () => {
@@ -779,41 +770,151 @@ function renderDrive(driveData) {
 
 function openModal(modalEl) { modalEl.classList.add("open"); }
 function closeModal(modalEl) {
-  if (modalEl === el.newFolderModal) clearInputError(el.newFolderInput, el.newFolderError);
-  if (modalEl === el.renameModal) clearInputError(el.renameInput, el.renameError);
-  if (modalEl === el.formatModal) {
-    clearInterval(_formatCountdown);
-    _formatCountdown = null;
-    el.btnFormatConfirm.textContent = "Format drive";
-    el.btnFormatConfirm.disabled = false;
+  if (modalEl === el.confirmModal) {
+    clearInterval(_confirmCountdown);
+    _confirmCountdown = null;
   }
   modalEl.classList.remove("open");
   modalEl.dispatchEvent(new Event("modal:close"));
 }
 
-let _formatCountdown = null;
-
-el.btnFormat.addEventListener("click", () => {
-  el.btnFormatConfirm.disabled = true;
-  el.btnFormatConfirm.textContent = "Wait (5s)";
-  let sec = 5;
-  clearInterval(_formatCountdown);
-  _formatCountdown = setInterval(() => {
-    sec--;
-    if (sec > 0) {
-      el.btnFormatConfirm.textContent = `Wait (${sec}s)`;
-    } else {
-      clearInterval(_formatCountdown);
-      _formatCountdown = null;
-      el.btnFormatConfirm.textContent = "Format drive";
-      el.btnFormatConfirm.disabled = false;
-    }
-  }, 1000);
-  openModal(el.formatModal);
-});
 // Generic close button delegate for all modals
 document.querySelectorAll("[data-modal-close]").forEach(btn => {
   btn.addEventListener("click", () => closeModal(btn.closest(".modal-overlay")));
+});
+
+// === Shared confirm modal ===
+
+let _confirmResolve = null;
+let _confirmCountdown = null;
+
+function showConfirmModal({ title, badge = "danger", icon, heading = "", message = "", okLabel = "Confirm", okClass = "danger", okDelay = 0 }) {
+  el.confirmTitle.textContent = title;
+  el.confirmBadge.className = `modal-icon-badge ${badge}`;
+  el.confirmBadge.hidden = !icon;
+  if (icon) el.confirmIcon.textContent = icon;
+  el.confirmBodyTitle.textContent = heading;
+  el.confirmBodyTitle.hidden = !heading;
+  el.confirmMessage.textContent = message;
+  el.confirmMessage.hidden = !message;
+  el.btnConfirmOk.className = `btn-labeled ${okClass}`;
+  clearInterval(_confirmCountdown);
+  if (okDelay > 0) {
+    el.btnConfirmOk.disabled = true;
+    el.btnConfirmOk.textContent = `Wait (${okDelay}s)`;
+    let sec = okDelay;
+    _confirmCountdown = setInterval(() => {
+      sec--;
+      if (sec > 0) {
+        el.btnConfirmOk.textContent = `Wait (${sec}s)`;
+      } else {
+        clearInterval(_confirmCountdown);
+        _confirmCountdown = null;
+        el.btnConfirmOk.textContent = okLabel;
+        el.btnConfirmOk.disabled = false;
+      }
+    }, 1000);
+  } else {
+    el.btnConfirmOk.disabled = false;
+    el.btnConfirmOk.textContent = okLabel;
+  }
+  openModal(el.confirmModal);
+  return new Promise(resolve => { _confirmResolve = resolve; });
+}
+
+el.confirmModal.addEventListener("modal:close", () => {
+  _confirmResolve?.(false);
+  _confirmResolve = null;
+});
+
+el.btnConfirmOk.addEventListener("click", () => {
+  if (el.btnConfirmOk.disabled) return;
+  const r = _confirmResolve;
+  _confirmResolve = null;
+  closeModal(el.confirmModal);
+  r?.(true);
+});
+
+// === Shared input modal ===
+
+let _inputResolve = null;
+let _inputValidate = null;
+
+function showInputModal({ title, label, placeholder = "", value = "", helper = "", okLabel = "OK" }) {
+  el.inputTitle.textContent = title;
+  el.inputLabel.textContent = label;
+  el.inputField.placeholder = placeholder;
+  el.inputField.value = value;
+  el.inputHelper.hidden = !helper;
+  el.inputHelper.textContent = helper;
+  el.btnInputOk.textContent = okLabel;
+  clearInputError(el.inputField, el.inputError);
+  openModal(el.inputModal);
+  requestAnimationFrame(() => { el.inputField.focus(); el.inputField.select(); });
+  return new Promise(resolve => { _inputResolve = resolve; });
+}
+
+el.inputModal.addEventListener("modal:close", () => {
+  clearInputError(el.inputField, el.inputError);
+  _inputResolve?.(null);
+  _inputResolve = null;
+  _inputValidate = null;
+});
+
+el.inputField.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") { e.preventDefault(); el.btnInputOk.click(); }
+});
+
+el.inputField.addEventListener("input", () => {
+  clearInputError(el.inputField, el.inputError);
+});
+
+el.btnInputOk.addEventListener("click", () => {
+  const raw = el.inputField.value;
+  if (_inputValidate) {
+    const err = _inputValidate(raw);
+    if (err) { showInputError(el.inputField, el.inputError, err); el.inputField.focus(); return; }
+  }
+  const r = _inputResolve;
+  _inputResolve = null;
+  closeModal(el.inputModal);
+  r?.(raw.trim());
+});
+
+// === Format drive ===
+
+el.btnFormat.addEventListener("click", async () => {
+  const confirmed = await showConfirmModal({
+    title: "Format drive",
+    badge: "warning",
+    icon: "warning",
+    heading: "Erase all files on your device?",
+    message: "Every file and folder will be permanently deleted. Firmware stays intact. You can't undo this.",
+    okLabel: "Format drive",
+    okClass: "danger",
+    okDelay: 5,
+  });
+  if (!confirmed || !state.client) return;
+  try {
+    const res = await state.client.formatDrive("E");
+    if (res.ok) {
+      log("Drive E: formatted successfully.");
+      showSuccessToast("Drive formatted");
+      invalidateCache();
+      const dr = await state.client.listDrives();
+      if (dr.ok && dr.data.length > 0) {
+        state.drive = dr.data[0];
+        renderDrive(state.drive);
+      }
+      await browseFolder("E:/");
+    } else {
+      log(`Format failed: ${res.error}`, "err");
+      showErrorToast("Format failed", res.error);
+    }
+  } catch (err) {
+    log(`Format error: ${err.message}`, "err");
+    showErrorToast("Format failed", err.message);
+  }
 });
 
 // Escape key — close surfaces from most to least prominent
@@ -835,49 +936,9 @@ document.addEventListener("keydown", e => {
   if (el.sheetContainer.classList.contains("open")) { e.preventDefault(); closeSheet(); }
 });
 
-el.btnFormatCancel.addEventListener("click", () => closeModal(el.formatModal));
-
-el.btnFormatConfirm.addEventListener("click", async () => {
-  closeModal(el.formatModal);
-  if (!state.client) return;
-  try {
-    el.btnFormatConfirm.disabled = true;
-    const res = await state.client.formatDrive("E");
-    if (res.ok) {
-      log("Drive E: formatted successfully.");
-      showSuccessToast("Drive formatted");
-      invalidateCache();
-      const dr = await state.client.listDrives();
-      if (dr.ok && dr.data.length > 0) {
-        state.drive = dr.data[0];
-        renderDrive(state.drive);
-      }
-      await browseFolder("E:/");
-    } else {
-      log(`Format failed: ${res.error}`, "err");
-      showErrorToast("Format failed", res.error);
-    }
-  } catch (err) {
-    log(`Format error: ${err.message}`, "err");
-    showErrorToast("Format failed", err.message);
-  } finally {
-    el.btnFormatConfirm.disabled = false;
-  }
-});
-
 // Close modals on backdrop click
-for (const modal of [el.formatModal, el.newFolderModal, el.renameModal, el.deleteModal,
-    el.sanitizeModalNone]) {
-  modal.addEventListener("click", (e) => {
-    if (e.target === modal) {
-      if (modal === el.formatModal) {
-        clearInterval(_formatCountdown);
-        _formatCountdown = null;
-        el.btnFormatConfirm.textContent = "Format drive";
-      }
-      closeModal(modal);
-    }
-  });
+for (const modal of [el.confirmModal, el.inputModal, el.sanitizeModalNone, el.uploadWarnModal]) {
+  modal.addEventListener("click", (e) => { if (e.target === modal) closeModal(modal); });
 }
 
 // === Update Controls ===
@@ -1185,7 +1246,7 @@ function getBrowserEmptyStateContent() {
   return {
     icon: "folder_open",
     title: "Folder is empty",
-    sub: "Nothing here yet.",
+    sub: "Upload files to get started.",
   };
 }
 
@@ -1307,7 +1368,7 @@ function applySelectionToRows(checked) {
 
 // === File Table Event Delegation ===
 
-el.fileTableBody.addEventListener("click", (e) => {
+el.fileTableBody.addEventListener("click", async (e) => {
   const row = e.target.closest("tr");
   if (!row || !row.dataset.name) return;
   const name = row.dataset.name;
@@ -1332,11 +1393,18 @@ el.fileTableBody.addEventListener("click", (e) => {
     if (actionBtn.dataset.action === "rename") {
       openRenameModal(entry.name);
     } else if (actionBtn.dataset.action === "delete") {
-      el.deleteCount.textContent = "1";
-      el.deleteModalMsg.textContent = `Permanently delete "${entry.name}"? This action cannot be undone.`;
       state.selectedNames.clear();
       state.selectedNames.add(entry.name);
-      openModal(el.deleteModal);
+      const confirmed = await showConfirmModal({
+        title: "Delete",
+        badge: "danger",
+        icon: "delete",
+        heading: `Delete "${entry.name}"?`,
+        message: "It will be permanently removed from your device. You can't undo this.",
+        okLabel: "Delete",
+        okClass: "danger",
+      });
+      if (confirmed) await doDeleteSelected();
     } else if (actionBtn.dataset.action === "download") {
       const filePath = joinChildPath(state.currentPath, entry.name);
       state.client.readFileData(filePath).then(res => {
@@ -1379,12 +1447,19 @@ el.checkAll.addEventListener("change", () => {
   updateSelectionBar();
 });
 
-el.btnDeleteSelected.addEventListener("click", () => {
+el.btnDeleteSelected.addEventListener("click", async () => {
   const count = state.selectedNames.size;
   if (count === 0) return;
-  el.deleteCount.textContent = String(count);
-  el.deleteModalMsg.textContent = `Permanently delete ${pluralize(count, "item")}? This action cannot be undone.`;
-  openModal(el.deleteModal);
+  const confirmed = await showConfirmModal({
+    title: "Delete",
+    badge: "danger",
+    icon: "delete",
+    heading: `Delete ${pluralize(count, "item")}?`,
+    message: "They'll be permanently removed from your device. You can't undo this.",
+    okLabel: "Delete",
+    okClass: "danger",
+  });
+  if (confirmed) await doDeleteSelected();
 });
 
 el.btnClearSelection.addEventListener("click", () => {
@@ -1490,29 +1565,25 @@ el.btnMobileUp.addEventListener("click", () => {
   }, { passive: true });
 }
 
-// New folder modal
-el.btnNewFolder.addEventListener("click", () => {
-  el.newFolderPath.textContent = state.currentPath || "E:/";
-  el.newFolderInput.value = "";
-  clearInputError(el.newFolderInput, el.newFolderError);
-  openModal(el.newFolderModal);
-  el.newFolderInput.focus();
-});
-
-el.btnNewFolderCancel.addEventListener("click", () => closeModal(el.newFolderModal));
-
-el.btnNewFolderConfirm.addEventListener("click", async () => {
+// New folder
+el.btnNewFolder.addEventListener("click", async () => {
   if (!state.client) return;
-
-  const name = readValidatedNameInput(el.newFolderInput, el.newFolderError, {
+  _inputValidate = (raw) => {
+    try {
+      const v = validateSingleName(raw, "Folder name");
+      ensureSiblingNameAvailable(v, "");
+      validateRemotePath(joinChildPath(state.currentPath || "E:/", v), "folder");
+      return null;
+    } catch (err) { return err.message; }
+  };
+  const name = await showInputModal({
+    title: "New folder",
     label: "Folder name",
-    kind: "folder",
-    currentName: "",
+    placeholder: "e.g. collection",
+    helper: `Created in ${state.currentPath || "E:/"}`,
+    okLabel: "Create",
   });
   if (!name) return;
-
-  closeModal(el.newFolderModal);
-
   try {
     const folderPath = joinChildPath(state.currentPath, name);
     const res = await state.client.createFolder(folderPath);
@@ -1523,16 +1594,13 @@ el.btnNewFolderConfirm.addEventListener("click", async () => {
       await browseFolder(state.currentPath);
     } else {
       log(`Failed to create folder: ${res.error}`, "err");
-      showErrorToast("Folder creation failed", res.error);
+      showErrorToast("Couldn't create folder", res.error);
     }
   } catch (err) {
     log(`Failed to create folder: ${err.message}`, "err");
-    showErrorToast("Folder creation failed", err.message);
+    showErrorToast("Couldn't create folder", err.message);
   }
 });
-
-el.btnDeleteCancel.addEventListener("click", () => closeModal(el.deleteModal));
-el.btnRenameCancel.addEventListener("click", () => closeModal(el.renameModal));
 
 // Normalize modal
 el.btnNormalize.addEventListener("click", () => {
@@ -1540,7 +1608,6 @@ el.btnNormalize.addEventListener("click", () => {
   openModal(el.sanitizeModalNone);
 });
 
-el.btnSanitizeNoneCancel.addEventListener("click", () => closeModal(el.sanitizeModalNone));
 
 // === Context Panel ===
 
@@ -1680,13 +1747,45 @@ el.detailsSheetBackdrop.addEventListener("click", () => {
   closeDetailsSheet();
 });
 
-function openRenameModal(name) {
-  renameTarget = name;
-  el.renameInput.value = name;
-  clearInputError(el.renameInput, el.renameError);
-  openModal(el.renameModal);
-  el.renameInput.focus();
-  el.renameInput.select();
+async function openRenameModal(name) {
+  if (!state.client) return;
+  const entry = state.entries.find(e => e.name === name);
+  const kind = entry && entry.type === "DIR" ? "folder" : "file";
+  _inputValidate = (raw) => {
+    try {
+      const v = validateSingleName(raw, "Name");
+      if (v === name) throw new Error("Name is unchanged");
+      ensureSiblingNameAvailable(v, name);
+      validateRemotePath(joinChildPath(state.currentPath || "E:/", v), kind);
+      return null;
+    } catch (err) { return err.message; }
+  };
+  const newName = await showInputModal({
+    title: "Rename",
+    label: "New name",
+    placeholder: "",
+    value: name,
+    okLabel: "Rename",
+  });
+  if (!newName) return;
+  try {
+    const oldPath = joinChildPath(state.currentPath, name);
+    const newPath = joinChildPath(state.currentPath, newName);
+    const res = await state.client.renamePath(oldPath, newPath);
+    if (res.ok) {
+      log(`Renamed: ${name} → ${newName}`);
+      showSuccessToast("Renamed");
+    } else {
+      log(`Rename failed: ${res.error}`, "err");
+      showErrorToast("Rename failed", res.error);
+    }
+  } catch (err) {
+    log(`Failed to rename: ${err.message}`, "err");
+    showErrorToast("Rename failed", err.message);
+  } finally {
+    invalidateCache();
+    await browseFolder(state.currentPath);
+  }
 }
 
 // === Log side sheet ===
@@ -1837,72 +1936,9 @@ el.btnUploadClose.addEventListener("click", () => {
 el.btnConnect.addEventListener("click", connectOrDisconnect);
 el.btnConnectCta.addEventListener("click", connectOrDisconnect);
 
-// === Keyboard: Enter in new-folder input ===
-
-el.newFolderInput.addEventListener("keydown", (e) => {
-  if (e.key === "Enter") {
-    e.preventDefault();
-    el.btnNewFolderConfirm.click();
-  }
-});
-
-el.newFolderInput.addEventListener("input", () => {
-  clearInputError(el.newFolderInput, el.newFolderError);
-});
-
-el.renameInput.addEventListener("keydown", (e) => {
-  if (e.key === "Enter") {
-    e.preventDefault();
-    el.btnRenameConfirm.click();
-  }
-});
-
-el.renameInput.addEventListener("input", () => {
-  clearInputError(el.renameInput, el.renameError);
-});
-
-let renameTarget = "";
-
-// --- Rename confirm ---
-
-el.btnRenameConfirm.addEventListener("click", async () => {
-  if (!state.client) return;
-
-  const entry = state.entries.find(e => e.name === renameTarget);
-  const kind = entry && entry.type === "DIR" ? "folder" : "file";
-  const newName = readValidatedNameInput(el.renameInput, el.renameError, {
-    label: "Name",
-    kind,
-    currentName: renameTarget,
-  });
-  if (!newName) return;
-
-  closeModal(el.renameModal);
-
-  try {
-    const oldPath = joinChildPath(state.currentPath, renameTarget);
-    const newPath = joinChildPath(state.currentPath, newName);
-    const res = await state.client.renamePath(oldPath, newPath);
-    if (res.ok) {
-      log(`Renamed: ${renameTarget} \u2192 ${newName}`);
-      showSuccessToast("Renamed");
-    } else {
-      log(`Rename failed: ${res.error}`, "err");
-      showErrorToast("Rename failed", res.error);
-    }
-  } catch (err) {
-    log(`Failed to rename: ${err.message}`, "err");
-    showErrorToast("Rename failed", err.message);
-  } finally {
-    invalidateCache();
-    await browseFolder(state.currentPath);
-  }
-});
-
 // --- Delete confirm ---
 
-el.btnDeleteConfirm.addEventListener("click", async () => {
-  closeModal(el.deleteModal);
+async function doDeleteSelected() {
   if (!state.client || state.selectedNames.size === 0) return;
 
   const selected = state.entries.filter(e => state.selectedNames.has(e.name));
@@ -1956,7 +1992,7 @@ el.btnDeleteConfirm.addEventListener("click", async () => {
     invalidateCache();
     await browseFolder(state.currentPath);
   }
-});
+}
 
 // --- Sanitize helpers ---
 
@@ -2045,11 +2081,11 @@ async function executeSanitize(allOps, allSkipped) {
   const totalText = pluralize(allOps.length, "item");
   const skippedText = allSkipped.length > 0 ? `Skipped ${pluralize(allSkipped.length, "item")}` : "";
   if (renamed === allOps.length && renamed > 0) {
-    showSuccessToast(`Renamed ${renamedText}`, skippedText);
+    showSuccessToast(`Lowercased ${renamedText}`, skippedText);
   } else if (renamed > 0) {
-    showErrorToast(`Renamed ${renamedText} of ${totalText}`, skippedText);
+    showErrorToast(`Lowercased ${renamedText} of ${totalText}`, skippedText);
   } else if (allOps.length > 0) {
-    showErrorToast("Rename failed");
+    showErrorToast("Normalize failed");
   } else {
     showSuccessToast("Already lowercase", skippedText);
   }
@@ -2063,7 +2099,7 @@ async function withBrowserLock(title, fn) {
     await fn();
   } catch (err) {
     log(err.message, "err");
-    showErrorToast("Rename failed", err.message);
+    showErrorToast("Normalize failed", err.message);
   } finally {
     el.browserLockOverlay.classList.remove("active");
     updateControls();
@@ -2082,7 +2118,7 @@ el.btnSanitizeNoneConfirm.addEventListener("click", async () => {
   try {
     scope = readCheckedRadioValue("sanitizeNoneScope", "Normalize scope");
   } catch (err) {
-    showErrorToast("Rename failed", err.message);
+    showErrorToast("Normalize failed", err.message);
     return;
   }
 
@@ -2517,13 +2553,13 @@ function buildUploadPlan(folders, files) {
     if (skipped.length > 0) {
       showErrorToast("No files added to queue", formatUploadInputFeedback(skipped));
     } else {
-      showWarningToast("No files added to queue", "The selected folder appears to be empty.");
+      showWarningToast("No files added to queue", "That folder is empty.");
     }
     return;
   }
 
   if (skipped.length > 0) {
-    showWarningToast(`Skipped ${pluralize(skipped.length, "invalid upload item")}`, formatUploadInputFeedback(skipped));
+    showWarningToast(`Couldn't add ${pluralize(skipped.length, "file")}`, formatUploadInputFeedback(skipped));
   }
 }
 
@@ -2588,7 +2624,6 @@ function showUploadWarnModal(htmlContent) {
     const { signal } = ac;
     const done = (result) => { ac.abort(); closeModal(el.uploadWarnModal); resolve(result); };
     el.btnUploadWarnConfirm.addEventListener("click", () => done(true), { signal });
-    el.btnUploadWarnCancel.addEventListener("click", () => done(false), { signal });
     el.uploadWarnModal.addEventListener("modal:close", () => { ac.abort(); resolve(false); }, { signal, once: true });
   });
 }
@@ -2596,14 +2631,14 @@ function showUploadWarnModal(htmlContent) {
 function buildSystemFolderWarnHtml(affected) {
   const parts = [];
   if (affected.has("data")) parts.push(
-    `<p><strong>My Tags (amiibo/data)</strong> — files here must be named ` +
-    `<strong>00.bin, 01.bin</strong>… to appear as slots in the AmiiDB app.</p>`
+    `<p><strong>My Tags (amiibo/data)</strong> — files need sequential names like ` +
+    `<strong>00.bin, 01.bin</strong>… to show up as slots in AmiiDB.</p>`
   );
   if (affected.has("fav")) parts.push(
-    `<p><strong>My Favorites (amiibo/fav)</strong> — this folder uses an internal ` +
-    `format managed by AmiiDB. Uploaded files won't be visible in the app.</p>`
+    `<p><strong>My Favorites (amiibo/fav)</strong> — AmiiDB manages this folder's format. ` +
+    `Files you upload here won't appear in the app.</p>`
   );
-  return parts.join("") + `<p class="modal-note">You can still upload, but files may not appear as expected.</p>`;
+  return parts.join("") + `<p class="modal-note">You can still upload — some files just may not appear as expected.</p>`;
 }
 
 async function checkSystemFolderWarning(collected) {

@@ -62,7 +62,7 @@
     </span>
     <span class="topbar-action-sep" id="topbarActionSep" hidden></span>
     <button class="btn-icon ghost" id="btnFormat" title="Format drive E:" aria-label="Format drive" hidden><span class="ms">mop</span></button>
-    <button class="btn-icon ghost" id="btnNormalize" title="Normalize filenames" aria-label="Normalize filenames" hidden><span class="ms">match_case</span></button>
+    <button class="btn-icon ghost" id="btnNormalize" title="Lowercase filenames" aria-label="Lowercase filenames" hidden><span class="ms">match_case</span></button>
     <button class="btn-icon ghost" id="btnLogToggle" title="Protocol log" aria-label="Toggle protocol log" hidden><span class="ms">terminal</span></button>
     <span class="topbar-error" id="connError" hidden></span>
   </header>
@@ -135,7 +135,7 @@
       <div class="panel-state" id="panelUpload" hidden>
         <div class="panel-header">
           <span class="panel-label">Upload</span>
-          <button class="btn-icon ghost" id="btnUploadClose" title="Close"><span class="ms-sm">close</span></button>
+          <button class="btn-icon ghost" id="btnUploadClose" title="Close" aria-label="Close upload panel"><span class="ms-sm">close</span></button>
         </div>
 
         <!-- Zone 1: source pickers -->
@@ -226,7 +226,7 @@
             <tr>
               <th class="cell-check"><input type="checkbox" id="checkAll" title="Select all" aria-label="Select all"></th>
               <th>Name</th>
-              <th>Size</th>
+              <th class="cell-size">Size</th>
               <th class="cell-actions"></th>
             </tr>
           </thead>
@@ -344,78 +344,40 @@
   </div>
 </div>
 
-<!-- Format drive modal -->
-<div id="formatModal" class="modal-overlay">
+<!-- Shared confirm modal (format, delete, …) -->
+<div id="confirmModal" class="modal-overlay">
   <div class="modal-box">
     <div class="modal-header">
-      <span class="modal-header-title">Format drive</span>
+      <span class="modal-header-title" id="confirmTitle"></span>
       <button class="modal-close" data-modal-close aria-label="Close"><span class="ms">close</span></button>
     </div>
     <div class="modal-body">
-      <div class="modal-icon-badge warning"><span class="ms">warning</span></div>
-      <div class="modal-body-title">Erase everything on Pixl.js?</div>
-      <p id="formatModalMsg">This will permanently erase all files and folders on the device. Firmware is not affected. This cannot be undone.</p>
+      <div class="modal-icon-badge" id="confirmBadge"><span class="ms" id="confirmIcon"></span></div>
+      <div class="modal-body-title" id="confirmBodyTitle"></div>
+      <p id="confirmMessage"></p>
       <div class="modal-actions">
-        <button class="btn-labeled ghost" id="btnFormatCancel">Cancel</button>
-        <button class="btn-labeled danger" id="btnFormatConfirm"><span class="ms">diamond</span> Format drive</button>
+        <button class="btn-labeled ghost" data-modal-close>Cancel</button>
+        <button class="btn-labeled danger" id="btnConfirmOk"></button>
       </div>
     </div>
   </div>
 </div>
 
-<!-- New folder modal -->
-<div id="newFolderModal" class="modal-overlay">
+<!-- Shared input modal (rename, new folder, …) -->
+<div id="inputModal" class="modal-overlay">
   <div class="modal-box">
     <div class="modal-header">
-      <span class="modal-header-title">New folder</span>
+      <span class="modal-header-title" id="inputTitle"></span>
       <button class="modal-close" data-modal-close aria-label="Close"><span class="ms">close</span></button>
     </div>
     <div class="modal-body">
-      <label class="modal-field-label" for="newFolderInput">Folder name</label>
-      <input type="text" class="path-input modal-input" id="newFolderInput" placeholder="e.g. firmware" spellcheck="false" autofocus>
-      <div class="field-error" id="newFolderError" hidden aria-live="polite"></div>
-      <div class="modal-helper-text">Created in <span class="modal-inline-mono" id="newFolderPath"></span></div>
+      <label class="modal-field-label" id="inputLabel" for="inputField"></label>
+      <input type="text" class="path-input modal-input" id="inputField" spellcheck="false">
+      <div class="field-error" id="inputError" hidden aria-live="polite"></div>
+      <div class="modal-helper-text" id="inputHelper" hidden></div>
       <div class="modal-actions">
-        <button class="btn-labeled ghost" id="btnNewFolderCancel">Cancel</button>
-        <button class="btn-labeled primary" id="btnNewFolderConfirm">Create</button>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- Rename modal -->
-<div id="renameModal" class="modal-overlay">
-  <div class="modal-box">
-    <div class="modal-header">
-      <span class="modal-header-title">Rename</span>
-      <button class="modal-close" data-modal-close aria-label="Close"><span class="ms">close</span></button>
-    </div>
-    <div class="modal-body">
-      <label class="modal-field-label" for="renameInput">New name</label>
-      <input type="text" class="path-input modal-input" id="renameInput" placeholder="New name" spellcheck="false">
-      <div class="field-error" id="renameError" hidden aria-live="polite"></div>
-      <div class="modal-actions">
-        <button class="btn-labeled ghost" id="btnRenameCancel">Cancel</button>
-        <button class="btn-labeled primary" id="btnRenameConfirm">Rename</button>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- Delete confirmation modal -->
-<div id="deleteModal" class="modal-overlay">
-  <div class="modal-box">
-    <div class="modal-header">
-      <span class="modal-header-title">Delete</span>
-      <button class="modal-close" data-modal-close aria-label="Close"><span class="ms">close</span></button>
-    </div>
-    <div class="modal-body">
-      <div class="modal-icon-badge danger"><span class="ms">delete</span></div>
-      <div class="modal-body-title">Delete <span id="deleteCount">0</span> item?</div>
-      <p id="deleteModalMsg"></p>
-      <div class="modal-actions">
-        <button class="btn-labeled ghost" id="btnDeleteCancel">Cancel</button>
-        <button class="btn-labeled danger" id="btnDeleteConfirm">Delete</button>
+        <button class="btn-labeled ghost" data-modal-close>Cancel</button>
+        <button class="btn-labeled primary" id="btnInputOk"></button>
       </div>
     </div>
   </div>
@@ -425,13 +387,15 @@
 <div id="uploadWarnModal" class="modal-overlay">
   <div class="modal-box">
     <div class="modal-header">
-      <span class="modal-header-title">Before you continue</span>
+      <span class="modal-header-title">Upload</span>
       <button class="modal-close" data-modal-close aria-label="Close"><span class="ms">close</span></button>
     </div>
     <div class="modal-body">
+      <div class="modal-icon-badge warning"><span class="ms">warning</span></div>
+      <div class="modal-body-title">Some folders have naming rules</div>
       <div id="uploadWarnMsg"></div>
       <div class="modal-actions">
-        <button class="btn-labeled ghost" id="btnUploadWarnCancel">Cancel</button>
+        <button class="btn-labeled ghost" data-modal-close>Cancel</button>
         <button class="btn-labeled primary" id="btnUploadWarnConfirm">Continue</button>
       </div>
     </div>
@@ -446,7 +410,8 @@
       <button class="modal-close" data-modal-close aria-label="Close"><span class="ms">close</span></button>
     </div>
     <div class="modal-body">
-      <p>What should be renamed to lowercase in <strong class="modal-inline-mono" id="sanitizeNonePath"></strong>?</p>
+      <div class="modal-icon-badge primary"><span class="ms">match_case</span></div>
+      <div class="modal-body-title">What should be lowercased in <strong class="modal-inline-mono" id="sanitizeNonePath"></strong>?</div>
       <div class="modal-choice-list">
         <label class="modal-choice-option">
           <input type="radio" name="sanitizeNoneScope" value="files" checked> Files in this folder only
@@ -455,12 +420,12 @@
           <input type="radio" name="sanitizeNoneScope" value="filesAndFolders"> Files and folders in this folder
         </label>
         <label class="modal-choice-option">
-          <input type="radio" name="sanitizeNoneScope" value="recursive"> Everything, recursively
+          <input type="radio" name="sanitizeNoneScope" value="recursive"> Everything, including subfolders
         </label>
       </div>
       <div class="modal-actions">
-        <button class="btn-labeled ghost" id="btnSanitizeNoneCancel">Cancel</button>
-        <button class="btn-labeled primary" id="btnSanitizeNoneConfirm">Rename all</button>
+        <button class="btn-labeled ghost" data-modal-close>Cancel</button>
+        <button class="btn-labeled primary" id="btnSanitizeNoneConfirm">Lowercase all</button>
       </div>
     </div>
   </div>
