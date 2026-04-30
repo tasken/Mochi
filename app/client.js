@@ -561,30 +561,29 @@ export class DevMockClient {
         { name: "save",       type: "DIR" },
         { name: "README.txt", type: "FILE", size: 312, meta: { nfcTagHead: null, nfcTagTail: null } },
       ],
+      // loose files in amiibo root + the 3 system folders
       "E:/amiibo": [
-        { name: "data",      type: "DIR" },
-        { name: "fav",       type: "DIR" },
-        { name: "figures",   type: "DIR" },
-        { name: "large-set", type: "DIR" },
-        { name: "tag_001.bin", type: "FILE", size: 540, meta: { nfcTagHead: 0x00000000, nfcTagTail: 0x00000002 } },
-        { name: "tag_002.bin", type: "FILE", size: 540, meta: { nfcTagHead: 0x05C00000, nfcTagTail: 0x04121302 } },
+        { name: "data",       type: "DIR" },
+        { name: "fav",        type: "DIR" },
+        { name: "large-set",  type: "DIR" },
+        { name: "tag_001.bin", type: "FILE", size: 540, meta: { nfcTagHead: 0x05C00000, nfcTagTail: 0x04121302 } }, // Samus (Metroid)
+        { name: "tag_002.bin", type: "FILE", size: 540, meta: { nfcTagHead: 0x1F000000, nfcTagTail: 0x02540C02 } }, // Kirby
+        { name: "tag_003.bin", type: "FILE", size: 540, meta: { nfcTagHead: 0x08000100, nfcTagTail: 0x04150402 } }, // Inkling (Splatoon)
+        { name: "tag_004.bin", type: "FILE", size: 540, meta: { nfcTagHead: 0x19070000, nfcTagTail: 0x03840002 } }, // Squirtle
       ],
+      // data: slot-named files required by AmiiDB (00.bin, 01.bin, …)
       "E:/amiibo/data": [
-        { name: "00.bin", type: "FILE", size: 540, meta: { nfcTagHead: 0x05C00000, nfcTagTail: 0x04121302 } },
-        { name: "01.bin", type: "FILE", size: 540, meta: { nfcTagHead: 0x01000000, nfcTagTail: 0x03530902 } },
-        { name: "02.bin", type: "FILE", size: 540, meta: { nfcTagHead: 0x00000000, nfcTagTail: 0x00000002 } },
+        { name: "00.bin", type: "FILE", size: 540, meta: { nfcTagHead: 0x00000000, nfcTagTail: 0x00000002 } }, // Mario (SSB)
+        { name: "01.bin", type: "FILE", size: 540, meta: { nfcTagHead: 0x21070000, nfcTagTail: 0x03611202 } }, // Celica (Fire Emblem)
+        { name: "02.bin", type: "FILE", size: 540, meta: { nfcTagHead: 0x01010300, nfcTagTail: 0x04140902 } }, // Zelda & Loftwing
       ],
+      // fav: favorites managed by AmiiDB
       "E:/amiibo/fav": [
-        { name: "tag_001.bin", type: "FILE", size: 540, meta: { nfcTagHead: 0x00000000, nfcTagTail: 0x00000002 } },
-        { name: "tag_002.bin", type: "FILE", size: 540, meta: { nfcTagHead: 0x01000000, nfcTagTail: 0x03530902 } },
+        { name: "tag_001.bin", type: "FILE", size: 540, meta: { nfcTagHead: 0x00C00000, nfcTagTail: 0x037B0002 } }, // King K. Rool
+        { name: "tag_002.bin", type: "FILE", size: 540, meta: { nfcTagHead: 0x22420000, nfcTagTail: 0x041F0002 } }, // Mythra (Xenoblade)
+        { name: "tag_003.bin", type: "FILE", size: 540, meta: { nfcTagHead: 0x08070000, nfcTagTail: 0x04330402 } }, // Shiver (Splatoon)
       ],
-      "E:/amiibo/figures": [
-        { name: "tag_001.bin", type: "FILE", size: 540, meta: { nfcTagHead: 0x01000000, nfcTagTail: 0x03530902 } },
-        { name: "tag_002.bin", type: "FILE", size: 540, meta: { nfcTagHead: 0x01000000, nfcTagTail: 0x03540902 } },
-      ],
-      "E:/save": [
-        { name: "backup.bin", type: "FILE", size: 1229, meta: { nfcTagHead: null, nfcTagTail: null } },
-      ],
+      // large-set: 95 files for scroll/bulk-operation testing
       "E:/amiibo/large-set": [
         ...Array.from({ length: 95 }, (_, i) => ({
           name: `tag_${String(i + 1).padStart(3, "0")}.bin`,
@@ -592,6 +591,9 @@ export class DevMockClient {
           size: 540,
           meta: { nfcTagHead: 0x01000000 + i, nfcTagTail: 0x03530902 },
         })),
+      ],
+      "E:/save": [
+        { name: "backup.bin", type: "FILE", size: 1229, meta: { nfcTagHead: null, nfcTagTail: null } },
       ],
     };
     return { ok: true, data: sortEntries(fs[path] ?? []) };
@@ -616,17 +618,21 @@ export class DevMockClient {
   async closeFile()       { return { ok: true, data: null }; }
   async readFileData(path) {
     const mockFiles = {
-      "E:/README.txt":                    { size: 312,  nfcTagHead: null,       nfcTagTail: null },
-      "E:/amiibo/data/00.bin":            { size: 540,  nfcTagHead: 0x05C00000, nfcTagTail: 0x04121302 },
-      "E:/amiibo/data/01.bin":            { size: 540,  nfcTagHead: 0x01000000, nfcTagTail: 0x03530902 },
-      "E:/amiibo/data/02.bin":            { size: 540,  nfcTagHead: 0x00000000, nfcTagTail: 0x00000002 },
-      "E:/amiibo/fav/tag_001.bin":         { size: 540,  nfcTagHead: 0x00000000, nfcTagTail: 0x00000002 },
-      "E:/amiibo/fav/tag_002.bin":         { size: 540,  nfcTagHead: 0x01000000, nfcTagTail: 0x03530902 },
-      "E:/amiibo/tag_001.bin":            { size: 540,  nfcTagHead: 0x00000000, nfcTagTail: 0x00000002 },
-      "E:/amiibo/tag_002.bin":            { size: 540,  nfcTagHead: 0x05C00000, nfcTagTail: 0x04121302 },
-      "E:/amiibo/figures/tag_001.bin":    { size: 540,  nfcTagHead: 0x01000000, nfcTagTail: 0x03530902 },
-      "E:/amiibo/figures/tag_002.bin":    { size: 540,  nfcTagHead: 0x01000000, nfcTagTail: 0x03540902 },
-      "E:/save/backup.bin":               { size: 1229, nfcTagHead: null,       nfcTagTail: null },
+      "E:/README.txt":                { size: 312,  nfcTagHead: null,       nfcTagTail: null       },
+      // loose files in amiibo root (all distinct heads, all API-validated)
+      "E:/amiibo/tag_001.bin":        { size: 540,  nfcTagHead: 0x05C00000, nfcTagTail: 0x04121302 }, // Samus - Metroid Dread
+      "E:/amiibo/tag_002.bin":        { size: 540,  nfcTagHead: 0x1F000000, nfcTagTail: 0x02540C02 }, // Kirby
+      "E:/amiibo/tag_003.bin":        { size: 540,  nfcTagHead: 0x08000100, nfcTagTail: 0x04150402 }, // Inkling - Yellow (Splatoon)
+      "E:/amiibo/tag_004.bin":        { size: 540,  nfcTagHead: 0x19070000, nfcTagTail: 0x03840002 }, // Squirtle
+      // data: slot-named, distinct characters
+      "E:/amiibo/data/00.bin":        { size: 540,  nfcTagHead: 0x00000000, nfcTagTail: 0x00000002 }, // Mario (SSB)
+      "E:/amiibo/data/01.bin":        { size: 540,  nfcTagHead: 0x21070000, nfcTagTail: 0x03611202 }, // Celica (Fire Emblem)
+      "E:/amiibo/data/02.bin":        { size: 540,  nfcTagHead: 0x01010300, nfcTagTail: 0x04140902 }, // Zelda & Loftwing
+      // fav: favorites managed by AmiiDB
+      "E:/amiibo/fav/tag_001.bin":    { size: 540,  nfcTagHead: 0x00C00000, nfcTagTail: 0x037B0002 }, // King K. Rool
+      "E:/amiibo/fav/tag_002.bin":    { size: 540,  nfcTagHead: 0x22420000, nfcTagTail: 0x041F0002 }, // Mythra (Xenoblade)
+      "E:/amiibo/fav/tag_003.bin":    { size: 540,  nfcTagHead: 0x08070000, nfcTagTail: 0x04330402 }, // Shiver (Splatoon)
+      "E:/save/backup.bin":           { size: 1229, nfcTagHead: null,       nfcTagTail: null       },
     };
     // Generate mock entries for large-set files
     const largeMatch = path.match(/^E:\/amiibo\/large-set\/tag_(\d+)\.bin$/);

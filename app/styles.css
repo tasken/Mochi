@@ -1419,6 +1419,7 @@ button.dev:hover:not(:disabled) { background: #fde68a; }
     margin-bottom: 12px;
     flex-shrink: 0;
   }
+  .modal-icon-badge.primary { background: #ede9fe; color: #7c3aed; }
   .modal-icon-badge.danger { background: #fff1f2; color: var(--destructive); }
   .modal-icon-badge.warning { background: #fffbeb; color: #d97706; }
   .modal-icon-badge .ms { font-size: 22px; }
