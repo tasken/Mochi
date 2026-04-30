@@ -1,37 +1,40 @@
 # Mochi
 
-Web Bluetooth workspace for [Pixl.js](https://github.com/solosky/pixl.js). Manage device storage from the browser over BLE, no firmware changes needed.
+Web Bluetooth file manager for [Pixl.js](https://github.com/solosky/pixl.js) — browse, upload, and organize device storage from the browser over BLE, no firmware changes needed.
 
 ## Features
 
-- **File browser** — navigate, create folders, rename, delete, multi-select
-- **Tree uploader** — queue a local folder or files and upload with real-time progress
-- **Normalize** — batch-rename files to lowercase, scoped to current folder or recursive
-- **NFC tag info** — `.bin` files show character name, series, and Figure ID when recognized
-- **Mobile-ready** — full-screen panels, pull-to-refresh, touch-friendly nav
+- **File browser** — navigate folders, rename, delete, and multi-select files on the device
+- **Tree uploader** — drop a local folder or files to upload with real-time progress
+- **Sync** — diff local and device trees, push changes, and remove orphaned files
+- **NFC tag lookup** — `.bin` files show character name and series from the AmiiboAPI
 
-## Run Locally
+## Running locally
 
-No build step. Web Bluetooth requires a secure context (HTTPS) and a Chromium-based browser (Chrome, Edge, Opera, Brave).
+Web Bluetooth requires HTTPS and a Chromium-based browser (Chrome, Edge, Brave).
 
-Generate a self-signed certificate first:
-
-```bash
-mkdir .cert
-openssl req -x509 -newkey rsa:2048 -keyout .cert/key.pem -out .cert/cert.pem -days 365 -nodes -subj "/CN=localhost"
-```
-
-Then start the dev server (no dependencies beyond Python 3):
+Generate a self-signed cert once:
 
 ```bash
-python3 server.py --bind 0.0.0.0 --cert .cert/cert.pem --key .cert/key.pem
+mkdir -p .cert
+openssl req -x509 -newkey rsa:2048 -keyout .cert/key.pem -out .cert/cert.pem \
+  -days 365 -nodes -subj "/CN=localhost"
 ```
 
-Open `https://<your-ip>:8443` in a Chromium-based browser.
+Install the task runner and start the server:
 
-## Thanks
+```bash
+pip install invoke
+inv serve
+```
 
-To the [solosky/pixl.js](https://github.com/solosky/pixl.js) firmware developers for the open BLE protocol and reference implementation.
+For LAN access (e.g. from a phone on the same network):
+
+```bash
+inv serve --bind 0.0.0.0 --host <your-local-ip>
+```
+
+> Click **Dev** in the top bar to simulate a connected device without hardware.
 
 ## License
 
