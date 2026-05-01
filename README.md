@@ -1,30 +1,37 @@
 # Mochi
 
-Web Bluetooth file manager for [Pixl.js](https://github.com/solosky/pixl.js) — browse, upload, and organize device storage from the browser over BLE, no firmware changes needed.
+Web Bluetooth workspace for [Pixl.js](https://github.com/solosky/pixl.js) to browse, upload, and manage NFC tag files over BLE from the browser, with no firmware changes needed.
+
+**[Try it](https://tasken.github.io/Mochi/)** (requires a Chromium-based browser: Chrome, Edge, or Brave)
+
+![Mochi file browser showing a connected Pixl.js device with folders and files](screenshot.png)
 
 ## Features
 
-- **File browser** — navigate folders, rename, delete, and multi-select files on the device
-- **Tree uploader** — drop a local folder or files to upload with real-time progress
-- **Sync** — diff local and device trees, push changes, and remove orphaned files
-- **NFC tag lookup** — `.bin` files show character name and series from the AmiiboAPI
+- **File browser**: navigate folders, rename, delete, and multi-select files on the device
+- **Tree uploader**: drop a local folder or files to upload with real-time progress
+- **Sync**: diff local and device trees, push changes, and remove orphaned files in the upload tree
+- **Normalize**: lowercase-rename files and folders for firmware path compatibility
+- **Format**: wipe and reformat the device drive
+- **NFC tag lookup**: `.bin` files show character name and series from [AmiiboAPI](https://amiiboapi.org/)
+- **Firmware version check**: notified when a newer build is available from the device firmware CI
 
-## Running locally
+## Development
 
-Web Bluetooth requires HTTPS and a Chromium-based browser (Chrome, Edge, Brave).
-
-Generate a self-signed cert once:
+To run the app locally for development or contribution:
 
 ```bash
+# One-time setup
+python3 -m venv .venv
+source .venv/bin/activate
+pip install invoke
+
+# Generate a self-signed cert (one-time)
 mkdir -p .cert
 openssl req -x509 -newkey rsa:2048 -keyout .cert/key.pem -out .cert/cert.pem \
   -days 365 -nodes -subj "/CN=localhost"
-```
 
-Install the task runner and start the server:
-
-```bash
-pip install invoke
+# Start the dev server (HTTPS at localhost:8443)
 inv serve
 ```
 
@@ -34,8 +41,8 @@ For LAN access (e.g. from a phone on the same network):
 inv serve --bind 0.0.0.0 --host <your-local-ip>
 ```
 
-> Click **Dev** in the top bar to simulate a connected device without hardware.
+> Click **Mock device** in the top bar to simulate a connected device without hardware. The button is only visible in local dev mode.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT. See [LICENSE](LICENSE).
