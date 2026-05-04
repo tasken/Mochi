@@ -6,6 +6,7 @@ Usage (via invoke):
 Direct usage:
     python3 scripts/server.py [--bind 0.0.0.0] [--port 8443] [--cert F] [--key F] [--host DISPLAY] [--directory DIR]
 """
+
 import argparse
 import functools
 import http.server
@@ -40,7 +41,9 @@ def _port_owner(port):
 
 
 def run(bind, port, certfile=None, keyfile=None, display_host=None, directory="app"):
-    handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory=directory)
+    handler = functools.partial(
+        http.server.SimpleHTTPRequestHandler, directory=directory
+    )
     try:
         httpd = http.server.ThreadingHTTPServer((bind, port), handler)
     except OSError as exc:
@@ -76,6 +79,8 @@ if __name__ == "__main__":
     ap.add_argument("--cert", default=None)
     ap.add_argument("--key", default=None)
     ap.add_argument("--host", default=None, help="Display hostname in the startup URL")
-    ap.add_argument("--directory", default="app", help="Directory to serve (default: app)")
+    ap.add_argument(
+        "--directory", default="app", help="Directory to serve (default: app)"
+    )
     args = ap.parse_args()
     run(args.bind, args.port, args.cert, args.key, args.host, args.directory)

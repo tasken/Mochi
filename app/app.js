@@ -1,4 +1,4 @@
-import { PixlToolsClient, DevMockClient, validateRemotePath, getBaseName, getParentPath, sortEntries, utf8Length, MAX_FILE_NAME_BYTES } from './client.js';
+import { PixlToolsClient, DevMockClient, validateRemotePath, getBaseName, getParentPath, sortEntries, utf8Length, MAX_FILE_NAME_BYTES, NUS_SERVICE } from './client.js';
 
 // === Constants ===
 
@@ -6,34 +6,44 @@ const LARGE_DIR_THRESHOLD = 80;
 const LARGE_BATCH_THRESHOLD = 200;
 const SYNC_EXCLUDE_PATHS = ["e:/amiibo/fav", "e:/amiibo/data"]; // device paths excluded from sync on both sides
 const PIXL_RELEASES_URL = "https://github.com/solosky/pixl.js/releases";
-const PIXL_LATEST_API = "https://api.github.com/repos/solosky/pixl.js/releases/latest";
 
 const FAVICON_PATH = `<path d="M225.5-82.5Q120-125 120-200q0-32 20-57.5t56-45.5l65 58q-24 8-42.5 20.5T200-200q0 26 81 53t199 27q118 0 199-27t81-53q0-12-18.5-24.5T699-245l65-58q36 20 56 45.5t20 57.5q0 75-105.5 117.5T480-40q-149 0-254.5-42.5Zm212-125Q417-215 400-230L148-453q-13-11-20.5-27t-7.5-33v-80q0-17 6.5-33t19.5-27l252-235q17-16 38-24t44-8q23 0 44 8t38 24l252 235q13 11 19.5 27t6.5 33v80q0 17-7.5 33T812-453L560-230q-17 15-37.5 22.5T480-200q-22 0-42.5-7.5Zm-42-357Q410-579 410-600t-14.5-35.5Q381-650 360-650t-35.5 14.5Q310-621 310-600t14.5 35.5Q339-550 360-550t35.5-14.5ZM410-496q43 21 90.5 13.5T584-522q34-29 44.5-73T618-678L410-496Zm105.5-188.5Q530-699 530-720t-14.5-35.5Q501-770 480-770t-35.5 14.5Q430-741 430-720t14.5 35.5Q459-670 480-670t35.5-14.5Z"/>`;
-const FAVICON_COLORS = {
-  disconnected: "#9ca3af",
-  connecting:   "#f59e0b",
-  connected:    "#10b981",
-  reconnecting: "#fb923c",
-  mock:         "#7878cc",
+const VISUAL_STATE_COLORS = {
+  disconnected: { favicon: "#9ca3af", theme: "#9ca3af", brandFrom: "#9ca3af", brandTo: "#cbd5e1" },
+  connecting:   { favicon: "#f59e0b", theme: "#f59e0b", brandFrom: "#f59e0b", brandTo: "#fde68a" },
+  connected:    { favicon: "#10b981", theme: "#059669", brandFrom: "#059669", brandTo: "#34d399" },
+  reconnecting: { favicon: "#fb923c", theme: "#f97316", brandFrom: "#f97316", brandTo: "#fbbf24" },
+  mock:         { favicon: "#7878cc", theme: "#7c3aed", brandFrom: "#7c3aed", brandTo: "#d946ef" },
+  dfu:          { favicon: "#f97316", theme: "#ea580c", brandFrom: "#ea580c", brandTo: "#fb923c" },
 };
 
-const BRAND_GRADIENTS = {
-  disconnected: ["#9ca3af", "#cbd5e1"],
-  connecting:   ["#f59e0b", "#fde68a"],
-  connected:    ["#059669", "#34d399"],
-  reconnecting: ["#f97316", "#fbbf24"],
-  mock:         ["#7c3aed", "#d946ef"],
-};
+function resolveVisualState(connState, isMock) {
+  const key = isMock ? "mock" : connState;
+  return VISUAL_STATE_COLORS[key] ?? VISUAL_STATE_COLORS.disconnected;
+}
+
+function hexToRgba(hex, alpha) {
+  const value = String(hex || "").replace("#", "");
+  if (value.length !== 6) return `rgba(124, 58, 237, ${alpha})`;
+  const r = Number.parseInt(value.slice(0, 2), 16);
+  const g = Number.parseInt(value.slice(2, 4), 16);
+  const b = Number.parseInt(value.slice(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
 
 function setStateColors(connState, isMock) {
-  const key = isMock ? "mock" : connState;
-  const faviconColor = FAVICON_COLORS[key] ?? FAVICON_COLORS.disconnected;
-  const [gradFrom, gradTo] = BRAND_GRADIENTS[key] ?? BRAND_GRADIENTS.disconnected;
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" width="32" height="32" fill="${faviconColor}">${FAVICON_PATH}</svg>`;
+  const { favicon, theme, brandFrom, brandTo } = resolveVisualState(connState, isMock);
+  const mockVisuals = resolveVisualState("connected", true);
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -960 960 960" width="32" height="32" fill="${favicon}">${FAVICON_PATH}</svg>`;
   const link = document.querySelector('link[rel="icon"]');
+  const themeMeta = document.querySelector('meta[name="theme-color"]');
   if (link) link.href = "data:image/svg+xml," + encodeURIComponent(svg);
-  document.documentElement.style.setProperty("--brand-grad-from", gradFrom);
-  document.documentElement.style.setProperty("--brand-grad-to", gradTo);
+  if (themeMeta) themeMeta.setAttribute("content", theme);
+  document.documentElement.style.setProperty("--brand-grad-from", brandFrom);
+  document.documentElement.style.setProperty("--brand-grad-to", brandTo);
+  document.documentElement.style.setProperty("--topbar-badge-dev-color", mockVisuals.theme);
+  document.documentElement.style.setProperty("--topbar-badge-dev-dot", mockVisuals.theme);
+  document.documentElement.style.setProperty("--topbar-badge-dev-glow", hexToRgba(mockVisuals.theme, 0.18));
 }
 
 // === Utilities ===
@@ -94,12 +104,18 @@ function setHiddenAll(hidden, ...elements) {
   for (const e of elements) e.hidden = hidden;
 }
 
+function trackAnalyticsEvent(name, params = {}) {
+  if (typeof window.gtag !== "function") return;
+  window.gtag("event", name, params);
+}
+
 // === DOM References ===
 
 const el = {
   // Top bar
   btnConnect: document.getElementById("btnConnect"),
   btnDev: document.getElementById("btnDev"),
+  topbarSep: document.getElementById("topbarSep"),
   topbarBadge: document.getElementById("topbarBadge"),
   topbarDrive: document.getElementById("topbarDrive"),
   topbarDriveInfo: document.getElementById("topbarDriveInfo"),
@@ -110,12 +126,14 @@ const el = {
   btnMobileUp: document.getElementById("btnMobileUp"),
   mobileFolderName: document.getElementById("mobileFolderName"),
   ptrIndicator: document.getElementById("ptrIndicator"),
-  navCommit: document.getElementById("navCommit"),
-  navCommitOverlay: document.getElementById("navCommitOverlay"),
-  navCommitMobile: document.getElementById("navCommitMobile"),
+  footers: document.querySelectorAll(".panel-footer"),
   btnNormalize: document.getElementById("btnNormalize"),
   btnLogToggle: document.getElementById("btnLogToggle"),
   connError: document.getElementById("connError"),
+
+  // iOS banner
+  iosBanner: document.getElementById("iosBanner"),
+  iosBannerClose: document.getElementById("iosBannerClose"),
 
   // Main overlay
   mainOverlay: document.getElementById("mainOverlay"),
@@ -124,6 +142,7 @@ const el = {
   mainOverlayTitle: document.getElementById("mainOverlayTitle"),
   mainOverlaySub: document.getElementById("mainOverlaySub"),
   btnConnectCta: document.getElementById("btnConnectCta"),
+  btnDfuFromDfu: document.getElementById("btnDfuFromDfu"),
 
   // Context panel — folder state
   panelFolder: document.getElementById("panelFolder"),
@@ -237,6 +256,65 @@ const el = {
   sanitizeModalNone: document.getElementById("sanitizeModalNone"),
   sanitizeNonePath: document.getElementById("sanitizeNonePath"),
   btnSanitizeNoneConfirm: document.getElementById("btnSanitizeNoneConfirm"),
+
+  // DFU
+  btnUpdateFirmware: document.getElementById("btnUpdateFirmware"),
+  dfuUpdateDot: document.getElementById("dfuUpdateDot"),
+  dfuFileInput: document.getElementById("dfuFileInput"),
+  dfuModal: document.getElementById("dfuModal"),
+  btnDfuClose: document.getElementById("btnDfuClose"),
+  dfuConfirmSection: document.getElementById("dfuConfirmSection"),
+  dfuNativePanel: document.getElementById("dfuNativePanel"),
+  dfuCustomPanel: document.getElementById("dfuCustomPanel"),
+  dfuReleaseContainer: document.getElementById("dfuReleaseContainer"),
+  dfuFileDividerLabel: document.getElementById("dfuFileDividerLabel"),
+  btnDfuPickFile: document.getElementById("btnDfuPickFile"),
+  dfuPickedFile: document.getElementById("dfuPickedFile"),
+  dfuPickedName: document.getElementById("dfuPickedName"),
+  btnDfuChangeFile: document.getElementById("btnDfuChangeFile"),
+  dfuVariantSection: document.getElementById("dfuVariantSection"),
+  btnDfuVariantLCD: document.getElementById("btnDfuVariantLCD"),
+  btnDfuVariantOLED: document.getElementById("btnDfuVariantOLED"),
+  btnDfuVariantCustom: document.getElementById("btnDfuVariantCustom"),
+  dfuDevFailLabel: document.getElementById("dfuDevFailLabel"),
+  dfuDevFailToggle: document.getElementById("dfuDevFailToggle"),
+  dfuProgressSection: document.getElementById("dfuProgressSection"),
+  dfuWarnTitle: document.getElementById("dfuWarnTitle"),
+  dfuWarnBodyPrimary: document.getElementById("dfuWarnBodyPrimary"),
+  dfuWarnBodySecondary: document.getElementById("dfuWarnBodySecondary"),
+  dfuMobileNote: document.getElementById("dfuMobileNote"),
+  dfuStatusSubhead: document.getElementById("dfuStatusSubhead"),
+  dfuActiveIcon: document.getElementById("dfuActiveIcon"),
+  dfuActiveLabel: document.getElementById("dfuActiveLabel"),
+  dfuProgressBarWrap: document.getElementById("dfuProgressBarWrap"),
+  dfuProgressFill: document.getElementById("dfuProgressFill"),
+  dfuProgressFile: document.getElementById("dfuProgressFile"),
+  dfuProgressSpeed: document.getElementById("dfuProgressSpeed"),
+  dfuProgressPct: document.getElementById("dfuProgressPct"),
+  dfuSelectingHint: document.getElementById("dfuSelectingHint"),
+  dfuReconnectHint: document.getElementById("dfuReconnectHint"),
+  dfuMobileTransferNote: document.getElementById("dfuMobileTransferNote"),
+  btnDfuReconnectPicker: document.getElementById("btnDfuReconnectPicker"),
+  dfuStageList: document.getElementById("dfuStageList"),
+  dfuErrorBox: document.getElementById("dfuErrorBox"),
+  dfuTroubleshootLinks: document.getElementById("dfuTroubleshootLinks"),
+  dfuSuccessBox: document.getElementById("dfuSuccessBox"),
+  dfuWarnSection: document.getElementById("dfuWarnSection"),
+  dfuFooterConfirm: document.getElementById("dfuFooterConfirm"),
+  btnDfuCancelConfirm: document.getElementById("btnDfuCancelConfirm"),
+  btnDfuStart: document.getElementById("btnDfuStart"),
+  dfuFooterWarn: document.getElementById("dfuFooterWarn"),
+  btnDfuBackToConfirm: document.getElementById("btnDfuBackToConfirm"),
+  btnDfuProceed: document.getElementById("btnDfuProceed"),
+  dfuFooterProgress: document.getElementById("dfuFooterProgress"),
+  btnDfuCancelTransfer: document.getElementById("btnDfuCancelTransfer"),
+  dfuFooterFailed: document.getElementById("dfuFooterFailed"),
+  btnDfuReconnect: document.getElementById("btnDfuReconnect"),
+  btnDfuReboot: document.getElementById("btnDfuReboot"),
+  btnDfuRetryConnect: document.getElementById("btnDfuRetryConnect"),
+  btnDfuRetry: document.getElementById("btnDfuRetry"),
+  dfuFooterSuccess: document.getElementById("dfuFooterSuccess"),
+  btnDfuCloseSuccess: document.getElementById("btnDfuCloseSuccess"),
 };
 
 function validateElementBindings(bindings) {
@@ -328,37 +406,11 @@ function ensureSiblingNameAvailable(name, currentName = "") {
   }
 }
 
-function readValidatedNameInput(inputEl, errorEl, options) {
-  clearInputError(inputEl, errorEl);
-
-  try {
-    const value = validateSingleName(inputEl.value, options.label);
-    if (options.currentName && value === options.currentName) {
-      throw new Error(`${options.label} is unchanged`);
-    }
-    ensureSiblingNameAvailable(value, options.currentName);
-    validateRemotePath(joinChildPath(state.currentPath || "E:/", value), options.kind);
-    return value;
-  } catch (err) {
-    showInputError(inputEl, errorEl, err.message);
-    inputEl.focus();
-    inputEl.select();
-    return null;
-  }
-}
 
 function readCheckedRadioValue(name, label) {
   const selected = document.querySelector(`input[name="${name}"]:checked`);
   if (!selected) throw new Error(`${label} is required`);
   return selected.value;
-}
-
-function formatUploadInputFeedback(skipped) {
-  if (skipped.length === 0) return "";
-
-  const first = skipped[0];
-  const more = skipped.length > 1 ? ` (+${skipped.length - 1} more)` : "";
-  return `${first.path}: ${first.reason}${more}`;
 }
 
 // === Protocol Log ===
@@ -369,6 +421,7 @@ function log(msg, role) {
     else if (msg.includes("ERR")) role = "err";
     else if (msg.startsWith("\u2190")) role = "ok";
   }
+  if (role === "err") console.error("[mochi]", msg);
   const now = new Date();
   const ts = [now.getHours(), now.getMinutes(), now.getSeconds()]
     .map(n => String(n).padStart(2, "0")).join(":");
@@ -428,23 +481,28 @@ function setConnState(newState) {
   const reconnecting = newState === "reconnecting";
   const disconnected = newState === "disconnected";
 
+  // iOS banner — dismiss once the user connects
+  if (!disconnected) el.iosBanner.hidden = true;
+
   // Main overlay
   el.mainOverlay.classList.toggle("active", !connected);
   el.mainOverlayIcon.hidden = connecting || reconnecting;
   el.mainOverlaySpinner.hidden = !(connecting || reconnecting);
-  el.mainOverlayTitle.textContent = reconnecting ? "Reconnecting\u2026" : connecting ? "Connecting to Pixl.js\u2026" : "No device connected";
-  el.mainOverlaySub.textContent = (connecting || reconnecting) ? "" : "Connect your Pixl.js to browse and manage files.";
+  el.mainOverlayTitle.textContent = reconnecting ? "Reconnecting\u2026" : connecting ? "Connecting\u2026" : "No device connected";
+  el.mainOverlaySub.textContent = (connecting || reconnecting) ? "" : "Connect your device to browse and manage files.";
   el.btnConnectCta.hidden = connecting || reconnecting;
   el.btnConnectCta.disabled = connecting || reconnecting;
+  el.btnDfuFromDfu.hidden = !disconnected;
 
   // Disconnect button — visible when connected or reconnecting
   el.btnConnect.hidden = !(connected || reconnecting);
   el.btnDev.hidden = !shouldShowDevButton();
+  el.topbarSep.hidden = el.btnConnect.hidden && el.btnDev.hidden;
 
   // Topbar connected elements — keep visible during reconnecting
   setHiddenAll(!(connected || reconnecting),
     el.topbarBadge, el.topbarDrive, el.topbarActionSep, el.btnFormat,
-    el.btnRefresh, el.btnNewFolder, el.btnNormalize, el.btnLogToggle,
+    el.btnRefresh, el.btnNewFolder, el.btnNormalize, el.btnUpdateFirmware, el.btnLogToggle,
     el.btnSheetInfo, el.btnSheetUpload);
   if (!(connected || reconnecting)) el.btnMobileUp.hidden = true;
 
@@ -453,6 +511,7 @@ function setConnState(newState) {
   el.connError.textContent = "";
 
   if (disconnected) {
+    el.dfuUpdateDot.hidden = true;
     clearToasts({ keepErrors: true });
     closeSheet();
     closeDetailsSheet();
@@ -470,6 +529,7 @@ function setConnState(newState) {
     el.folderWarningText.textContent = "";
     el.topbarBadge.textContent = "";
     el.topbarBadge.classList.remove("dev");
+    state.client = null;
   }
 
   updateControls();
@@ -630,18 +690,19 @@ function compareSemver(a, b) {
 
 async function checkFirmwareVersion(deviceVersion) {
   try {
-    const resp = await fetch(PIXL_LATEST_API);
+    const resp = await fetch("https://api.github.com/repos/solosky/pixl.js/releases/latest");
     if (!resp.ok) return;
     const data = await resp.json();
     const latest = data.tag_name;
     if (!latest) return;
     if (compareSemver(deviceVersion, latest) < 0) {
+      el.dfuUpdateDot.hidden = false;
       createToast({
         tone: "info",
-        summary: `Firmware ${latest} available`,
-        detail: `You have ${deviceVersion}`,
-        actionLabel: "Download",
-        actionUrl: PIXL_RELEASES_URL,
+        summary: `Firmware ${latest} is out!`,
+        detail: `You're on ${deviceVersion}. Want to update?`,
+        actionLabel: "Update",
+        onAction: () => el.btnUpdateFirmware.click(),
       });
     }
   } catch (_) { /* network error, skip silently */ }
@@ -664,9 +725,9 @@ async function connectOrDisconnect() {
   state.client.onDisconnect = () => {
     const wasReconnecting = state.connState === "reconnecting";
     if (state.disconnectToast) { removeToast(state.disconnectToast); state.disconnectToast = null; }
+    invalidateCache();
     if (state.connState !== "disconnected") setConnState("disconnected");
     if (wasReconnecting) showErrorToast("Reconnection timed out", "Disconnect and try again.");
-    invalidateCache();
   };
   state.client.onReconnecting = () => {
     if (state.abortController) state.abortController.abort();
@@ -719,7 +780,10 @@ async function devConnect() {
   if (state.connState === "connected") return;
   setConnState("connecting");
   state.client = new DevMockClient();
-  state.client.onDisconnect = () => setConnState("disconnected");
+  state.client.onDisconnect = () => {
+    invalidateCache();
+    setConnState("disconnected");
+  };
   setConnState("connected");
   showSuccessToast("Connected");
 
@@ -750,7 +814,7 @@ function renderDrive(driveData) {
     el.panelDriveBarFill.style.width = "0%";
     el.panelDriveBarFill.classList.remove("high");
     el.panelDriveUsage.innerHTML = "";
-    el.topbarDriveInfo.textContent = "—";
+    el.topbarDriveInfo.textContent = "";
     return;
   }
   const freeBytes = driveData.freeBytes ?? (driveData.totalBytes - (driveData.usedBytes ?? 0));
@@ -924,7 +988,15 @@ document.addEventListener("keydown", e => {
   if (!el.imgLightbox.hidden) { e.preventDefault(); closeLightbox(); return; }
   // 2. Open modals
   const openModalEl = document.querySelector(".modal-overlay.open");
-  if (openModalEl) { e.preventDefault(); closeModal(openModalEl); return; }
+  if (openModalEl) {
+    e.preventDefault();
+    if (openModalEl === el.dfuModal) {
+      if (dfuCanCloseFromBackdrop()) closeDfuModal();
+      return;
+    }
+    closeModal(openModalEl);
+    return;
+  }
   // 3. Log sheet
   if (el.logOverlay.classList.contains("open")) { e.preventDefault(); closeLogSheet(); return; }
   // 4. Details sheet (mobile) or details panel (desktop)
@@ -936,10 +1008,14 @@ document.addEventListener("keydown", e => {
   if (el.sheetContainer.classList.contains("open")) { e.preventDefault(); closeSheet(); }
 });
 
-// Close modals on backdrop click
+// Close modals on backdrop click (DFU excluded — handled separately, blocked during transfer)
 for (const modal of [el.confirmModal, el.inputModal, el.sanitizeModalNone, el.uploadWarnModal]) {
   modal.addEventListener("click", (e) => { if (e.target === modal) closeModal(modal); });
 }
+el.dfuModal.addEventListener("click", (e) => {
+  if (e.target !== el.dfuModal) return;
+  if (dfuCanCloseFromBackdrop()) closeDfuModal();
+});
 
 // === Update Controls ===
 
@@ -949,11 +1025,13 @@ function updateControls() {
   const atRoot = !state.currentPath || state.currentPath === "E:/";
   const syncing = state.syncState === "scanning";
   const queueHasItems = hasQueuedUploadState();
-  el.btnRefresh.disabled = !connected || uploading;
-  el.btnNewFolder.disabled = !connected || uploading;
-  el.sidebarDropZone.setAttribute("aria-disabled", String(!connected || uploading || syncing));
-  el.btnNormalize.disabled = !connected || uploading;
-  el.btnFormat.disabled = !connected || uploading;
+  const dfuActive = dfuState.phase !== "idle";
+  el.btnRefresh.disabled = !connected || uploading || dfuActive;
+  el.btnNewFolder.disabled = !connected || uploading || dfuActive;
+  el.sidebarDropZone.setAttribute("aria-disabled", String(!connected || uploading || syncing || dfuActive));
+  el.btnNormalize.disabled = !connected || uploading || dfuActive;
+  el.btnFormat.disabled = !connected || uploading || dfuActive;
+  el.btnUpdateFirmware.disabled = !connected || uploading || dfuActive;
   el.btnPickFolder.disabled = !connected || uploading || syncing;
   el.btnPickFiles.disabled = !connected || uploading || syncing;
   el.btnSync.disabled = !connected || uploading || syncing || !queueHasItems;
@@ -972,10 +1050,10 @@ function updateControls() {
   if (state.syncState === "done") {
     el.btnUploadStart.innerHTML = `<span class="ms">upload</span> Upload`;
     el.btnUploadStart.disabled = !connected || uploading ||
-      (state.uploadPlan.filter(i => i.kind === "file").length === 0 && state.syncOrphanChecked.size === 0);
+      (state.uploadPlan.filter(i => i.kind === "file" && i.status !== "skipped").length === 0 && state.syncOrphanChecked.size === 0);
   } else {
     el.btnUploadStart.innerHTML = `<span class="ms">play_arrow</span> Start`;
-    el.btnUploadStart.disabled = !connected || uploading || syncing || state.uploadPlan.length === 0;
+    el.btnUploadStart.disabled = !connected || uploading || syncing || state.uploadPlan.filter(i => i.status !== "skipped").length === 0;
   }
 
   setButtonDisabledState(el.btnUploadClear, {
@@ -1043,10 +1121,10 @@ async function browseFolder(path) {
   // Update warning banner for current folder (always, whether cached or fresh)
   if (truncated) {
     el.folderWarningBanner.hidden = false;
-    el.folderWarningText.textContent = "Listing may be incomplete — some entries couldn't load over Bluetooth.";
+    el.folderWarningText.textContent = "This listing may be incomplete. Some items couldn't be loaded.";
   } else if (entries.length >= LARGE_DIR_THRESHOLD) {
     el.folderWarningBanner.hidden = false;
-    el.folderWarningText.textContent = `This folder has ${entries.length} items. Large folders can be slow over Bluetooth.`;
+    el.folderWarningText.textContent = `This folder has ${entries.length} items and may be slow to load.`;
   } else {
     el.folderWarningBanner.hidden = true;
     el.folderWarningText.textContent = "";
@@ -1239,7 +1317,7 @@ function getBrowserEmptyStateContent() {
     return {
       icon: "storage",
       title: "Device is empty",
-      sub: "No files yet — drop some in to get started.",
+      sub: "No files yet. Drop some in to get started.",
     };
   }
 
@@ -1285,7 +1363,7 @@ function renderFileTable() {
     const iconHtml = isDir
       ? `<span class="cell-name-icon folder"><span class="ms-sm">folder</span></span>`
       : `<span class="cell-name-icon file"><span class="ms-sm">insert_drive_file</span></span>`;
-    const warnIcon = nameWarn ? `<span class="ms-sm warn-icon cell-warn-icon" title="Filename is ${utf8Length(entry.name)} bytes, exceeding the ${MAX_FILE_NAME_BYTES}-byte firmware limit. Rename it to avoid issues.">warning</span>` : "";
+    const warnIcon = nameWarn ? `<span class="ms-sm warn-icon cell-warn-icon" title="Name is ${utf8Length(entry.name)} bytes (max ${MAX_FILE_NAME_BYTES}). Rename to avoid issues.">warning</span>` : "";
     const nameCell = isDir
       ? `<td class="cell-name folder"><span class="cell-name-inner">${iconHtml}${escapeHtml(entry.name)}${warnIcon}</span></td>`
       : `<td class="cell-name"><span class="cell-name-inner">${iconHtml}${escapeHtml(entry.name)}${warnIcon}</span></td>`;
@@ -1408,7 +1486,7 @@ el.fileTableBody.addEventListener("click", async (e) => {
     } else if (actionBtn.dataset.action === "download") {
       const filePath = joinChildPath(state.currentPath, entry.name);
       state.client.readFileData(filePath).then(res => {
-        if (!res.ok) { log(`Download failed: ${res.error}`); return; }
+        if (!res.ok) { log(`Download failed: ${res.error}`, "err"); return; }
         triggerDownload(res.data, entry.name);
       }).catch(err => log(`Download failed: ${err.message}`));
     }
@@ -1717,14 +1795,13 @@ function setPanelState(mode, entry) {
   } else {
     el.panelFolderName.textContent = "Pixl.js";
     el.panelFolderPath.textContent = "";
-    el.panelCurrentFolderName.textContent = "—";
+    el.panelCurrentFolderName.textContent = "";
     el.panelFolderCount.textContent = "";
     el.panelFolderSize.textContent = "";
   }
   // Drive bar updated by renderDrive
 }
 
-// Panel rename button — renames the currently displayed file
 // Details panel close button
 el.btnDetailsClose.addEventListener("click", () => {
   if (state.panelMode === "upload") {
@@ -1972,17 +2049,17 @@ async function doDeleteSelected() {
           log(`Deleted ${item.path}`, "ok");
         } else {
           failedPaths.push(item.path);
-          log(`Delete failed: ${item.path} — ${res.error}`, "err");
+          log(`Delete failed: ${item.path}: ${res.error}`, "err");
         }
       } catch (err) {
         failedPaths.push(item.path);
-        log(`Delete failed: ${item.path} — ${err.message}`, "err");
+        log(`Delete failed: ${item.path}: ${err.message}`, "err");
       }
     }
     if (deleted === total) {
       showSuccessToast(`Deleted ${pluralize(deleted, "item")}`);
     } else if (deleted > 0) {
-      showErrorToast(`Deleted ${deleted} of ${total} — some failed`, firstPlusMore(failedPaths));
+      showErrorToast(`Deleted ${deleted} of ${total} (some failed)`, firstPlusMore(failedPaths));
     } else {
       showErrorToast("Delete failed", firstPlusMore(failedPaths) || "Nothing was deleted");
     }
@@ -2065,16 +2142,16 @@ async function executeSanitize(allOps, allSkipped) {
         renamed++;
         log(`Renamed: ${op.from} → ${op.to}`, "ok");
       } else {
-        log(`Rename failed: ${op.from} — ${res.error}`, "err");
+        log(`Rename failed: ${op.from}: ${res.error}`, "err");
       }
     } catch (err) {
-      log(`Rename failed: ${op.from} — ${err.message}`, "err");
+      log(`Rename failed: ${op.from}: ${err.message}`, "err");
     }
   }
 
   if (allSkipped.length > 0) {
     for (const s of allSkipped) {
-      log(`Skipped: ${s.name} — ${s.reason}`);
+      log(`Skipped: ${s.name} (${s.reason})`);
     }
   }
   const renamedText = pluralize(renamed, "item");
@@ -2250,6 +2327,7 @@ function getQueueStatusIcon(status) {
     case "pending": return '<span class="ms-sm queue-icon pending">schedule</span>';
     case "error": return '<span class="ms-sm queue-icon error">error</span>';
     case "aborted": return '<span class="ms-sm queue-icon aborted">block</span>';
+    case "skipped": return '<span class="ms-sm queue-icon skipped">warning</span>';
     default: return '';
   }
 }
@@ -2274,8 +2352,9 @@ function resetUploadSessionState() {
 }
 
 function resetUploadProgress(plan = state.uploadPlan) {
-  state.uploadTotalCount = plan.length;
-  state.uploadTotalBytes = plan.reduce((sum, item) => sum + item.size, 0);
+  const uploadable = plan.filter(i => i.status !== "skipped");
+  state.uploadTotalCount = uploadable.length;
+  state.uploadTotalBytes = uploadable.reduce((sum, item) => sum + item.size, 0);
   state.uploadCompletedCount = 0;
   state.uploadCompletedBytes = 0;
 }
@@ -2446,12 +2525,12 @@ function renderUploadQueue() {
         `<div class="queue-item">` +
         `${icon}` +
         `<span class="queue-name" title="${title}">${baseName}/</span>` +
-        `<span class="queue-status ${item.status}">${item.status}</span>` +
+        `<span class="queue-status ${item.status}">${item.status === "skipped" ? "skipped" : item.status}</span>` +
         `</div>`
       );
     } else {
       const pct = item.size > 0 ? Math.round((item.transferred / item.size) * 100) : (item.status === "done" ? 100 : 0);
-      const pctStr = item.status === "done" ? "done" : item.status === "pending" ? "pending" : item.status === "aborted" ? "aborted" : item.status === "error" ? "error" : `${pct}%`;
+      const pctStr = item.status === "done" ? "done" : item.status === "pending" ? "pending" : item.status === "aborted" ? "aborted" : item.status === "error" ? "error" : item.status === "skipped" ? "skipped" : `${pct}%`;
       items.push(
         `<div class="queue-item">` +
         `${icon}` +
@@ -2479,9 +2558,9 @@ function renderUploadQueue() {
     for (const w of state.uploadWarnings) {
       if (w.type === "large-dirs") {
         const pathList = w.dirs.map(({ dir }) => `<li>${escapeHtml(dir)}</li>`).join("");
-        bodyHtml += `<p>${pluralize(w.dirs.length, "folder")} with many files — these may transfer slowly or stall:</p><ul>${pathList}</ul>`;
+        bodyHtml += `<p>${pluralize(w.dirs.length, "folder")} with many files. These may transfer slowly or stall:</p><ul>${pathList}</ul>`;
       } else if (w.type === "large-batch") {
-        bodyHtml += `<p>${w.count} files total. Expect ${w.mins}+ minutes — keep the device nearby and the screen on to avoid drops.</p>`;
+        bodyHtml += `<p>${w.count} files total. Expect ${w.mins}+ minutes. Keep the device nearby and the screen on to avoid drops.</p>`;
       }
     }
     el.uploadWarningBanner.className = "queue-warning";
@@ -2517,30 +2596,39 @@ function buildUploadPlan(folders, files) {
     return d !== 0 ? d : a.localeCompare(b);
   });
   const plan = [];
-  const skipped = [];
 
   for (const rel of sortedFolders) {
     const remote = joinChildPath(base, rel.toLowerCase());
-    try {
-      validateRemotePath(remote, "folder");
-    } catch (err) {
-      log(`Skipping folder ${rel}: ${err.message}`, "err");
-      skipped.push({ path: rel, reason: err.message });
-      continue;
+    let pathError = null;
+    try { validateRemotePath(remote, "folder"); } catch (err) { pathError = err.message; }
+    if (pathError) {
+      log(`Path too long: ${rel} (${pathError})`, "err");
+      plan.push({ id: ++planSeed, kind: "folder", localPath: rel, remotePath: remote, size: 0, file: null, transferred: 0, status: "skipped", skipReason: pathError });
+    } else {
+      plan.push({ id: ++planSeed, kind: "folder", localPath: rel, remotePath: remote, size: 0, file: null, transferred: 0, status: "pending" });
     }
-    plan.push({ id: ++planSeed, kind: "folder", localPath: rel, remotePath: remote, size: 0, file: null, transferred: 0, status: "pending" });
   }
 
   for (const entry of files) {
     const remote = joinChildPath(base, entry.relativePath.toLowerCase());
-    try {
-      validateRemotePath(remote, "file");
-    } catch (err) {
-      log(`Skipping file ${entry.relativePath}: ${err.message}`, "err");
-      skipped.push({ path: entry.relativePath, reason: err.message });
-      continue;
+    let pathError = null;
+    try { validateRemotePath(remote, "file"); } catch (err) { pathError = err.message; }
+    if (pathError) {
+      log(`Path too long: ${entry.relativePath} (${pathError})`, "err");
+      plan.push({ id: ++planSeed, kind: "file", localPath: entry.relativePath, remotePath: remote, size: entry.file.size, file: entry.file, transferred: 0, status: "skipped", skipReason: pathError });
+    } else {
+      plan.push({ id: ++planSeed, kind: "file", localPath: entry.relativePath, remotePath: remote, size: entry.file.size, file: entry.file, transferred: 0, status: "pending" });
     }
-    plan.push({ id: ++planSeed, kind: "file", localPath: entry.relativePath, remotePath: remote, size: entry.file.size, file: entry.file, transferred: 0, status: "pending" });
+  }
+
+  for (const item of plan) {
+    if (item.kind !== "folder" || item.status === "skipped") continue;
+    const prefix = item.remotePath.endsWith("/") ? item.remotePath : item.remotePath + "/";
+    const hasUploadableChild = plan.some(c => c.kind === "file" && c.status !== "skipped" && c.remotePath.startsWith(prefix));
+    if (!hasUploadableChild) {
+      item.status = "skipped";
+      item.skipReason = "No uploadable files inside";
+    }
   }
 
   state.uploadPlan = plan;
@@ -2549,17 +2637,22 @@ function buildUploadPlan(folders, files) {
   renderUploadQueue();
   updateControls();
 
-  if (plan.length === 0) {
-    if (skipped.length > 0) {
-      showErrorToast("No files added to queue", formatUploadInputFeedback(skipped));
+  const uploadable = plan.filter(i => i.status !== "skipped");
+  const skippedFileCount = plan.filter(i => i.kind === "file" && i.status === "skipped").length;
+  if (uploadable.length === 0) {
+    if (skippedFileCount > 0) {
+      showErrorToast("No uploadable files", "All files have paths that exceed the device limit. Shorten the folder or file names.");
     } else {
       showWarningToast("No files added to queue", "That folder is empty.");
     }
     return;
   }
 
-  if (skipped.length > 0) {
-    showWarningToast(`Couldn't add ${pluralize(skipped.length, "file")}`, formatUploadInputFeedback(skipped));
+  if (skippedFileCount > 0) {
+    showWarningToast(
+      `${pluralize(skippedFileCount, "file")} can't be uploaded`,
+      "Path or name exceeds the device limit. Shorten the folder or file names to include them."
+    );
   }
 }
 
@@ -2569,6 +2662,7 @@ function checkUploadPlanWarnings(plan) {
   const largeDirs = [];
   const perDir = new Map();
   for (const item of plan) {
+    if (item.status === "skipped") continue;
     const parent = getParentPath(item.remotePath);
     perDir.set(parent, (perDir.get(parent) || 0) + 1);
   }
@@ -2580,9 +2674,10 @@ function checkUploadPlanWarnings(plan) {
   }
   if (largeDirs.length > 0) warnings.push({ type: "large-dirs", dirs: largeDirs });
   // Total batch size check
-  if (plan.length >= LARGE_BATCH_THRESHOLD) {
-    const mins = Math.ceil(plan.length * 0.75 / 60);
-    warnings.push({ type: "large-batch", count: plan.length, mins });
+  const uploadable = plan.filter(i => i.status !== "skipped");
+  if (uploadable.length >= LARGE_BATCH_THRESHOLD) {
+    const mins = Math.ceil(uploadable.length * 0.75 / 60);
+    warnings.push({ type: "large-batch", count: uploadable.length, mins });
   }
   return warnings;
 }
@@ -2595,7 +2690,7 @@ function warningsToStrings(warnings) {
         lines.push(`${dir} has many files and may transfer slowly or stall`);
       }
     } else if (w.type === "large-batch") {
-      lines.push(`${w.count} files total — expect ${w.mins}+ minutes. Keep the device nearby and screen on to avoid drops`);
+      lines.push(`${w.count} files total. Expect ${w.mins}+ minutes. Keep the device nearby and screen on to avoid drops`);
     }
   }
   return lines;
@@ -2631,14 +2726,14 @@ function showUploadWarnModal(htmlContent) {
 function buildSystemFolderWarnHtml(affected) {
   const parts = [];
   if (affected.has("data")) parts.push(
-    `<p><strong>My Tags (amiibo/data)</strong> — files need sequential names like ` +
+    `<p><strong>My Tags (amiibo/data)</strong>: files need sequential names like ` +
     `<strong>00.bin, 01.bin</strong>… to show up as slots in AmiiDB.</p>`
   );
   if (affected.has("fav")) parts.push(
-    `<p><strong>My Favorites (amiibo/fav)</strong> — AmiiDB manages this folder's format. ` +
+    `<p><strong>My Favorites (amiibo/fav)</strong>: AmiiDB manages this folder's format. ` +
     `Files you upload here won't appear in the app.</p>`
   );
-  return parts.join("") + `<p class="modal-note">You can still upload — some files just may not appear as expected.</p>`;
+  return parts.join("") + `<p class="modal-note">You can still upload, but some files may not appear as expected.</p>`;
 }
 
 async function checkSystemFolderWarning(collected) {
@@ -2725,6 +2820,7 @@ async function runSync() {
   const skippedFiles = [];
   const filteredPlan = [];
   for (const item of state.uploadPlan) {
+    if (item.status === "skipped") { filteredPlan.push(item); continue; }
     if (item.kind === "file") {
       const remote = deviceTree.get(item.remotePath);
       if (remote && remote.kind === "file" && remote.size === item.size) {
@@ -2776,7 +2872,7 @@ async function runOrphanDeletion() {
       log(`Removed ${orphan.remotePath}`, "ok");
       state.client.folderCache.delete(getParentPath(orphan.remotePath));
     } catch (err) {
-      log(`Remove failed: ${orphan.remotePath} — ${err.message}`, "err");
+      log(`Remove failed: ${orphan.remotePath}: ${err.message}`, "err");
       orphan.status = "error";
       errorCount++;
     }
@@ -2813,11 +2909,15 @@ async function runUpload() {
 
   resetUploadProgress(state.uploadPlan);
 
-  for (const item of state.uploadPlan) { item.transferred = 0; item.status = "pending"; }
+  for (const item of state.uploadPlan) {
+    if (item.status === "skipped") continue;
+    item.transferred = 0;
+    item.status = "pending";
+  }
   renderUploadQueue();
 
-  const folderItems = state.uploadPlan.filter(i => i.kind === "folder");
-  const fileItems = state.uploadPlan.filter(i => i.kind === "file");
+  const folderItems = state.uploadPlan.filter(i => i.kind === "folder" && i.status !== "skipped");
+  const fileItems = state.uploadPlan.filter(i => i.kind === "file" && i.status !== "skipped");
 
   try {
     for (const item of folderItems) {
@@ -2995,37 +3095,1020 @@ el.btnUploadClear.addEventListener("click", () => {
   updateControls();
 });
 
+// === DFU ===
+
+const DFU_STAGES = [
+  { id: "selecting",          label: "Connecting to device" },
+  { id: "entering_dfu",       label: "Switching to update mode" },
+  { id: "waiting",            label: "Waiting for device to restart" },
+  { id: "reconnecting",       label: "Reconnecting in update mode" },
+  { id: "preparing",          label: "Preparing update file" },
+  { id: "uploading_init",     label: "Preparing transfer" },
+  { id: "uploading_firmware", label: "Transferring firmware" },
+  { id: "rebooting",          label: "Finishing up" },
+];
+
+const dfuState = {
+  phase: "idle",       // idle | confirming | selecting | entering_dfu | waiting | reconnecting | preparing | uploading_init | uploading_firmware | rebooting | success | failed
+  source: null,        // { type: "url", url, name } | { type: "file", file, name }
+  firmwareType: "native", // "native" | "custom"
+  variant: null,       // "LCD" | "OLED" | null (detected from filename)
+  chosenVariant: null, // explicit user pick when variant is null
+  cancelFlag: false,
+  enterDfuDone: false, // true once the device has been rebooted into DFU mode; retry skips enterDfu()
+  dfuDevice: null,     // BluetoothDevice once connected to the DFU bootloader; used for forced reboot
+  cachedImages: null,  // { baseImage, appImage } once prepared; reused on picker-retry without re-download
+  pickerDismissed: false, // true when user closed the BT picker; retry jumps straight to scan
+  skippedStages: new Set(),
+  release: null,
+  releaseLoading: false,
+};
+
+const DFU_IS_MOBILE = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+
+const DFU_RUNTIME_OPTIONS = Object.freeze({
+  maxDfuAttempts: 2,
+  reconnectDelayMs: 1000,
+  notificationTimeoutMs: DFU_IS_MOBILE ? 30000 : 20000,
+  operationTimeoutMs: DFU_IS_MOBILE ? 30000 : 20000,
+  dataObjectDelayMs: DFU_IS_MOBILE ? 100 : 0,
+  rebootTimeMs: 3000,
+  packetSize: 244,
+});
+
+const DFU_TRANSFER_DEFAULTS = Object.freeze({
+  delayMs: DFU_IS_MOBILE ? 5 : 0,
+  prn: DFU_IS_MOBILE ? 8 : 12,
+});
+
+function createSecureDfu({ delayMs = DFU_TRANSFER_DEFAULTS.delayMs, prn = DFU_TRANSFER_DEFAULTS.prn } = {}) {
+  return new window.SecureDfu(null, undefined, delayMs, prn, DFU_RUNTIME_OPTIONS);
+}
+
+// ── Package utilities ─────────────────────────────────────────────────────────
+
+async function resolveOtaZip(fileBlob, fileName) {
+  log(`[DFU] Opening package: ${fileName}`, "cmd");
+  const lower = (fileName || "").toLowerCase();
+  const inferredVariant = lower.includes("_lcd") ? "LCD"
+    : lower.includes("_oled") ? "OLED"
+    : null;
+
+  const zip = await window.JSZip.loadAsync(fileBlob);
+  if (zip.file("manifest.json")) {
+    log("[DFU] Package is a direct DFU zip.", "ok");
+    return { otaBlob: fileBlob, variant: inferredVariant };
+  }
+
+  const nested = Object.values(zip.files).find(e => !e.dir && e.name.toLowerCase().endsWith(".zip"));
+  if (!nested) throw new Error("No update file found. Use a firmware .zip file or a full Pixl.js release .zip.");
+
+  log(`[DFU] Extracting inner package: ${nested.name}`, "ok");
+  const innerLower = nested.name.toLowerCase();
+  const innerVariant = inferredVariant
+    ?? (innerLower.includes("_lcd") ? "LCD" : innerLower.includes("_oled") ? "OLED" : null);
+  const nestedBlob = await nested.async("blob");
+  return { otaBlob: nestedBlob, variant: innerVariant };
+}
+
+async function loadDfuImages(zipBlob) {
+  log("[DFU] Parsing DFU manifest...", "cmd");
+  const zip = await window.JSZip.loadAsync(zipBlob);
+  const manifestFile = zip.file("manifest.json");
+  if (!manifestFile) throw new Error("This file doesn't look like a valid update package.");
+
+  const manifestRoot = JSON.parse(await manifestFile.async("string"));
+  const manifest = manifestRoot.manifest || {};
+
+  async function getImage(types) {
+    for (const type of types) {
+      const entry = manifest[type];
+      if (!entry) continue;
+      const init = zip.file(entry.dat_file);
+      const image = zip.file(entry.bin_file);
+      if (!init || !image) throw new Error(`Package is incomplete: missing files for ${type}.`);
+      return {
+        type,
+        initData: await init.async("arraybuffer"),
+        imageData: await image.async("arraybuffer"),
+      };
+    }
+    return null;
+  }
+
+  const images = {
+    baseImage: await getImage(["softdevice", "bootloader", "softdevice_bootloader"]),
+    appImage: await getImage(["application"]),
+  };
+  const parts = [];
+  if (images.baseImage) parts.push(images.baseImage.type);
+  if (images.appImage) parts.push("application");
+  log(`[DFU] Images loaded: ${parts.join(", ") || "none"}`, "ok");
+  return images;
+}
+
+// ── Dev mock helpers ──────────────────────────────────────────────────────────
+
+function dfuIsDev() { return state.client instanceof DevMockClient; }
+
+async function validateDfuZip(file) {
+  if (!window.JSZip) return; // library not yet loaded, skip silently
+  let zip;
+  try {
+    zip = await window.JSZip.loadAsync(file);
+  } catch {
+    throw new Error("This file doesn't appear to be a valid .zip archive.");
+  }
+
+  if (zip.file("manifest.json")) {
+    let manifest;
+    try {
+      manifest = JSON.parse(await zip.file("manifest.json").async("string")).manifest || {};
+    } catch {
+      throw new Error("The manifest.json in this package is malformed.");
+    }
+    const TYPES = ["application", "softdevice", "bootloader", "softdevice_bootloader"];
+    const found = TYPES.find(t => manifest[t]);
+    if (!found) throw new Error("No firmware image found in this package.");
+    const entry = manifest[found];
+    if (!zip.file(entry.bin_file) || !zip.file(entry.dat_file))
+      throw new Error("This package is incomplete: files listed in manifest.json are missing.");
+    return;
+  }
+
+  // Release zip: must contain at least one nested .zip
+  const nested = Object.values(zip.files).find(e => !e.dir && e.name.toLowerCase().endsWith(".zip"));
+  if (!nested)
+    throw new Error("No firmware file found inside this .zip. Use a firmware .zip file or a full Pixl.js release .zip.");
+}
+
+const MOCK_RELEASE = {
+  tag_name: "v2.16.0-mock",
+  assets: [
+    { name: "pixljs_2.16.0_LCD.zip"  },
+    { name: "pixljs_2.16.0_OLED.zip" },
+  ],
+};
+
+async function mockDfuTransfer(onProgress, fail = false) {
+  const delay = ms => new Promise(r => setTimeout(r, ms));
+  async function sweep(stageId, label, steps, stepMs, cap = 100) {
+    for (let i = 0; i <= steps; i++) {
+      if (dfuState.cancelFlag) throw new Error("Cancelled");
+      onProgress(stageId, { progress: Math.min((i / steps) * 100, cap), progressFile: label });
+      await delay(stepMs);
+    }
+  }
+  await delay(300);
+  await sweep("uploading_init", "Init packet", 10, 80);
+  if (fail) {
+    await sweep("uploading_firmware", "Firmware", 8, 100, 40);
+    throw new Error("Transfer interrupted: device disconnected mid-transfer.");
+  }
+  await sweep("uploading_firmware", "Firmware", 20, 100);
+}
+
+// ── Modal helpers ─────────────────────────────────────────────────────────────
+
+function dfuInProgress() {
+  const active = ["preparing", "entering_dfu", "waiting", "selecting", "reconnecting", "uploading_init", "uploading_firmware", "rebooting"];
+  return active.includes(dfuState.phase);
+}
+
+function dfuCanCloseFromBackdrop() {
+  return !dfuInProgress() && el.dfuWarnSection.hidden;
+}
+
+function closeDfuModal() {
+  closeModal(el.dfuModal);
+  resetDfuUi();
+  setStateColors(state.connState, state.client instanceof DevMockClient);
+}
+
+function dfuShowConfirmView() {
+  _clearDfuWarnCountdown();
+  el.dfuConfirmSection.hidden = false;
+  el.dfuWarnSection.hidden = true;
+  el.dfuProgressSection.hidden = true;
+  el.dfuFooterConfirm.hidden = false;
+  el.dfuFooterWarn.hidden = true;
+  el.dfuFooterProgress.hidden = true;
+  el.dfuFooterFailed.hidden = true;
+  el.dfuFooterSuccess.hidden = true;
+}
+
+let _dfuWarnTimer = null;
+
+function _clearDfuWarnCountdown() {
+  clearInterval(_dfuWarnTimer);
+  _dfuWarnTimer = null;
+}
+
+function updateDfuWarnCopy() {
+  const isCustom = dfuState.firmwareType === "custom";
+  const isLocalFile = dfuState.source?.type === "file";
+
+  el.dfuWarnTitle.textContent = "Almost there, one last check";
+
+  if (isCustom || isLocalFile) {
+    el.dfuWarnBodyPrimary.textContent =
+      "Make sure this file matches your device model (LCD or OLED). Using the wrong one can leave the screen blank until you flash the correct version.";
+  } else {
+    el.dfuWarnBodyPrimary.textContent =
+      "Confirm you picked the right model above. If LCD and OLED are mixed up, the screen can go blank until you install the correct version.";
+  }
+
+  el.dfuWarnBodySecondary.textContent =
+    "If something goes wrong mid-update, your device may stay in update mode. Don't worry, you can retry with the correct file to fix it.";
+
+  el.dfuMobileNote.hidden = !DFU_IS_MOBILE;
+}
+
+function dfuShowWarnView() {
+  updateDfuWarnCopy();
+  el.dfuConfirmSection.hidden = true;
+  el.dfuWarnSection.hidden = false;
+  el.dfuProgressSection.hidden = true;
+  el.dfuFooterConfirm.hidden = true;
+  el.dfuFooterWarn.hidden = false;
+  el.dfuFooterProgress.hidden = true;
+  el.dfuFooterFailed.hidden = true;
+  el.dfuFooterSuccess.hidden = true;
+
+  _clearDfuWarnCountdown();
+  let sec = 3;
+  el.btnDfuProceed.disabled = true;
+  el.btnDfuProceed.textContent = `I understand, update (${sec}s)`;
+  _dfuWarnTimer = setInterval(() => {
+    sec--;
+    if (sec > 0) {
+      el.btnDfuProceed.textContent = `I understand, update (${sec}s)`;
+    } else {
+      _clearDfuWarnCountdown();
+      el.btnDfuProceed.textContent = "I understand, update";
+      el.btnDfuProceed.disabled = false;
+    }
+  }, 1000);
+}
+
+function dfuShowProgressView() {
+  _clearDfuWarnCountdown();
+  el.dfuConfirmSection.hidden = true;
+  el.dfuWarnSection.hidden = true;
+  el.dfuProgressSection.hidden = false;
+  el.dfuFooterConfirm.hidden = true;
+  el.dfuFooterWarn.hidden = true;
+  el.dfuFooterProgress.hidden = false;
+  el.dfuFooterFailed.hidden = true;
+  el.dfuFooterSuccess.hidden = true;
+  el.dfuStatusSubhead.textContent = "UPDATING";
+  el.dfuErrorBox.hidden = true;
+  el.dfuTroubleshootLinks.hidden = true;
+  el.dfuSuccessBox.hidden = true;
+}
+
+function dfuShowFailedView(errorText, { title = "Update failed", subhead = "UPDATE FAILED" } = {}) {
+  el.dfuConfirmSection.hidden = true;
+  el.dfuWarnSection.hidden = true;
+  el.dfuProgressSection.hidden = false;
+  el.dfuFooterConfirm.hidden = true;
+  el.dfuFooterWarn.hidden = true;
+  el.dfuFooterProgress.hidden = true;
+  el.dfuFooterFailed.hidden = false;
+  el.dfuFooterSuccess.hidden = true;
+  el.dfuStatusSubhead.textContent = subhead;
+  el.dfuActiveIcon.className = "modal-icon-badge danger";
+  el.dfuActiveIcon.querySelector(".ms").textContent = "error_outline";
+  el.dfuActiveLabel.textContent = title;
+  el.dfuErrorBox.hidden = false;
+  el.dfuErrorBox.textContent = errorText;
+  el.dfuTroubleshootLinks.hidden = false;
+  el.dfuSuccessBox.hidden = true;
+  el.btnDfuReboot.hidden = !dfuState.dfuDevice;
+  el.btnDfuRetryConnect.hidden = !dfuState.pickerDismissed;
+  el.btnDfuRetry.hidden = dfuState.pickerDismissed;
+  const hadRealSession = !!(state.currentPath && state.client && !(state.client instanceof DevMockClient));
+  el.btnDfuReconnect.hidden = !hadRealSession;
+}
+
+function dfuShowSuccessView() {
+  el.dfuConfirmSection.hidden = true;
+  el.dfuWarnSection.hidden = true;
+  el.dfuProgressSection.hidden = false;
+  el.dfuFooterConfirm.hidden = true;
+  el.dfuFooterWarn.hidden = true;
+  el.dfuFooterProgress.hidden = true;
+  el.dfuFooterFailed.hidden = true;
+  el.dfuFooterSuccess.hidden = false;
+  el.dfuStatusSubhead.textContent = "COMPLETE";
+  el.dfuActiveIcon.className = "modal-icon-badge success";
+  el.dfuActiveIcon.querySelector(".ms").textContent = "check";
+  el.dfuActiveLabel.textContent = "Firmware updated successfully";
+  el.dfuErrorBox.hidden = true;
+  el.dfuTroubleshootLinks.hidden = true;
+  el.dfuSuccessBox.hidden = false;
+  renderDfuStageList("__done__");
+}
+
+// ── Stage list rendering ──────────────────────────────────────────────────────
+
+function renderDfuStageList(currentStageId) {
+  // currentIdx === -1 means all stages complete (e.g. success view)
+  const currentIdx = DFU_STAGES.findIndex(s => s.id === currentStageId);
+
+  // Build skeleton on first render; subsequent calls only patch changed items
+  // so the active stage's CSS animation never gets destroyed mid-spin.
+  if (el.dfuStageList.children.length !== DFU_STAGES.length) {
+    el.dfuStageList.innerHTML = DFU_STAGES.map(s =>
+      `<li class="dfu-stage-item pending"><span class="dfu-stage-dot"></span><span class="dfu-stage-item-label">${s.label}</span></li>`
+    ).join("");
+  }
+
+  Array.from(el.dfuStageList.children).forEach((li, i) => {
+    const dot = li.querySelector(".dfu-stage-dot");
+    const stageId = DFU_STAGES[i].id;
+    if (dfuState.skippedStages.has(stageId)) {
+      if (!li.classList.contains("skipped")) {
+        li.className = "dfu-stage-item skipped";
+        dot.innerHTML = "";
+      }
+    } else if (currentIdx === -1 || i < currentIdx) {
+      if (!li.classList.contains("done")) {
+        li.className = "dfu-stage-item done";
+        dot.innerHTML = `<span class="ms">check</span>`;
+      }
+    } else if (i === currentIdx) {
+      if (!li.classList.contains("active")) {
+        li.className = "dfu-stage-item active";
+        dot.innerHTML = `<span class="ms">sync</span>`;
+      }
+    } else {
+      if (!li.classList.contains("pending")) {
+        li.className = "dfu-stage-item pending";
+        dot.innerHTML = "";
+      }
+    }
+  });
+}
+
+function dfuSetStage(stageId, { progress = null, progressFile = "", speed = "" } = {}) {
+  const stage = DFU_STAGES.find(s => s.id === stageId);
+  if (!stage) return;
+  dfuState.phase = stageId;
+  el.dfuActiveLabel.textContent = stage.label;
+  el.dfuActiveIcon.className = "modal-icon-badge primary spinning";
+  el.dfuActiveIcon.querySelector(".ms").textContent = "autorenew";
+  el.dfuSelectingHint.hidden = stageId !== "selecting";
+  el.dfuReconnectHint.hidden = stageId !== "reconnecting";
+  const transferring = stageId === "uploading_init" || stageId === "uploading_firmware";
+  el.dfuMobileTransferNote.hidden = !(DFU_IS_MOBILE && transferring);
+
+  if (progress !== null) {
+    el.dfuProgressBarWrap.hidden = false;
+    const pct = Math.min(100, Math.max(0, Math.round(progress)));
+    el.dfuProgressFill.style.width = `${pct}%`;
+    el.dfuProgressPct.textContent = `${pct}%`;
+    el.dfuProgressFile.textContent = progressFile;
+    el.dfuProgressSpeed.textContent = speed;
+  } else {
+    el.dfuProgressBarWrap.hidden = true;
+    el.dfuProgressSpeed.textContent = "";
+  }
+
+  renderDfuStageList(stageId);
+}
+
+// ── Release fetching ──────────────────────────────────────────────────────────
+
+async function fetchDfuRelease() {
+  if (dfuState.releaseLoading) return;
+  dfuState.releaseLoading = true;
+  dfuState.release = null;
+  renderDfuReleaseList();
+  try {
+    if (dfuIsDev()) {
+      await new Promise(r => setTimeout(r, 400));
+      dfuState.release = MOCK_RELEASE;
+    } else {
+      log("[DFU] Fetching latest release...", "cmd");
+      const resp = await fetch("/firmware/release.json");
+      if (!resp.ok) throw new Error(`Couldn't load release info (${resp.status})`);
+      dfuState.release = await resp.json();
+      log(`[DFU] Latest release: ${dfuState.release.tag_name}`, "ok");
+    }
+  } catch (err) {
+    log(`[DFU] Couldn't check for updates: ${err.message}`, "err");
+    dfuState.release = { error: err.message };
+  } finally {
+    dfuState.releaseLoading = false;
+    renderDfuReleaseList();
+    if (dfuState.chosenVariant && dfuState.firmwareType === "native") {
+      autoSelectReleaseSource(dfuState.chosenVariant);
+    }
+  }
+}
+
+function renderDfuReleaseList() {
+  const c = el.dfuReleaseContainer;
+  if (dfuState.releaseLoading) {
+    c.innerHTML = `<span class="ms dfu-release-spinner">progress_activity</span><span class="dfu-release-status-text">Checking the latest official update…</span>`;
+    return;
+  }
+  if (!dfuState.release) {
+    c.innerHTML = `<span class="dfu-release-status-text">Checking the latest official update…</span>`;
+    return;
+  }
+  if (dfuState.release.error) {
+    c.innerHTML = `<span class="dfu-release-status-text error">Couldn't check the latest official update. You can still use your own file below.</span>`;
+    return;
+  }
+  const assets = (dfuState.release.assets || []).filter(a => a.name.toLowerCase().endsWith(".zip"));
+  if (!assets.length) {
+    c.innerHTML = `<span class="dfu-release-status-text">The latest official release does not include an update file right now.</span>`;
+    return;
+  }
+  const tagName = dfuState.release.tag_name || "";
+  const releaseUrl = dfuState.release.html_url || PIXL_RELEASES_URL;
+  c.innerHTML = tagName
+    ? `<span class="dfu-release-status-text">Latest official version:</span><span class="dfu-release-tag">${escapeHtml(tagName)}</span><a class="ext-link dfu-release-link" href="${escapeHtml(releaseUrl)}" target="_blank" rel="noopener">View release notes <span class="ms-sm">open_in_new</span></a>`
+    : "";
+}
+
+function autoSelectReleaseSource(variant) {
+  if (!dfuState.release || dfuState.release.error) return;
+  const assets = (dfuState.release.assets || []).filter(a => a.name.toLowerCase().endsWith(".zip"));
+  const match = assets.find(a => a.name.toLowerCase().includes(`_${variant.toLowerCase()}`));
+  if (!match) return;
+  selectDfuSource({ type: "url", url: `/firmware/${match.name}`, name: match.name });
+}
+
+// ── Package selection ─────────────────────────────────────────────────────────
+
+function detectVariantFromName(name) {
+  const lower = (name || "").toLowerCase();
+  return lower.includes("_lcd") ? "LCD" : lower.includes("_oled") ? "OLED" : null;
+}
+
+function selectDfuSource(source) {
+  dfuState.source = source;
+  dfuState.variant = detectVariantFromName(source.name);
+  if (source.type === "file" && !dfuState.variant) {
+    setDfuFirmwareType("custom");
+  } else if (dfuState.firmwareType === "native" && dfuState.variant) {
+    dfuState.chosenVariant = dfuState.variant;
+  }
+  el.dfuPickedFile.hidden = source.type !== "file";
+  el.btnDfuPickFile.hidden = source.type === "file";
+  if (source.type === "file") el.dfuPickedName.textContent = source.name;
+  updateDfuVariantUI();
+  updateDfuStartButton();
+}
+
+
+function updateDfuVariantUI() {
+  const isCustom = dfuState.firmwareType === "custom";
+  el.btnDfuVariantLCD.classList.toggle("selected", !isCustom && dfuState.chosenVariant === "LCD");
+  el.btnDfuVariantOLED.classList.toggle("selected", !isCustom && dfuState.chosenVariant === "OLED");
+  el.btnDfuVariantCustom.classList.toggle("selected", isCustom);
+}
+
+function updateDfuStartButton() {
+  const isCustom = dfuState.firmwareType === "custom";
+  const ready = !!dfuState.source && (isCustom || !!dfuState.chosenVariant);
+  el.btnDfuStart.disabled = !ready;
+}
+
+function setDfuFirmwareType(type) {
+  dfuState.firmwareType = type;
+  const isCustom = type === "custom";
+  el.dfuNativePanel.hidden = isCustom;
+  el.dfuCustomPanel.hidden = !isCustom;
+  el.dfuFileDividerLabel.textContent = isCustom ? "select your update file" : "or use your own .zip file";
+  if (isCustom) {
+    dfuState.chosenVariant = null;
+    if (dfuState.source?.type === "url") {
+      dfuState.source = null;
+    }
+  } else if (dfuState.source?.type === "file") {
+    dfuState.chosenVariant = detectVariantFromName(dfuState.source.name) || dfuState.chosenVariant;
+  }
+  updateDfuVariantUI();
+  updateDfuStartButton();
+}
+
+function resetDfuUi() {
+  _clearDfuWarnCountdown();
+  dfuState.phase = "idle";
+  dfuState.source = null;
+  dfuState.variant = null;
+  dfuState.chosenVariant = null;
+  dfuState.cancelFlag = false;
+  dfuState.enterDfuDone = false;
+  dfuState.dfuDevice = null;
+  dfuState.cachedImages = null;
+  dfuState.pickerDismissed = false;
+  dfuState.skippedStages = new Set();
+
+  setDfuFirmwareType("native");
+
+  el.dfuWarnSection.hidden = true;
+  el.dfuFooterWarn.hidden = true;
+  el.dfuSelectingHint.hidden = true;
+  el.dfuReconnectHint.hidden = true;
+  el.dfuMobileTransferNote.hidden = true;
+  el.dfuPickedFile.hidden = true;
+  el.btnDfuPickFile.hidden = false;
+  el.dfuPickedName.textContent = "";
+  el.dfuProgressBarWrap.hidden = true;
+  el.dfuErrorBox.hidden = true;
+  el.dfuTroubleshootLinks.hidden = true;
+  el.dfuSuccessBox.hidden = true;
+  el.dfuStatusSubhead.textContent = "UPDATING";
+  el.dfuActiveLabel.textContent = "";
+  el.dfuActiveIcon.className = "modal-icon-badge primary";
+  el.dfuActiveIcon.querySelector(".ms").textContent = "sync";
+  el.dfuStageList.innerHTML = "";
+  el.dfuDevFailLabel.hidden = !dfuIsDev();
+  el.dfuDevFailToggle.checked = false;
+  el.btnDfuStart.disabled = true;
+  updateControls();
+}
+
+// ── Transfer ──────────────────────────────────────────────────────────────────
+
+async function runDfuTransfer() {
+  const shouldTrackDfuAnalytics = !dfuIsDev();
+  dfuState.cancelFlag = false;
+  dfuState.skippedStages = new Set();
+  dfuShowProgressView();
+  updateControls();
+
+  let wakeLock = null;
+  try {
+    if (navigator.wakeLock) {
+      wakeLock = await navigator.wakeLock.request("screen").catch(() => null);
+    }
+    const src = dfuState.source;
+    if (!src) throw new Error("Pick an update file first.");
+
+    if (dfuIsDev()) {
+      // Simulate the full flow without real BLE or real ZIP
+      const shouldFail = el.dfuDevFailToggle.checked;
+      el.dfuDevFailToggle.checked = false;
+      dfuSetStage("selecting");
+      await new Promise(r => setTimeout(r, 300));
+      dfuSetStage("entering_dfu");
+      await new Promise(r => setTimeout(r, 500));
+      dfuSetStage("waiting");
+      await new Promise(r => setTimeout(r, 700));
+      if (dfuState.cancelFlag) throw new Error("Cancelled");
+      dfuSetStage("reconnecting");
+      await new Promise(r => setTimeout(r, 600));
+      if (dfuState.cancelFlag) throw new Error("Cancelled");
+      dfuSetStage("preparing");
+      await new Promise(r => setTimeout(r, 400));
+      await mockDfuTransfer((stageId, opts) => dfuSetStage(stageId, opts), shouldFail);
+    } else {
+      const DFU_UUID = window.SecureDfu.SERVICE_UUID;
+      const dfu = createSecureDfu();
+      dfu.addEventListener(window.SecureDfu.EVENT_LOG, ({ message }) => {
+        console.log("[DFU]", message);
+      });
+      log(`[DFU] Runtime: retries=${DFU_RUNTIME_OPTIONS.maxDfuAttempts}, objectDelay=${DFU_RUNTIME_OPTIONS.dataObjectDelayMs}ms, packet=${DFU_RUNTIME_OPTIONS.packetSize}B, prn=${DFU_TRANSFER_DEFAULTS.prn}, delay=${DFU_TRANSFER_DEFAULTS.delayMs}ms`, "cmd");
+
+      let _dfuLastStage = null;
+      let _dfuPrevBytes = 0;
+      let _dfuPrevTime = 0;
+      let _dfuSmoothedKbps = 0;
+      const EMA_ALPHA = 0.15;
+      dfu.addEventListener(window.SecureDfu.EVENT_PROGRESS, ({ object, currentBytes, totalBytes }) => {
+        const isInit = object === "init";
+        const stageId = isInit ? "uploading_init" : "uploading_firmware";
+        const pct = totalBytes > 0 ? (currentBytes / totalBytes) * 100 : 0;
+        if (stageId !== _dfuLastStage) {
+          _dfuLastStage = stageId;
+          _dfuPrevBytes = 0;
+          _dfuPrevTime = performance.now();
+          _dfuSmoothedKbps = 0;
+          log(`[DFU] Uploading: ${isInit ? "init packet" : "firmware"}`, "cmd");
+        }
+        let speed = "";
+        if (!isInit && currentBytes > 0) {
+          const now = performance.now();
+          const dt = (now - _dfuPrevTime) / 1000;
+          if (dt > 0.05) {
+            const instantKbps = ((currentBytes - _dfuPrevBytes) / 1024) / dt;
+            _dfuSmoothedKbps = _dfuSmoothedKbps < 0.1
+              ? instantKbps
+              : _dfuSmoothedKbps * (1 - EMA_ALPHA) + instantKbps * EMA_ALPHA;
+            _dfuPrevBytes = currentBytes;
+            _dfuPrevTime = now;
+          }
+          if (_dfuSmoothedKbps > 0.1) speed = `${_dfuSmoothedKbps.toFixed(1)} KB/s`;
+        }
+        dfuSetStage(stageId, { progress: pct, progressFile: isInit ? "Init packet" : "Firmware", speed });
+      });
+
+      // ── Device selection (must happen first — requires user gesture) ──
+      let device;
+
+      function waitForReconnectClick() {
+        return new Promise((resolve, reject) => {
+          function cleanup() {
+            el.btnDfuReconnectPicker.removeEventListener("click", onClick);
+            el.btnDfuCancelTransfer.removeEventListener("click", onCancel);
+          }
+          function onClick() {
+            cleanup();
+            dfu.requestDevice(false, [{ services: [DFU_UUID] }]).then(resolve, reject);
+          }
+          function onCancel() {
+            cleanup();
+            reject(new Error("Cancelled"));
+          }
+          el.btnDfuReconnectPicker.addEventListener("click", onClick);
+          el.btnDfuCancelTransfer.addEventListener("click", onCancel);
+        });
+      }
+
+      if (dfuState.enterDfuDone) {
+        // Retry — device already rebooted into DFU mode
+        if (!dfuState.pickerDismissed) {
+          dfuSetStage("waiting");
+          await new Promise(r => setTimeout(r, 3000));
+        }
+        dfuState.pickerDismissed = false;
+        if (dfuState.cancelFlag) throw new Error("Cancelled");
+
+        dfuSetStage("reconnecting");
+        log("[DFU] Tap the button to reconnect...", "cmd");
+        device = await waitForReconnectClick();
+
+      } else if (state.client && state.connState === "connected") {
+        // Already connected from file browser — reboot into DFU directly
+        dfuState.skippedStages = new Set(["selecting"]);
+        dfuSetStage("entering_dfu");
+        const deviceName = state.client.device?.name || "device";
+        log(`[DFU] "${deviceName}" is connected, rebooting into update mode...`, "cmd");
+        const enterRes = await state.client.enterDfu();
+        if (!enterRes.ok) throw new Error(`Couldn't switch to update mode: ${enterRes.error}`);
+
+        dfuSetStage("waiting");
+        await new Promise(r => setTimeout(r, 3000));
+        if (dfuState.cancelFlag) throw new Error("Cancelled");
+
+        dfuSetStage("reconnecting");
+        log("[DFU] Tap the button to reconnect...", "cmd");
+        device = await waitForReconnectClick();
+        dfuState.enterDfuDone = true;
+
+      } else {
+        // Disconnected — unified picker accepts both regular and DFU mode
+        dfuSetStage("selecting");
+        log("[DFU] Select your device...", "cmd");
+        const picked = await navigator.bluetooth.requestDevice({
+          filters: [{ services: [NUS_SERVICE] }, { services: [DFU_UUID] }],
+          optionalServices: [NUS_SERVICE, DFU_UUID],
+        });
+        const server = await picked.gatt.connect();
+
+        let isDfuMode = false;
+        try {
+          await server.getPrimaryService(DFU_UUID);
+          isDfuMode = true;
+        } catch { /* not in DFU mode */ }
+
+        if (isDfuMode) {
+          log(`[DFU] "${picked.name || "device"}" is already in update mode.`, "ok");
+          dfuState.skippedStages = new Set(["entering_dfu", "waiting", "reconnecting"]);
+          device = picked;
+        } else {
+          dfuSetStage("entering_dfu");
+          log(`[DFU] "${picked.name || "device"}" is in normal mode, rebooting into update mode...`, "cmd");
+          const nusClient = await (async () => { const c = new PixlToolsClient(msg => log(`[DFU] ${msg}`, "cmd")); await c.connectTo(picked); return c; })();
+          const enterRes = await nusClient.enterDfu();
+          if (!enterRes.ok) throw new Error(`Couldn't switch to update mode: ${enterRes.error}`);
+
+          dfuSetStage("waiting");
+          await new Promise(r => setTimeout(r, 3000));
+          if (dfuState.cancelFlag) throw new Error("Cancelled");
+
+          dfuSetStage("reconnecting");
+          log("[DFU] Tap the button to reconnect...", "cmd");
+          device = await waitForReconnectClick();
+        }
+        dfuState.enterDfuDone = true;
+      }
+
+      dfuState.dfuDevice = device;
+      const deviceName = device.name || "DFU device";
+      log(`[DFU] Connected to "${deviceName}".`, "ok");
+      if (dfuState.cancelFlag) throw new Error("Cancelled");
+
+      // ── Firmware preparation (after device selection — no gesture needed) ──
+      dfuSetStage("preparing");
+      let images;
+      if (dfuState.cachedImages) {
+        log("[DFU] Using cached firmware images.", "cmd");
+        images = dfuState.cachedImages;
+      } else {
+        let rawBlob;
+        if (src.type === "url") {
+          log(`[DFU] Downloading: ${src.name}`, "cmd");
+          const resp = await fetch(src.url);
+          if (!resp.ok) throw new Error(`Couldn't download the update file (${resp.status}). Check your connection and try again.`);
+          rawBlob = await resp.blob();
+          log(`[DFU] Download complete.`, "ok");
+        } else {
+          log(`[DFU] Using local file: ${src.name}`, "cmd");
+          rawBlob = src.file;
+        }
+
+        const { otaBlob } = await resolveOtaZip(rawBlob, src.name);
+        images = await loadDfuImages(otaBlob);
+        if (!images.baseImage && !images.appImage) throw new Error("This file doesn't contain any firmware to install.");
+        dfuState.cachedImages = images;
+      }
+
+      // ── Transfer ──
+      dfuSetStage("uploading_init", { progress: 0, progressFile: "Init packet" });
+
+      if (images.baseImage) {
+        await dfu.update(device, images.baseImage.initData, images.baseImage.imageData);
+        log(`[DFU] ${images.baseImage.type} uploaded.`, "ok");
+      }
+      if (images.appImage) {
+        await dfu.update(device, images.appImage.initData, images.appImage.imageData);
+        log("[DFU] Application uploaded.", "ok");
+      }
+    }
+
+    dfuSetStage("rebooting");
+    await new Promise(r => setTimeout(r, 400));
+
+    log("[DFU] Firmware updated successfully.", "ok");
+    dfuState.phase = "success";
+    if (shouldTrackDfuAnalytics) {
+      trackAnalyticsEvent("Flash_OK", {
+        firmware_type: dfuState.firmwareType,
+        source_type: src.type,
+        variant: dfuState.chosenVariant || dfuState.variant || "unknown",
+      });
+    }
+    dfuShowSuccessView();
+    updateControls();
+
+  } catch (err) {
+    if (err.name === "NotFoundError") {
+      log("[DFU] Bluetooth picker dismissed.", "err");
+      dfuState.phase = "failed";
+      dfuState.pickerDismissed = true;
+      if (dfuState.enterDfuDone) {
+        dfuShowFailedView(
+          "Your device may still be in update mode. Tap Retry to pick it from the Bluetooth list and continue.",
+          { title: "No device selected", subhead: "NOT CONNECTED" }
+        );
+      } else {
+        dfuShowFailedView(
+          "No device was selected. Tap Retry to try again.",
+          { title: "No device selected", subhead: "NOT CONNECTED" }
+        );
+      }
+      updateControls();
+    } else if (dfuState.cancelFlag || err.message?.toLowerCase().includes("cancel")) {
+      log("[DFU] Update cancelled.", "err");
+      closeDfuModal();
+    } else {
+      log(`[DFU] Update failed: ${err.message}`, "err");
+      dfuState.phase = "failed";
+      if (shouldTrackDfuAnalytics) {
+        trackAnalyticsEvent("Flash_error", {
+          firmware_type: dfuState.firmwareType,
+          source_type: dfuState.source?.type || "unknown",
+          variant: dfuState.chosenVariant || dfuState.variant || "unknown",
+          error_type: "transfer_failed",
+        });
+      }
+      const guidance = dfuState.enterDfuDone
+        ? " Your device may still be in update mode. Tap Retry to try again."
+        : " Tap Retry to start over.";
+      dfuShowFailedView(err.message + guidance);
+      updateControls();
+    }
+  } finally {
+    wakeLock?.release().catch(() => {});
+  }
+}
+
+// ── Event listeners ───────────────────────────────────────────────────────────
+
+el.btnUpdateFirmware.addEventListener("click", () => {
+  if (!dfuIsDev() && (!window.JSZip || !window.SecureDfu)) {
+    showErrorToast("Still loading", "Refresh the page and try again.");
+    return;
+  }
+  el.dfuUpdateDot.hidden = true;
+  resetDfuUi();
+  dfuState.phase = "confirming";
+  dfuShowConfirmView();
+  openModal(el.dfuModal);
+  setStateColors("dfu", false);
+  updateControls();
+  fetchDfuRelease();
+});
+
+el.btnDfuFromDfu.addEventListener("click", () => {
+  if (!dfuIsDev() && (!window.JSZip || !window.SecureDfu)) {
+    showErrorToast("Still loading", "Refresh the page and try again.");
+    return;
+  }
+  resetDfuUi();
+  dfuState.phase = "confirming";
+  dfuShowConfirmView();
+  openModal(el.dfuModal);
+  setStateColors("dfu", false);
+  updateControls();
+  fetchDfuRelease();
+});
+
+el.btnDfuClose.addEventListener("click", () => {
+  if (!dfuInProgress()) closeDfuModal();
+});
+
+el.btnDfuPickFile.addEventListener("click", () => {
+  el.dfuFileInput.value = "";
+  el.dfuFileInput.click();
+});
+
+el.btnDfuChangeFile.addEventListener("click", () => {
+  el.dfuFileInput.value = "";
+  el.dfuFileInput.click();
+});
+
+el.dfuFileInput.addEventListener("change", async () => {
+  const file = el.dfuFileInput.files[0];
+  if (!file) return;
+  clearToasts();
+  try {
+    await validateDfuZip(file);
+  } catch (err) {
+    showErrorToast("Invalid file", err.message);
+    el.dfuFileInput.value = "";
+    return;
+  }
+  selectDfuSource({ type: "file", file, name: file.name });
+});
+
+el.btnDfuVariantLCD.addEventListener("click", () => {
+  setDfuFirmwareType("native");
+  dfuState.chosenVariant = "LCD";
+  updateDfuVariantUI();
+  autoSelectReleaseSource("LCD");
+  updateDfuStartButton();
+});
+
+el.btnDfuVariantOLED.addEventListener("click", () => {
+  setDfuFirmwareType("native");
+  dfuState.chosenVariant = "OLED";
+  updateDfuVariantUI();
+  autoSelectReleaseSource("OLED");
+  updateDfuStartButton();
+});
+
+el.btnDfuVariantCustom.addEventListener("click", () => {
+  setDfuFirmwareType("custom");
+});
+
+el.btnDfuStart.addEventListener("click", () => {
+  if (el.btnDfuStart.disabled) return;
+  dfuShowWarnView();
+});
+
+el.btnDfuCancelConfirm.addEventListener("click", () => {
+  closeDfuModal();
+});
+
+el.btnDfuBackToConfirm.addEventListener("click", () => {
+  dfuShowConfirmView();
+});
+
+el.btnDfuProceed.addEventListener("click", async () => {
+  if (el.btnDfuProceed.disabled) return;
+  await runDfuTransfer();
+});
+
+el.btnDfuCancelTransfer.addEventListener("click", async () => {
+  if (!dfuState.enterDfuDone) {
+    dfuState.cancelFlag = true;
+    return;
+  }
+  if (el.confirmModal.classList.contains("open")) return;
+  const confirmed = await showConfirmModal({
+    title: "Cancel update",
+    icon: "warning",
+    message: "Cancelling mid-update may leave your device in update mode. Are you sure?",
+    okLabel: "Cancel update",
+  });
+  if (confirmed) dfuState.cancelFlag = true;
+});
+
+function dfuReconnect() {
+  const shouldReconnectMock = state.client instanceof DevMockClient;
+  closeDfuModal();
+  // DFU may have left the connection in an ambiguous state (mock never
+  // disconnects; real device may have already dropped). Tear it down
+  // explicitly so connectOrDisconnect / devConnect always enter the
+  // connect path.
+  if (state.connState === "connected" || state.connState === "reconnecting") {
+    if (state.client) state.client.disconnect();
+    setConnState("disconnected");
+  }
+  if (shouldReconnectMock) {
+    devConnect();
+  } else {
+    connectOrDisconnect();
+  }
+}
+
+el.btnDfuReconnect.addEventListener("click", dfuReconnect);
+
+el.btnDfuReboot.addEventListener("click", () => {
+  const device = dfuState.dfuDevice;
+  if (device?.gatt?.connected) {
+    device.gatt.disconnect();
+  }
+  closeDfuModal();
+  showSuccessToast("Exiting update mode", "Power cycle your device to go back to normal.");
+});
+
+el.btnDfuRetry.addEventListener("click", async () => {
+  if (!dfuState.source) { closeDfuModal(); return; }
+  await runDfuTransfer();
+});
+
+el.btnDfuRetryConnect.addEventListener("click", async () => {
+  dfuState.pickerDismissed = true; // preserved so wait is skipped
+  await runDfuTransfer();
+});
+
+el.btnDfuCloseSuccess.addEventListener("click", () => {
+  closeDfuModal();
+  if (state.connState === "connected" || state.connState === "reconnecting") {
+    if (state.client) state.client.disconnect();
+    setConnState("disconnected");
+  }
+});
+
 // === Initial state ===
+
+function stampFooters(commitText) {
+  const html = `
+    <div class="footer-made">Made with <span class="ms-sm footer-heart">favorite</span> from Argentina</div>
+    <div class="footer-meta">
+      <span class="nav-commit">${commitText}</span>
+      <span class="panel-footer-sep">&middot;</span>
+      <a href="https://github.com/tasken/Mochi" target="_blank" rel="noopener">Mochi &copy; 2026 Nimbo</a>
+      <span class="panel-footer-sep">&middot;</span>
+      <a href="https://github.com/tasken/Mochi/blob/main/LICENSE" target="_blank" rel="noopener">MIT</a>
+    </div>`;
+  el.footers.forEach(f => { f.innerHTML = html; });
+}
 
 const _buildCommit = document.querySelector('meta[name="build-commit"]')?.content;
 const _buildBranch = document.querySelector('meta[name="build-branch"]')?.content;
 
-if (_buildCommit && _buildCommit !== "dev") {
-  el.navCommit.textContent = _buildCommit;
-  el.navCommitOverlay.textContent = _buildCommit;
-  el.navCommitMobile.textContent = _buildCommit;
-}
-
 const isDevMode = _buildCommit === "dev" || (_buildBranch && _buildBranch !== "main") || (!_buildCommit && !_buildBranch);
+stampFooters((_buildCommit && _buildCommit !== "dev") ? _buildCommit : "dev");
+
 if (isDevMode) {
   el.btnDev.addEventListener("click", devConnect);
-  if (_buildCommit === "dev") {
-    el.navCommit.textContent = "dev";
-    el.navCommitOverlay.textContent = "dev";
-    el.navCommitMobile.textContent = "dev";
-  }
 }
 
 setConnState("disconnected");
 updateControls();
 
+const isIOS = (/iPhone|iPad|iPod/.test(navigator.userAgent)
+  || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1))
+  && !/Bluefy/i.test(navigator.userAgent);
+
+if (isIOS || isDevMode) {
+  el.iosBanner.hidden = false;
+  el.iosBannerClose.addEventListener("click", () => { el.iosBanner.hidden = true; });
+}
+
 if (!navigator.bluetooth) {
   const [summary, detail, overlaySub] = window.isSecureContext
-    ? [
-        "Chrome or Edge required",
-        "Your browser doesn't support device connections. Switch to Chrome or Edge to use Mochi.",
-        "Open Mochi in Chrome or Edge to connect to your Pixl.js.",
-      ]
+    ? isIOS
+      ? [
+          "Bluetooth not available",
+          "iOS browsers don't support Web Bluetooth. Open Mochi in Bluefy, a free iOS browser built for Bluetooth web apps.",
+          "Open Mochi in Bluefy to connect to your Pixl.js.",
+        ]
+      : [
+          "Chrome or Edge required",
+          "Your browser doesn't support device connections. Switch to Chrome or Edge to use Mochi.",
+          "Open Mochi in Chrome or Edge to connect to your Pixl.js.",
+        ]
     : [
         "Secure connection required",
         "Mochi needs to be opened over HTTPS to connect to your device.",
