@@ -1,38 +1,25 @@
 ---
 name: Bug report
-about: Create a report to help us improve
+about: Something isn't working right
 title: ''
-labels: ''
+labels: bug
 assignees: ''
 
 ---
 
-**Describe the bug**
-A clear and concise description of what the bug is.
+**What went wrong?**
+Tell us what happened. A screenshot or short video is very helpful if you can share one.
 
-**To Reproduce**
-Steps to reproduce the behavior:
-1. Go to '...'
-2. Click on '....'
-3. Scroll down to '....'
-4. See error
+**What were you trying to do?**
+e.g. "I was trying to upload files to my device" or "I was updating the firmware"
 
-**Expected behavior**
-A clear and concise description of what you expected to happen.
+**What did you expect to happen instead?**
 
-**Screenshots**
-If applicable, add screenshots to help explain your problem.
+**Your setup**
+- App: <!-- e.g. allmiibo, amiibotool, Flashiibo, Joysfusion… -->
+- Firmware type: <!-- Vanilla (solosky/pixl.js) or Modified? -->
+- Browser: <!-- Chrome, Edge, Brave… — note: Firefox and Safari don't support Web Bluetooth -->
+- Device / OS: <!-- e.g. Windows 11, Android 14, Mac -->
 
-**Desktop (please complete the following information):**
- - OS: [e.g. iOS]
- - Browser [e.g. chrome, safari]
- - Version [e.g. 22]
-
-**Smartphone (please complete the following information):**
- - Device: [e.g. iPhone6]
- - OS: [e.g. iOS8.1]
- - Browser [e.g. stock browser, safari]
- - Version [e.g. 22]
-
-**Additional context**
-Add any other context about the problem here.
+**Anything else?**
+Any error messages you saw, or other details that might help.

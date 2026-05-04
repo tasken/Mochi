@@ -1,20 +1,17 @@
 ---
 name: Feature request
-about: Suggest an idea for this project
+about: Suggest something that would make Mochi better
 title: ''
-labels: ''
+labels: enhancement
 assignees: ''
 
 ---
 
-**Is your feature request related to a problem? Please describe.**
-A clear and concise description of what the problem is. Ex. I'm always frustrated when [...]
+**What's the problem or limitation you're running into?**
+e.g. "I can't easily do X with my device"
 
-**Describe the solution you'd like**
-A clear and concise description of what you want to happen.
+**What would you like Mochi to do?**
+Describe the feature or change you have in mind.
 
-**Describe alternatives you've considered**
-A clear and concise description of any alternative solutions or features you've considered.
-
-**Additional context**
-Add any other context or screenshots about the feature request here.
+**Anything else?**
+Screenshots, examples from other apps, or any extra context that might help.

@@ -1,22 +1,29 @@
 # Dev server certificate (generated locally)
 .cert/
 
-# Local config overrides
+# Local notes and research
 .local/
 
 # Runtime
 *.log
+__pycache__/
 
 # Python environment
 .venv/
-requirements-dev.txt
 
 # Local firmware reference clone (not deployed, not committed)
 upstream/
 
+# Build-time firmware downloads (fetched by fetch-firmware.sh)
+app/firmware/
+
 # Personal dev task config (contains local IP, ports, etc.)
 tasks.py
 
-# Editor / AI tooling
-.superpowers/
+# Benchmark tool (dev only, not deployed)
+app/bench.html
+app/bench.js
+
+# AI tooling (local only)
 .github/copilot-instructions.md
+CLAUDE.md

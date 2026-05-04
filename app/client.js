@@ -6,6 +6,7 @@ const NUS_CHAR_RX_UUID = "6e400003-b5a3-f393-e0a9-e50e24dcca9e";
 
 const FRAME_HEADER_SIZE = 4;
 
+export const NUS_SERVICE = NUS_SERVICE_UUID;
 export const MAX_FILE_NAME_BYTES = 47;
 const MAX_FILE_PATH_BYTES = 63;
 const MAX_FOLDER_PATH_BYTES = 55;
@@ -35,6 +36,7 @@ const VFS_ERRORS = {
 
 const CMD_NAMES = {
   0x01: "VERSION_INFO",
+  0x02: "ENTER_DFU",
   0x10: "DRIVE_LIST",
   0x11: "DRIVE_FORMAT",
   0x12: "FILE_OPEN",
@@ -141,6 +143,10 @@ export class PixlToolsClient {
       filters: [{ services: [NUS_SERVICE_UUID] }],
       optionalServices: [NUS_SERVICE_UUID],
     });
+    await this._setupGatt(device);
+  }
+
+  async connectTo(device) {
     await this._setupGatt(device);
   }
 
@@ -369,6 +375,26 @@ export class PixlToolsClient {
     return { ok: true, error: null, data: null };
   }
 
+  async enterDfu() {
+    // Set flag before sending: device reboots immediately on ENTER_DFU and
+    // disconnects before (or without) sending a notification response, so
+    // _onDisconnect fires while _sendCommand is still pending. Marking as
+    // intentional here prevents the reconnect timer from starting.
+    this._intentionalDisconnect = true;
+    try {
+      await this._sendCommand(0x02);
+      return { ok: true, error: null };
+    } catch (err) {
+      // Expected: "Device disconnected." due to reboot. Any other error is real.
+      const msg = err.message || "";
+      if (msg.includes("disconnected") || msg.includes("timed out") || msg.includes("Not connected")) {
+        return { ok: true, error: null };
+      }
+      this._intentionalDisconnect = false;
+      return { ok: false, error: msg };
+    }
+  }
+
   async readFileData(path) {
     const openRes = await this.openFile(path, "r");
     if (!openRes.ok) return { ok: false, error: openRes.error, data: null };
@@ -408,7 +434,7 @@ export class PixlToolsClient {
     }
   }
 
-  async uploadFile(remotePath, file, onProgress, abortSignal, chunkSize = 128) {
+  async uploadFile(remotePath, file, onProgress, abortSignal, chunkSize = 242) {
     validateRemotePath(remotePath, "file");
     const openRes = await this.openFile(remotePath, "w");
     if (!openRes.ok) throw new Error(openRes.error);
@@ -456,16 +482,20 @@ export class PixlToolsClient {
         ? this.txChar.writeValueWithResponse(frame)
         : this.txChar.writeValue(frame);
       write.then(() => {
+        if (!this.pending) return;
         const pendingRef = this.pending;
         this._pendingTimer = setTimeout(() => {
           if (this.pending === pendingRef) {
             this.pending = null;
             this._pendingTimer = null;
-            reject(new Error("Command timed out"));
+            const err = new Error(`Command timed out: ${cmdName}`);
+            console.error("[BLE]", err.message);
+            reject(err);
           }
         }, 15000);
       }).catch(err => {
         this.pending = null;
+        console.error("[BLE]", `Write failed (${cmdName}):`, err.message);
         reject(err);
       });
     });
@@ -504,13 +534,17 @@ export class PixlToolsClient {
       } else {
         const errMsg = this._vfsError(response.status);
         this._log(`← ${cmdName} ERR: ${errMsg}`);
+        console.error("[BLE]", `${cmdName} returned error: ${errMsg} (status ${response.status})`);
       }
       if (response.cmd !== p.cmd) {
-        p.reject(new Error(`Unexpected response 0x${response.cmd.toString(16)} for 0x${p.cmd.toString(16)}`));
+        const err = new Error(`Unexpected response 0x${response.cmd.toString(16)} for 0x${p.cmd.toString(16)}`);
+        console.error("[BLE]", err.message);
+        p.reject(err);
         return;
       }
       p.resolve(response);
     } catch (err) {
+      console.error("[BLE]", "Notification parse error:", err.message);
       clearTimeout(this._pendingTimer); this._pendingTimer = null;
       if (this.pending) { this.pending.reject(err); this.pending = null; }
       this.chunking = false; this.rxParts = [];
@@ -598,6 +632,8 @@ export class DevMockClient {
     };
     return { ok: true, data: sortEntries(fs[path] ?? []) };
   }
+
+  async enterDfu() { return { ok: true, error: null }; }
 
   // Mutations always succeed but are not reflected in readFolder (static mock).
   async createFolder()    { return { ok: true, data: null }; }
