@@ -1,6 +1,6 @@
 # Mochi
 
-A browser-based tool to manage files and update firmware on [Pixl.js](https://github.com/solosky/pixl.js)-based NFC devices over Bluetooth. No app, no drivers, no cables.
+A browser-based tool to manage files and update firmware on [Pixl.js](https://github.com/solosky/pixl.js)-based NFC devices over Bluetooth. No app, no drivers, nothing extra.
 
 **[Try it](https://tasken.github.io/Mochi/)** (requires Chrome, Edge, or Brave).
 
@@ -19,7 +19,7 @@ Connect your device and manage its storage directly from the browser:
 
 ## Firmware update
 
-Flash firmware directly over Bluetooth using Nordic Secure DFU. No cables or tools required.
+Flash firmware directly over Bluetooth using Nordic Secure DFU. No extra tools required.
 
 - **Auto-detect device mode**: connects to devices in normal or update mode from a single flow
 - **Connected shortcut**: devices already paired from the file browser reboot into update mode automatically, no extra pairing needed
