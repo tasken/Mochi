@@ -7,6 +7,14 @@ assignees: ''
 
 ---
 
+**Which part of Mochi does this relate to?**
+- [ ] File browser / file management
+- [ ] Uploading files
+- [ ] Firmware update (DFU)
+- [ ] Connection / pairing
+- [ ] UI / usability
+- [ ] New feature entirely
+
 **What's the problem or limitation you're running into?**
 e.g. "I can't easily do X with my device"
 
