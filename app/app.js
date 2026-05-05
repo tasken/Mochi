@@ -3491,7 +3491,7 @@ async function fetchDfuRelease() {
       dfuState.release = MOCK_RELEASE;
     } else {
       log("[DFU] Fetching latest release...", "cmd");
-      const resp = await fetch("/firmware/release.json");
+      const resp = await fetch("firmware/release.json");
       if (!resp.ok) throw new Error(`Couldn't load release info (${resp.status})`);
       dfuState.release = await resp.json();
       log(`[DFU] Latest release: ${dfuState.release.tag_name}`, "ok");
@@ -3539,7 +3539,7 @@ function autoSelectReleaseSource(variant) {
   const assets = (dfuState.release.assets || []).filter(a => a.name.toLowerCase().endsWith(".zip"));
   const match = assets.find(a => a.name.toLowerCase().includes(`_${variant.toLowerCase()}`));
   if (!match) return;
-  selectDfuSource({ type: "url", url: `/firmware/${match.name}`, name: match.name });
+  selectDfuSource({ type: "url", url: `firmware/${match.name}`, name: match.name });
 }
 
 // ── Package selection ─────────────────────────────────────────────────────────
