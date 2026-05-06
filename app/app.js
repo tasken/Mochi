@@ -697,6 +697,7 @@ async function checkFirmwareVersion(deviceVersion) {
     if (!latest) return;
     if (compareSemver(deviceVersion, latest) < 0) {
       el.dfuUpdateDot.hidden = false;
+      trackAnalyticsEvent("firmware_update_available", { current: deviceVersion, latest });
       createToast({
         tone: "info",
         summary: `Firmware ${latest} is out!`,
@@ -748,6 +749,7 @@ async function connectOrDisconnect() {
     await state.client.connect();
     setConnState("connected");
     showSuccessToast("Connected");
+    trackAnalyticsEvent("device_connect");
 
     const ver = await state.client.getVersion();
     if (ver.ok) {
@@ -772,6 +774,7 @@ async function connectOrDisconnect() {
     log(`Connection failed: ${err.message}`);
     showConnError(err.message);
     showErrorToast("Connection failed", err.message);
+    trackAnalyticsEvent("device_connect_fail", { error: err.message });
     setConnState("disconnected");
   }
 }
@@ -964,6 +967,7 @@ el.btnFormat.addEventListener("click", async () => {
     if (res.ok) {
       log("Drive E: formatted successfully.");
       showSuccessToast("Drive formatted");
+      trackAnalyticsEvent("format_drive");
       invalidateCache();
       const dr = await state.client.listDrives();
       if (dr.ok && dr.data.length > 0) {
@@ -1572,6 +1576,8 @@ el.btnDownloadSelected.addEventListener("click", async () => {
   } else {
     showSuccessToast(`Downloaded ${pluralize(files.length, "file")}`);
   }
+  const downloaded = files.length - failed;
+  if (downloaded > 0) trackAnalyticsEvent("file_download", { count: downloaded });
 });
 
 // Navigation bar — breadcrumb handles all navigation (including home crumb)
@@ -1668,6 +1674,7 @@ el.btnNewFolder.addEventListener("click", async () => {
     if (res.ok) {
       log(`Created folder: ${folderPath}`);
       showSuccessToast("Folder created");
+      trackAnalyticsEvent("folder_create");
       state.client.folderCache.delete(state.currentPath);
       await browseFolder(state.currentPath);
     } else {
@@ -1852,6 +1859,7 @@ async function openRenameModal(name) {
     if (res.ok) {
       log(`Renamed: ${name} → ${newName}`);
       showSuccessToast("Renamed");
+      trackAnalyticsEvent("file_rename");
     } else {
       log(`Rename failed: ${res.error}`, "err");
       showErrorToast("Rename failed", res.error);
@@ -2063,6 +2071,7 @@ async function doDeleteSelected() {
     } else {
       showErrorToast("Delete failed", firstPlusMore(failedPaths) || "Nothing was deleted");
     }
+    if (deleted > 0) trackAnalyticsEvent("file_delete", { count: deleted });
   } finally {
     el.browserLockOverlay.classList.remove("active");
     updateControls();
@@ -2166,6 +2175,7 @@ async function executeSanitize(allOps, allSkipped) {
   } else {
     showSuccessToast("Already lowercase", skippedText);
   }
+  if (renamed > 0) trackAnalyticsEvent("normalize_run", { count: renamed });
 }
 
 async function withBrowserLock(title, fn) {
@@ -2752,6 +2762,7 @@ async function runSync() {
   state.syncSkippedFiles = [];
   state.syncOrphans = [];
   state.syncOrphanChecked = new Set();
+  trackAnalyticsEvent("file_sync");
   updateControls();
   renderUploadQueue();
 
@@ -2904,6 +2915,9 @@ async function runUpload() {
   state.abortController = new AbortController();
   el.browserLockOverlay.classList.add("active");
   el.browserLockTitle.textContent = "Uploading…";
+  const uploadableFiles = state.uploadPlan.filter(i => i.kind === "file" && i.status !== "skipped");
+  const uploadTotalSize = uploadableFiles.reduce((s, i) => s + i.size, 0);
+  trackAnalyticsEvent("file_upload_start", { count: uploadableFiles.length, size: uploadTotalSize });
 
   updateControls();
 
@@ -2965,6 +2979,7 @@ async function runUpload() {
 
     if (fileItems.length > 0) {
       showSuccessToast(`Uploaded ${pluralize(fileItems.length, "file")}`);
+      trackAnalyticsEvent("file_upload_complete", { count: fileItems.length, size: uploadTotalSize });
     }
   } catch (err) {
     log(`Upload error: ${err.message}`, "err");
@@ -3642,6 +3657,12 @@ async function runDfuTransfer() {
   dfuState.skippedStages = new Set();
   dfuShowProgressView();
   updateControls();
+  if (shouldTrackDfuAnalytics) {
+    trackAnalyticsEvent("dfu_start", {
+      source: dfuState.source?.type || "unknown",
+      variant: dfuState.chosenVariant || dfuState.variant || "unknown",
+    });
+  }
 
   let wakeLock = null;
   try {
@@ -3849,9 +3870,8 @@ async function runDfuTransfer() {
     log("[DFU] Firmware updated successfully.", "ok");
     dfuState.phase = "success";
     if (shouldTrackDfuAnalytics) {
-      trackAnalyticsEvent("Flash_OK", {
-        firmware_type: dfuState.firmwareType,
-        source_type: src.type,
+      trackAnalyticsEvent("dfu_complete", {
+        source: src.type,
         variant: dfuState.chosenVariant || dfuState.variant || "unknown",
       });
     }
@@ -3877,16 +3897,16 @@ async function runDfuTransfer() {
       updateControls();
     } else if (dfuState.cancelFlag || err.message?.toLowerCase().includes("cancel")) {
       log("[DFU] Update cancelled.", "err");
+      if (shouldTrackDfuAnalytics) trackAnalyticsEvent("dfu_cancel");
       closeDfuModal();
     } else {
       log(`[DFU] Update failed: ${err.message}`, "err");
       dfuState.phase = "failed";
       if (shouldTrackDfuAnalytics) {
-        trackAnalyticsEvent("Flash_error", {
-          firmware_type: dfuState.firmwareType,
-          source_type: dfuState.source?.type || "unknown",
+        trackAnalyticsEvent("dfu_fail", {
+          source: dfuState.source?.type || "unknown",
           variant: dfuState.chosenVariant || dfuState.variant || "unknown",
-          error_type: "transfer_failed",
+          error: err.message,
         });
       }
       const guidance = dfuState.enterDfuDone
@@ -3914,6 +3934,7 @@ el.btnUpdateFirmware.addEventListener("click", () => {
   openModal(el.dfuModal);
   setStateColors("dfu", false);
   updateControls();
+  trackAnalyticsEvent("dfu_open");
   fetchDfuRelease();
 });
 
@@ -4093,6 +4114,7 @@ const isIOS = (/iPhone|iPad|iPod/.test(navigator.userAgent)
 
 if (isIOS || isDevMode) {
   el.iosBanner.hidden = false;
+  if (isIOS) trackAnalyticsEvent("ios_banner_shown");
   el.iosBannerClose.addEventListener("click", () => { el.iosBanner.hidden = true; });
 }
 
