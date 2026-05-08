@@ -8,7 +8,9 @@ OUT_DIR="app/firmware"
 mkdir -p "$OUT_DIR"
 
 echo "Fetching latest release from ${REPO}..."
-RELEASE_JSON=$(curl -fsSL ${GITHUB_TOKEN:+-H} ${GITHUB_TOKEN:+"Authorization: Bearer $GITHUB_TOKEN"} "$API_URL")
+AUTH_ARGS=()
+[ -n "${GITHUB_TOKEN:-}" ] && AUTH_ARGS=(-H "Authorization: Bearer $GITHUB_TOKEN")
+RELEASE_JSON=$(curl -fsSL "${AUTH_ARGS[@]}" "$API_URL")
 
 TAG=$(echo "$RELEASE_JSON" | jq -r '.tag_name')
 EXISTING_TAG=$(jq -r '.tag_name // empty' "$OUT_DIR/release.json" 2>/dev/null || true)

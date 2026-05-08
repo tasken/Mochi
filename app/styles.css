@@ -54,16 +54,34 @@
     /* --- Type scale --- */
     --fs-xs: 0.68rem;
     --fs-s: 0.72rem;
+    --fs-sm: 0.78rem;
     --fs-base: 0.8rem;
     --fs-md: 0.875rem;
     --fs-lg: 0.9375rem;
     --fs-xl: 1rem;
     --fs-display: 2rem;
+
+    /* --- Misc tokens --- */
+    --subtle: #9ca3af;
+    --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 
 * {
     box-sizing: border-box;
     margin: 0;
+}
+
+/* Disable iOS double-tap-zoom on tappable elements so rapid file-selection
+ * taps register without the 300ms delay. Affects only touch input. */
+button,
+a,
+[role="button"],
+label,
+input[type="checkbox"],
+input[type="radio"],
+.nav-crumb,
+tr[data-name] {
+    touch-action: manipulation;
 }
 
 body {
@@ -312,12 +330,15 @@ button.dev:hover:not(:disabled) {
     color: var(--foreground) !important;
 }
 
-/* Labeled chip buttons in topbar (Firmware, Format) */
+/* Labeled chip buttons in topbar (Firmware, Format, Normalize) */
 .topbar-chip {
     background: transparent;
     color: #374151;
     white-space: nowrap;
     position: relative;
+}
+.topbar-chip-label {
+    margin-left: 4px;
 }
 .topbar-chip:hover:not(:disabled) {
     background: #f3f4f6;
@@ -383,14 +404,22 @@ button.dev:hover:not(:disabled) {
     color: #2563eb;
 }
 .ios-ble-banner-close {
-    all: unset;
-    cursor: pointer;
+    width: 24px;
+    height: 24px;
+    border: none;
+    background: transparent;
     color: var(--subtle);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border-radius: 6px;
     flex-shrink: 0;
-    padding: 2px;
-    border-radius: 4px;
+    transition: background 0.12s, color 0.12s;
 }
 .ios-ble-banner-close:hover {
+    background: rgba(17, 24, 39, 0.05);
     color: var(--foreground);
 }
 
@@ -513,7 +542,8 @@ button.dev:hover:not(:disabled) {
     justify-content: space-between;
 }
 
-/* Sidebar drop zone */
+/* Sidebar drop zone — rendered as a real <button> so keyboard activation
+ * (Enter/Space) and assistive-tech behavior come for free. */
 .sidebar-drop-zone {
     flex: 1;
     min-height: 110px;
@@ -526,6 +556,9 @@ button.dev:hover:not(:disabled) {
     border-radius: 14px;
     margin: 12px 12px 0;
     background: #faf5ff;
+    color: inherit;
+    font-family: inherit;
+    font-size: inherit;
     cursor: pointer;
     transition:
         background 0.15s,
@@ -946,7 +979,6 @@ button.dev:hover:not(:disabled) {
     justify-content: center;
     gap: 4px;
     min-height: 120px;
-    height: 100%;
     padding: 24px 16px;
     text-align: center;
 }
@@ -1131,6 +1163,13 @@ details[open] .queue-warning-toggle {
     white-space: pre-wrap;
     word-break: break-all;
     flex: 1;
+}
+/* First-run hint: until a single log line is appended, the <pre> is :empty.
+ * The pseudo-element disappears the moment log() runs appendChild. */
+.log:empty::before {
+    content: "Protocol log entries will appear here as Mochi talks to your device.";
+    color: #6b7280;
+    font-style: italic;
 }
 
 .log .cmd {
@@ -1321,6 +1360,53 @@ table {
     display: none;
 }
 
+/* --- Skeleton rows (folder load) --- */
+.skeleton-row td {
+    border-top: 1px solid var(--border);
+}
+.skeleton {
+    display: inline-block;
+    background: linear-gradient(
+        90deg,
+        rgba(229, 231, 235, 0.6) 0%,
+        rgba(243, 244, 246, 0.9) 50%,
+        rgba(229, 231, 235, 0.6) 100%
+    );
+    background-size: 200% 100%;
+    border-radius: 6px;
+    animation: skeleton-shimmer 1.4s ease-in-out infinite;
+    vertical-align: middle;
+}
+.skeleton-checkbox {
+    width: 14px;
+    height: 14px;
+    border-radius: 4px;
+}
+.skeleton-icon {
+    width: 24px;
+    height: 24px;
+    border-radius: 6px;
+    margin-right: 8px;
+}
+.skeleton-text {
+    width: min(60%, 220px);
+    height: 14px;
+}
+.skeleton-size {
+    width: 48px;
+    height: 12px;
+}
+@keyframes skeleton-shimmer {
+    from { background-position: 200% 0; }
+    to   { background-position: -200% 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .skeleton {
+        animation: none;
+        background: rgba(229, 231, 235, 0.7);
+    }
+}
+
 .browser-empty-state {
     flex: 1;
     display: flex;
@@ -1507,6 +1593,14 @@ tr:focus-within .cell-actions button {
     opacity: 1;
 }
 
+/* Touch devices have no hover, so reveal-on-hover hides actions entirely.
+ * Always show them on coarse-pointer inputs. */
+@media (hover: none) {
+    .cell-actions button {
+        opacity: 1;
+    }
+}
+
 .cell-actions button.ghost:hover:not(:disabled) {
     background: #f3f4f6;
     color: var(--foreground);
@@ -1654,7 +1748,7 @@ tr:focus-within .cell-actions button {
     background: none;
     border: none;
     padding: 4px 8px;
-    font-size: var(--fs-md);
+    font-size: var(--fs-base);
     font-family: var(--mono);
     color: #9ca3af;
     cursor: pointer;
@@ -1695,7 +1789,7 @@ tr:focus-within .cell-actions button {
 
 .nav-sep {
     color: #d1d5db;
-    font-size: 1rem;
+    font-size: var(--fs-base);
     padding: 0 1px;
     user-select: none;
     flex-shrink: 0;
@@ -1725,9 +1819,7 @@ tr:focus-within .cell-actions button {
     padding: 0;
     max-width: 420px;
     width: 90%;
-    box-shadow:
-        0 20px 60px rgba(17, 24, 39, 0.18),
-        0 4px 16px rgba(17, 24, 39, 0.08);
+    box-shadow: var(--shadow-2xl);
     overflow: hidden;
 }
 
@@ -1906,13 +1998,6 @@ tr:focus-within .cell-actions button {
     animation: spin 1s linear infinite;
 }
 
-#btnConnect md-circular-progress {
-    --md-circular-progress-size: 16px;
-    --md-circular-progress-active-indicator-color: currentColor;
-    vertical-align: -0.2em;
-    flex-shrink: 0;
-}
-
 /* --- Disconnected / connecting states --- */
 .main-overlay {
     display: none;
@@ -1972,9 +2057,13 @@ tr:focus-within .cell-actions button {
     align-self: center;
     margin-top: 6px;
 }
-#mainOverlaySpinner md-circular-progress {
-    --md-circular-progress-size: 40px;
-    --md-circular-progress-active-indicator-color: #8b5cf6;
+.overlay-spinner {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    border: 3px solid rgba(139, 92, 246, 0.18);
+    border-top-color: #8b5cf6;
+    animation: spin 0.85s linear infinite;
 }
 .main-overlay-card .title {
     font-weight: 700;
@@ -2042,10 +2131,13 @@ tr:focus-within .cell-actions button {
     color: #6b7280;
 }
 
-/* --- Material icons --- */
+/* --- Material icons ---
+ * Two sizes: `.ms` (default 20px, used at panel/heading scale) and `.ms-sm`
+ * (16px, used inline with body text and inside buttons). Many specific icon
+ * wrappers in the UI override the size via more-specific selectors. */
 .ms {
     font-family: "Material Symbols Rounded";
-    font-size: 16px;
+    font-size: 20px;
     font-weight: 400;
     vertical-align: -0.2em;
     user-select: none;
@@ -2058,6 +2150,13 @@ tr:focus-within .cell-actions button {
     vertical-align: -0.15em;
     user-select: none;
     line-height: 1;
+}
+/* Inside generic buttons, .ms collapses to .ms-sm size so existing button
+ * label icons keep their 16px footprint. Specific icon wrappers (badges,
+ * cards, headings) still get the 20px default via the rules above. */
+button .ms,
+.btn-labeled .ms {
+    font-size: 16px;
 }
 
 /* --- Responsive --- */
@@ -2129,6 +2228,7 @@ tr:focus-within .cell-actions button {
         border-top: 1px solid var(--border);
         border-radius: 1rem 1rem 0 0;
         padding-top: 0;
+        padding-bottom: env(safe-area-inset-bottom, 0px);
         transform: translateY(100%);
         transition: transform 0.25s ease;
     }
@@ -2149,6 +2249,70 @@ tr:focus-within .cell-actions button {
 }
 
 @media (max-width: 767px) {
+    .topbar {
+        gap: 6px;
+        padding: 0 10px;
+        height: 52px;
+        overflow-x: auto;
+        overflow-y: hidden;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+    }
+    .topbar::-webkit-scrollbar {
+        display: none;
+    }
+
+    .topbar-brand-name,
+    .topbar-sep,
+    .topbar-action-sep,
+    .topbar-error,
+    .topbar-badge,
+    .topbar-drive,
+    #btnDev,
+    #btnLogToggle {
+        display: none !important;
+    }
+
+    .topbar-spacer {
+        display: none;
+    }
+
+    .topbar button:not(.btn-icon) {
+        width: 40px;
+        height: 40px;
+        padding: 0;
+        border-radius: 999px;
+        justify-content: center;
+        min-width: 40px;
+    }
+
+    .topbar-brand-icon {
+        width: 28px;
+        height: 28px;
+        border-radius: 7px;
+    }
+
+    .topbar-chip .ms-sm,
+    #btnConnect .ms-sm {
+        margin: 0;
+        font-size: 16px;
+    }
+
+    #btnUpdateFirmware .topbar-chip-label,
+    #btnFormat .topbar-chip-label,
+    #btnNormalize .topbar-chip-label {
+        display: none;
+    }
+
+    #btnUpdateFirmware {
+        position: relative;
+    }
+
+    #btnUpdateFirmware .topbar-update-dot {
+        top: 6px;
+        right: 6px;
+    }
+
     .main-overlay {
         padding-inline: 12px;
         align-items: center;
@@ -2167,13 +2331,6 @@ tr:focus-within .cell-actions button {
     .nav-btn-label {
         display: none;
     }
-    .topbar-drive {
-        display: none;
-    }
-    .topbar-badge {
-        font-size: 0;
-        gap: 0;
-    } /* dot only — no text */
     .sidebar-drop-zone {
         display: none;
     }
@@ -2249,6 +2406,19 @@ tr:focus-within .cell-actions button {
     .btn-icon {
         width: 44px;
         height: 44px;
+    }
+    /* Override more-specific desktop rules that pin certain icon buttons to
+     * sub-44 sizes (topbar, upload-execute-zone). The visual chrome is the
+     * same — only the hit-box grows on touch. */
+    .topbar .btn-icon,
+    .upload-execute-zone .btn-icon {
+        width: 44px;
+        height: 44px;
+    }
+    .modal-close {
+        width: 44px;
+        height: 44px;
+        border-radius: 8px;
     }
     button:not(.nav-crumb-home),
     .nav-crumb:not(.nav-crumb-home) {
@@ -2783,6 +2953,7 @@ tr:focus-within .cell-actions button {
         border-radius: 0;
         border-left: none;
         border-top: 1px solid var(--border);
+        padding-bottom: env(safe-area-inset-bottom, 0px);
         transform: translateY(100%);
         transition: transform 0.25s ease;
     }
@@ -2969,7 +3140,7 @@ tr:focus-within .cell-actions button {
 /* === DFU === */
 
 .dfu-modal-box {
-    max-width: 480px;
+    max-width: 560px;
     display: flex;
     flex-direction: column;
     max-height: 90vh;
@@ -2981,14 +3152,35 @@ tr:focus-within .cell-actions button {
     flex: 1;
     display: flex;
     flex-direction: column;
-    gap: 14px;
+    gap: 10px;
+    animation: dfu-section-enter 220ms ease-out backwards;
+}
+.dfu-modal-footer:not([hidden]) {
+    animation: dfu-section-enter 220ms ease-out backwards;
+}
+@keyframes dfu-section-enter {
+    from {
+        opacity: 0;
+        transform: translateY(4px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+@media (prefers-reduced-motion: reduce) {
+    .dfu-modal-body:not([hidden]),
+    .dfu-modal-footer:not([hidden]) {
+        animation: none;
+    }
 }
 
 .dfu-modal-body .modal-body-title {
     margin-bottom: 0;
 }
 
-.dfu-modal-body .modal-body-title + .dfu-intro {
+.dfu-modal-body .modal-body-title + .dfu-intro,
+.dfu-modal-body .modal-body-title + .dfu-type-desc {
     margin-top: -8px;
 }
 
@@ -3001,26 +3193,36 @@ tr:focus-within .cell-actions button {
     align-items: center;
     justify-content: flex-end;
     gap: 8px;
-    padding: 16px 20px 20px;
+    padding: 14px 20px 16px;
     border-top: 1px solid var(--border);
     flex-shrink: 0;
 }
-
-/* Intro */
-.dfu-intro {
-    font-size: var(--fs-base);
-    color: var(--foreground);
-    line-height: 1.5;
-    margin: 0;
+.dfu-modal-footer-cancel-confirm:not([hidden]) {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+    background: #fff7ed;
+    border-top-color: #fed7aa;
+}
+.dfu-cancel-confirm-msg {
+    font-size: var(--fs-s);
+    color: #9a3412;
+    line-height: 1.4;
+}
+.dfu-cancel-confirm-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
 }
 
 .dfu-mobile-note:not([hidden]) {
     display: flex;
-    align-items: baseline;
-    gap: 6px;
-    opacity: 0.7;
-    font-size: var(--fs-sm);
     margin-top: 8px;
+}
+
+.dfu-mobile-note .ms-sm {
+    margin-top: 1px;
+    flex-shrink: 0;
 }
 
 .dfu-mobile-transfer-note:not([hidden]) {
@@ -3036,7 +3238,6 @@ tr:focus-within .cell-actions button {
     display: flex;
     flex-wrap: wrap;
     gap: 6px;
-    padding-top: 2px;
 }
 
 .dfu-code {
@@ -3052,6 +3253,69 @@ tr:focus-within .cell-actions button {
     color: var(--muted-foreground);
     line-height: 1.5;
     margin: 0;
+}
+
+.dfu-type-desc-caution:not([hidden]) {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    color: #9a3412;
+    background: #fff7ed;
+    border: 1px solid #fed7aa;
+    border-radius: calc(var(--radius) - 2px);
+    padding: 8px 10px;
+}
+
+.dfu-type-desc-caution .ms-sm {
+    color: #d97706;
+    margin-top: 1px;
+    flex-shrink: 0;
+}
+
+.dfu-custom-devices-details {
+    border: 1px solid var(--border);
+    border-radius: calc(var(--radius) - 2px);
+    background: #fafafa;
+}
+
+.dfu-custom-devices-summary {
+    list-style: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 8px 10px;
+    font-size: var(--fs-xs);
+    font-weight: 600;
+    color: var(--muted-foreground);
+}
+
+.dfu-custom-devices-summary::-webkit-details-marker {
+    display: none;
+}
+
+.dfu-custom-devices-summary::after {
+    content: "keyboard_arrow_down";
+    font-family: "Material Symbols Rounded";
+    font-size: 16px;
+    line-height: 1;
+    color: #9ca3af;
+    transition: transform 0.12s ease;
+}
+
+.dfu-custom-devices-summary:focus-visible {
+    outline: 2px solid #7c3aed;
+    outline-offset: 1px;
+    border-radius: 6px;
+}
+
+.dfu-custom-devices-details[open] .dfu-custom-devices-summary::after {
+    transform: rotate(180deg);
+}
+
+.dfu-custom-devices-details .dfu-custom-devices {
+    padding: 0 10px 10px;
 }
 .dfu-device-chip {
     background: var(--secondary);
@@ -3081,6 +3345,15 @@ a.dfu-device-chip:hover {
     opacity: 1;
 }
 
+/* Non-link device chips (vendor/category names without a homepage). Subtler
+ * styling so they read as labels rather than broken links. */
+span.dfu-device-chip {
+    background: transparent;
+    border-style: dashed;
+    color: var(--muted-foreground);
+    cursor: default;
+}
+
 /* Native panel layout */
 #dfuNativePanel[hidden],
 #dfuCustomPanel[hidden],
@@ -3092,7 +3365,7 @@ a.dfu-device-chip:hover {
 .dfu-selector-panel {
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 10px;
 }
 
 /* Release source row */
@@ -3163,6 +3436,14 @@ a.dfu-device-chip:hover {
     border-color: #7c3aed;
     background: #ede9fe;
     color: #7c3aed;
+}
+
+/* Ensure our JS/HTML `hidden` attribute always hides these elements.
+ * (We have explicit display:flex rules above, and class specificity can
+ * override the browser's default `[hidden]{display:none}`.) */
+.dfu-pick-btn[hidden],
+.dfu-file-divider[hidden] {
+    display: none !important;
 }
 
 .dfu-picked-file:not([hidden]) {
@@ -3253,7 +3534,7 @@ a.dfu-device-chip:hover {
 
 .dfu-variant-img {
     width: 100%;
-    aspect-ratio: 4 / 3;
+    aspect-ratio: 16 / 10;
     object-fit: cover;
     object-position: center;
     display: block;
@@ -3265,7 +3546,7 @@ a.dfu-device-chip:hover {
 
 .dfu-variant-custom-icon-wrap {
     width: 100%;
-    aspect-ratio: 4 / 3;
+    aspect-ratio: 16 / 10;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -3283,7 +3564,7 @@ a.dfu-device-chip:hover {
 }
 
 .dfu-variant-card-body {
-    padding: 8px 10px 10px;
+    padding: 7px 9px 8px;
     display: flex;
     flex-direction: column;
     gap: 2px;
@@ -3303,12 +3584,28 @@ a.dfu-device-chip:hover {
 }
 
 @media (max-width: 767px) {
+    /* Mobile: show LCD + OLED side-by-side, and place "Use my own file"
+     * below spanning the full width (2:1 layout).
+     */
     .dfu-device-selector-grid {
-        flex-wrap: wrap;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
     }
 
     .dfu-device-selector-grid > .dfu-variant-card {
-        flex-basis: 100%;
+        flex: initial;
+        min-width: 0;
+    }
+
+    .dfu-variant-card-custom {
+        grid-column: 1 / -1;
+    }
+
+    .dfu-variant-custom-icon-wrap {
+        /* User-requested mobile sizing: keep the custom card short. */
+        aspect-ratio: auto;
+        height: 80px;
     }
 }
 
@@ -3357,26 +3654,6 @@ a.dfu-device-chip:hover {
     color: #5b21b6;
     line-height: 1.5;
 }
-button.dfu-reconnect-btn {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    margin-top: 10px;
-    background: #7c3aed;
-    color: #fff;
-    border: none;
-    height: auto;
-    padding: 8px 16px;
-    border-radius: var(--radius);
-    font-size: var(--fs-s);
-    font-weight: 600;
-    cursor: pointer;
-    width: 100%;
-    justify-content: center;
-}
-button.dfu-reconnect-btn:hover:not(:disabled) {
-    background: #6d28d9;
-}
 
 /* Progress bar */
 .dfu-progress-bar-wrap:not([hidden]) {
@@ -3418,7 +3695,7 @@ button.dfu-reconnect-btn:hover:not(:disabled) {
     margin: 0;
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 6px;
 }
 
 .dfu-stage-item {
@@ -3465,7 +3742,55 @@ button.dfu-reconnect-btn:hover:not(:disabled) {
 
 .dfu-stage-item-label {
     color: #4b5563;
+    flex: 1;
+    min-width: 0;
 }
+
+.dfu-stage-item-hint {
+    height: auto;
+    min-height: 0;
+    padding: 2px 8px;
+    border-radius: 999px;
+    border: 1px solid #c4b5fd;
+    background: #ede9fe;
+    color: #5b21b6;
+    font-weight: 600;
+    cursor: pointer;
+    align-items: center;
+    gap: 4px;
+    font-size: var(--fs-xs);
+    line-height: 1.3;
+    white-space: nowrap;
+}
+
+.dfu-stage-item-hint .ms-sm {
+    font-size: 14px;
+}
+
+.dfu-stage-item-hint:not([hidden]) {
+    display: inline-flex;
+}
+
+.dfu-stage-item-hint[hidden] {
+    display: none !important;
+}
+
+.dfu-stage-item-hint:hover:not(:disabled) {
+    background: #ddd6fe;
+    border-color: #a78bfa;
+    color: #4c1d95;
+}
+
+.dfu-stage-item-hint:focus-visible {
+    outline: 2px solid #7c3aed;
+    outline-offset: 1px;
+}
+
+.dfu-stage-item-hint:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
 .dfu-stage-item.done .dfu-stage-item-label {
     color: var(--muted-foreground);
     text-decoration: line-through;
@@ -3529,12 +3854,100 @@ button.dfu-reconnect-btn:hover:not(:disabled) {
     opacity: 0.8;
 }
 
-.dfu-dev-fail:not([hidden]) {
+.dfu-dev-panel:not([hidden]) {
+    display: block;
+    margin-top: 16px;
+    padding: 10px 12px 12px;
+    border: 1px dashed rgba(245, 158, 11, 0.55);
+    border-radius: 8px;
+    background: rgba(245, 158, 11, 0.06);
+}
+.dfu-dev-panel-head {
     display: flex;
     align-items: center;
-    gap: 6px;
-    margin-top: 12px;
-    font-size: var(--fs-s);
-    color: #f59e0b;
+    gap: 8px;
+    margin: 0;
+    list-style: none;
     cursor: pointer;
+}
+
+.dfu-dev-panel-head::-webkit-details-marker {
+    display: none;
+}
+
+.dfu-dev-panel-head::after {
+    content: "keyboard_arrow_down";
+    font-family: "Material Symbols Rounded";
+    font-size: 16px;
+    line-height: 1;
+    color: rgba(146, 64, 14, 0.72);
+    margin-left: auto;
+    transition: transform 0.12s ease;
+}
+
+.dfu-dev-panel[open] .dfu-dev-panel-head::after {
+    transform: rotate(180deg);
+}
+
+.dfu-dev-panel-head:focus-visible {
+    outline: 2px solid #f59e0b;
+    outline-offset: 1px;
+    border-radius: 6px;
+}
+
+.dfu-dev-panel-body {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 8px;
+}
+.dfu-dev-badge {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.6px;
+    color: #fff;
+    background: #f59e0b;
+    padding: 2px 6px;
+    border-radius: 4px;
+    text-transform: uppercase;
+    line-height: 1;
+}
+.dfu-dev-panel-title {
+    font-size: var(--fs-s);
+    font-weight: 600;
+    color: #92400e;
+}
+.dfu-dev-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+.dfu-dev-label {
+    font-size: var(--fs-s);
+    color: #92400e;
+}
+.dfu-dev-select {
+    flex: 1;
+    max-width: 240px;
+    height: 30px;
+    padding: 0 8px;
+    font-family: inherit;
+    font-size: var(--fs-s);
+    border: 1px solid rgba(245, 158, 11, 0.45);
+    border-radius: 6px;
+    background: #fff;
+    color: #92400e;
+    cursor: pointer;
+}
+.dfu-dev-select:focus-visible {
+    outline: 2px solid #f59e0b;
+    outline-offset: 1px;
+}
+.dfu-dev-hint {
+    margin: 0;
+    font-size: var(--fs-xs);
+    color: rgba(146, 64, 14, 0.75);
+    line-height: 1.4;
 }

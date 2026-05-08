@@ -1,69 +1,80 @@
 <!doctype html>
 <html lang="en">
     <head>
-        <!-- Google tag (gtag.js) -->
-        <script
-            async
-            src="https://www.googletagmanager.com/gtag/js?id=G-20FR8YDBP3"
-        ></script>
-        <script>
-            window.dataLayer = window.dataLayer || [];
-            function gtag() {
-                dataLayer.push(arguments);
-            }
-            gtag("js", new Date());
-
-            gtag("config", "G-20FR8YDBP3");
-        </script>
-
         <meta charset="utf-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
         <meta name="theme-color" content="#9ca3af" />
         <meta name="build-commit" content="dev" />
-        <meta name="build-branch" content="" />
         <title>Mochi</title>
         <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-        <link
-            href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400&family=IBM+Plex+Sans:wght@400;700&display=swap"
-            rel="stylesheet"
-        />
-        <link
-            rel="stylesheet"
-            href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,1,0"
-        />
-        <link rel="stylesheet" href="./styles.css" />
-        <script type="module">
-            import "https://esm.sh/@material/web/progress/circular-progress.js";
-        </script>
         <style>
-            @keyframes ui-reveal {
-                from {
-                    opacity: 0;
-                    transform: translateY(6px);
-                }
-                to {
-                    opacity: 1;
-                    transform: translateY(0);
-                }
+            /* === BOOT === */
+            /* Inline so the loading screen renders before any external CSS. */
+            html, body {
+                margin: 0;
+                background: #ffffff;
+                min-height: 100vh;
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+                color: #111827;
+            }
+            /* Hide everything except the boot screen until the app is fully loaded. */
+            body:not(.app-ready) > *:not(.boot-screen) {
+                display: none !important;
+            }
+            .boot-screen {
+                position: fixed;
+                inset: 0;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                gap: 14px;
+                background: #ffffff;
+                z-index: 999999;
+                transition: opacity 220ms ease;
+            }
+            body.app-ready .boot-screen {
+                opacity: 0;
+                pointer-events: none;
+            }
+            .boot-spinner {
+                width: 28px;
+                height: 28px;
+                border-radius: 50%;
+                border: 2px solid rgba(17, 24, 39, 0.12);
+                border-top-color: rgba(17, 24, 39, 0.55);
+                animation: boot-spin 0.85s linear infinite;
+            }
+            @keyframes boot-spin { to { transform: rotate(360deg); } }
+            .boot-mark {
+                font-size: 13px;
+                letter-spacing: 0.6px;
+                color: rgba(17, 24, 39, 0.45);
+            }
+            .boot-error {
+                max-width: 360px;
+                padding: 0 16px;
+                text-align: center;
+                color: #b91c1c;
+                font-size: 14px;
+                line-height: 1.4;
             }
             @keyframes ui-fade {
-                from {
-                    opacity: 0;
-                }
-                to {
-                    opacity: 1;
-                }
+                from { opacity: 0; }
+                to   { opacity: 1; }
             }
-
-            /* App body fades in */
             .app-body {
                 animation: ui-fade 0.45s 0.07s ease-out backwards;
             }
         </style>
     </head>
     <body>
+        <div class="boot-screen" id="bootScreen" role="status" aria-live="polite">
+            <div class="boot-spinner" aria-hidden="true"></div>
+            <div class="boot-mark" id="bootStatus">Mochi</div>
+        </div>
         <div class="app">
             <!-- Top bar -->
             <header class="topbar" id="topbar">
@@ -97,29 +108,29 @@
                     aria-label="Update firmware"
                     hidden
                 >
-                    <span class="ms-sm">memory</span>Firmware<span
+                    <span class="ms-sm">memory</span><span class="topbar-chip-label">Firmware</span><span
                         class="topbar-update-dot"
                         id="dfuUpdateDot"
                         hidden
                     ></span>
                 </button>
                 <button
-                    class="btn-icon ghost"
+                    class="topbar-chip"
                     id="btnFormat"
                     title="Format drive"
                     aria-label="Format drive"
                     hidden
                 >
-                    <span class="ms">mop</span>
+                    <span class="ms-sm">mop</span><span class="topbar-chip-label">Format</span>
                 </button>
                 <button
-                    class="btn-icon ghost"
+                    class="topbar-chip"
                     id="btnNormalize"
-                    title="Lowercase filenames"
-                    aria-label="Lowercase filenames"
+                    title="Convert names to lowercase"
+                    aria-label="Convert names to lowercase"
                     hidden
                 >
-                    <span class="ms">match_case</span>
+                    <span class="ms-sm">match_case</span><span class="topbar-chip-label">Lowercase</span>
                 </button>
                 <button
                     class="btn-icon ghost"
@@ -130,7 +141,7 @@
                 >
                     <span class="ms">terminal</span>
                 </button>
-                <span class="topbar-error" id="connError" hidden></span>
+                <span class="topbar-error" id="connError" role="status" aria-live="polite" hidden></span>
             </header>
 
             <!-- iOS Bluetooth banner -->
@@ -138,9 +149,9 @@
                 <span class="ms-sm ios-ble-banner-icon">phone_iphone</span>
                 <div class="ios-ble-banner-body">
                     <span class="ios-ble-banner-text">
-                        iOS browsers don't support Web Bluetooth.
-                        Open Mochi in <strong>Bluefy</strong>, a free
-                        iOS browser built for Bluetooth web apps.
+                        Most iOS browsers don't support Web Bluetooth yet.
+                        Open Mochi in <strong>Bluefy</strong> to connect your
+                        device over Bluetooth.
                     </span>
                     <a
                         class="ext-link ios-ble-banner-link"
@@ -172,16 +183,14 @@
                             <span class="ms">bluetooth_disabled</span>
                         </div>
                         <div id="mainOverlaySpinner" hidden>
-                            <md-circular-progress
-                                indeterminate
-                            ></md-circular-progress>
+                            <div class="overlay-spinner" aria-hidden="true"></div>
                         </div>
                         <span class="title" id="mainOverlayTitle"
-                            >No device connected</span
+                            >Connect your device to get started</span
                         >
                         <span class="sub" id="mainOverlaySub"></span>
                         <button class="btn-labeled primary" id="btnConnectCta">
-                            <span class="ms">bluetooth</span> Connect to Pixl.js
+                            <span class="ms">bluetooth</span> Connect device
                         </button>
                         <button
                             class="btn-labeled ghost overlay-dfu-btn"
@@ -227,7 +236,7 @@
                                     <span
                                         class="sidebar-drive-path"
                                         id="panelFolderPath"
-                                        >E:/</span
+                                        >Root</span
                                     >
                                 </div>
                                 <div class="sidebar-drive-storage">
@@ -263,11 +272,10 @@
                                     id="panelFolderSize"
                                 ></div>
                             </div>
-                            <div
+                            <button
+                                type="button"
                                 class="sidebar-drop-zone"
                                 id="sidebarDropZone"
-                                role="button"
-                                tabindex="0"
                                 aria-label="Drop files to upload, or click to browse"
                             >
                                 <div class="sidebar-drop-icon-bubble">
@@ -279,9 +287,9 @@
                                     >Drop files or folders here</span
                                 >
                                 <span class="sidebar-drop-sub"
-                                    >or click to browse</span
+                                    >or click to choose</span
                                 >
-                            </div>
+                            </button>
                         </div>
 
                         <!-- State 4: Upload -->
@@ -318,7 +326,7 @@
                                 id="btnSync"
                                 disabled
                             >
-                                <span class="ms-sm">sync</span> Sync with device
+                                <span class="ms-sm">sync</span> Compare with device
                             </button>
 
                             <!-- Zone 2: execute (shown when queue has items or uploading) -->
@@ -369,7 +377,7 @@
                                         >Queue is empty</span
                                     >
                                     <span class="queue-empty-sub"
-                                        >Pick files or a folder above</span
+                                        >Choose Folder or Files above to start</span
                                     >
                                 </div>
                             </div>
@@ -406,13 +414,13 @@
                                 >Working…</span
                             >
                             <span class="browser-lock-sub"
-                                >File browsing is paused.</span
+                                >Transfers are in progress. Browsing resumes automatically.</span
                             >
                         </div>
                     </div>
 
                     <!-- Navigation bar -->
-                    <div id="selectionBar" class="selection-bar">
+                    <div id="selectionBar" class="selection-bar" role="status" aria-live="polite">
                         <!-- Nav state -->
                         <div class="sb-nav">
                             <button
@@ -528,6 +536,8 @@
                     <div
                         id="folderWarningBanner"
                         class="folder-warning-banner"
+                        role="status"
+                        aria-live="polite"
                         hidden
                     >
                         <span class="ms-sm folder-warning-icon">warning</span>
@@ -566,7 +576,7 @@
                                 <span
                                     class="browser-empty-sub"
                                     id="browserEmptySub"
-                                    >Nothing here yet.</span
+                                    >Upload files or create a folder to get started.</span
                                 >
                             </div>
                         </div>
@@ -692,9 +702,9 @@
 
         <!-- Log overlay -->
         <div class="log-sheet-backdrop" id="logSheetBackdrop"></div>
-        <aside class="log-sheet" id="logOverlay">
+        <aside class="log-sheet" id="logOverlay" role="dialog" aria-labelledby="logSheetTitle">
             <div class="log-sheet-header">
-                <span class="log-sheet-title"
+                <span class="log-sheet-title" id="logSheetTitle"
                     ><span class="ms-sm">terminal</span> Protocol log</span
                 >
                 <button
@@ -731,7 +741,7 @@
                         class="img-lightbox-img"
                         id="imgLightboxImg"
                         src=""
-                        alt=""
+                        alt="NFC tag artwork"
                     />
                 </div>
                 <aside class="img-lightbox-side" id="imgLightboxSide"></aside>
@@ -739,7 +749,7 @@
         </div>
 
         <!-- Shared confirm modal (format, delete, …) -->
-        <div id="confirmModal" class="modal-overlay">
+        <div id="confirmModal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="confirmTitle">
             <div class="modal-box">
                 <div class="modal-header">
                     <span class="modal-header-title" id="confirmTitle"></span>
@@ -771,7 +781,7 @@
         </div>
 
         <!-- Shared input modal (rename, new folder, …) -->
-        <div id="inputModal" class="modal-overlay">
+        <div id="inputModal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="inputTitle">
             <div class="modal-box">
                 <div class="modal-header">
                     <span class="modal-header-title" id="inputTitle"></span>
@@ -820,10 +830,10 @@
         </div>
 
         <!-- Upload warning modal -->
-        <div id="uploadWarnModal" class="modal-overlay">
+        <div id="uploadWarnModal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="uploadWarnTitle">
             <div class="modal-box">
                 <div class="modal-header">
-                    <span class="modal-header-title">Upload</span>
+                    <span class="modal-header-title" id="uploadWarnTitle">Upload warning</span>
                     <button
                         class="modal-close"
                         data-modal-close
@@ -837,7 +847,7 @@
                         <span class="ms">warning</span>
                     </div>
                     <div class="modal-body-title">
-                        Some folders have naming rules
+                        Heads up before upload
                     </div>
                     <div id="uploadWarnMsg"></div>
                     <div class="modal-actions">
@@ -856,10 +866,10 @@
         </div>
 
         <!-- Sanitize names modal — nothing selected -->
-        <div id="sanitizeModalNone" class="modal-overlay sanitize-modal">
+        <div id="sanitizeModalNone" class="modal-overlay sanitize-modal" role="dialog" aria-modal="true" aria-labelledby="sanitizeNoneTitle">
             <div class="modal-box">
                 <div class="modal-header">
-                    <span class="modal-header-title">Normalize names</span>
+                    <span class="modal-header-title" id="sanitizeNoneTitle">Convert names to lowercase</span>
                     <button
                         class="modal-close"
                         data-modal-close
@@ -873,13 +883,9 @@
                         <span class="ms">match_case</span>
                     </div>
                     <div class="modal-body-title">
-                        What should be lowercased in
-                        <strong
-                            class="modal-inline-mono"
-                            id="sanitizeNonePath"
-                        ></strong
-                        >?
+                        Choose what to lowercase in this location
                     </div>
+                    <p class="modal-note">Location: <strong class="modal-inline-mono" id="sanitizeNonePath"></strong></p>
                     <div class="modal-choice-list">
                         <label class="modal-choice-option">
                             <input
@@ -888,7 +894,7 @@
                                 value="files"
                                 checked
                             />
-                            Files in this folder only
+                            Files in this folder
                         </label>
                         <label class="modal-choice-option">
                             <input
@@ -904,7 +910,7 @@
                                 name="sanitizeNoneScope"
                                 value="recursive"
                             />
-                            Everything, including subfolders
+                            This folder and all subfolders
                         </label>
                     </div>
                     <div class="modal-actions">
@@ -915,7 +921,7 @@
                             class="btn-labeled primary"
                             id="btnSanitizeNoneConfirm"
                         >
-                            Lowercase all
+                            Convert names
                         </button>
                     </div>
                 </div>
@@ -923,10 +929,10 @@
         </div>
 
         <!-- DFU modal — confirm + progress in one surface -->
-        <div id="dfuModal" class="modal-overlay">
+        <div id="dfuModal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="dfuModalTitle">
             <div class="modal-box dfu-modal-box">
                 <div class="modal-header">
-                    <span class="modal-header-title">Update firmware</span>
+                    <span class="modal-header-title" id="dfuModalTitle">Update firmware</span>
                     <button
                         class="modal-close"
                         id="btnDfuClose"
@@ -939,9 +945,10 @@
                 <!-- Confirm section -->
                 <div class="modal-body dfu-modal-body" id="dfuConfirmSection">
                     <div class="modal-body-title">Choose your firmware</div>
-                    <p class="dfu-intro">
-                        Pick your device model so Mochi can download the right
-                        update, or provide your own .zip file.
+                    <p class="dfu-type-desc">
+                        Pick your device model and Mochi will download the
+                        correct official update. Advanced users can provide
+                        their own .zip file.
                     </p>
 
                     <div id="dfuVariantSection">
@@ -955,6 +962,7 @@
                                     src="img/lcd.png"
                                     alt="allmiibo LCD device"
                                     class="dfu-variant-img"
+                                    loading="lazy"
                                 />
                                 <div class="dfu-variant-card-body">
                                     <div class="dfu-variant-card-label">
@@ -974,6 +982,7 @@
                                     src="img/oled.png"
                                     alt="allmiibo OLED device"
                                     class="dfu-variant-img"
+                                    loading="lazy"
                                 />
                                 <div class="dfu-variant-card-body">
                                     <div class="dfu-variant-card-label">
@@ -1012,7 +1021,10 @@
                             <div
                                 id="dfuReleaseContainer"
                                 class="dfu-release-inline"
-                            ></div>
+                            >
+                                <span class="ms dfu-release-spinner">progress_activity</span>
+                                <span class="dfu-release-status-text">Checking the latest official update…</span>
+                            </div>
                         </div>
                     </div>
 
@@ -1021,78 +1033,92 @@
                             Make sure the file matches your device model.
                             Using the wrong one can leave the screen blank.
                         </p>
-                        <div class="dfu-custom-devices">
-                            <a
-                                class="ext-link dfu-device-chip"
-                                href="https://github.com/solosky/pixl.js"
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                >allmiibo
-                                <span class="ms-sm" aria-hidden="true"
-                                    >open_in_new</span
-                                ></a
-                            >
-                            <a
-                                class="ext-link dfu-device-chip"
-                                href="https://github.com/strengthen/iNFCAmiibo"
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                >amiibotool
-                                <span class="ms-sm" aria-hidden="true"
-                                    >open_in_new</span
-                                ></a
-                            >
-                            <a
-                                class="ext-link dfu-device-chip"
-                                href="https://www.flashiibo.com/"
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                >Flashiibo
-                                <span class="ms-sm" aria-hidden="true"
-                                    >open_in_new</span
-                                ></a
-                            >
-                            <a
-                                class="ext-link dfu-device-chip"
-                                href="https://joysfusion.com/"
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                >Joysfusion
-                                <span class="ms-sm" aria-hidden="true"
-                                    >open_in_new</span
-                                ></a
-                            >
-                            <a
-                                class="ext-link dfu-device-chip"
-                                href="https://github.com/strengthen/iNFCAmiibo"
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                >NFC emulator
-                                <span class="ms-sm" aria-hidden="true"
-                                    >open_in_new</span
-                                ></a
-                            >
-                            <span class="dfu-device-chip">NFC tool</span>
-                            <a
-                                class="ext-link dfu-device-chip"
-                                href="https://wuzplay-nfc.com"
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                >Wuzplay
-                                <span class="ms-sm" aria-hidden="true"
-                                    >open_in_new</span
-                                ></a
-                            >
-                        </div>
+                        <p class="dfu-type-desc dfu-type-desc-caution">
+                            <span class="ms-sm" aria-hidden="true">warning</span>
+                            Caution: flashing firmware for a different device type
+                            is still experimental and should only be done if you
+                            understand recovery steps.
+                        </p>
+                        <details
+                            class="dfu-custom-devices-details"
+                            id="dfuCustomDevicesDetails"
+                        >
+                            <summary class="dfu-custom-devices-summary">
+                                Device project links
+                            </summary>
+                            <div class="dfu-custom-devices">
+                                <a
+                                    class="ext-link dfu-device-chip"
+                                    href="https://github.com/solosky/pixl.js"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    >allmiibo
+                                    <span class="ms-sm" aria-hidden="true"
+                                        >open_in_new</span
+                                    ></a
+                                >
+                                <a
+                                    class="ext-link dfu-device-chip"
+                                    href="https://github.com/strengthen/iNFCAmiibo"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    >amiibotool
+                                    <span class="ms-sm" aria-hidden="true"
+                                        >open_in_new</span
+                                    ></a
+                                >
+                                <a
+                                    class="ext-link dfu-device-chip"
+                                    href="https://www.flashiibo.com/"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    >Flashiibo
+                                    <span class="ms-sm" aria-hidden="true"
+                                        >open_in_new</span
+                                    ></a
+                                >
+                                <a
+                                    class="ext-link dfu-device-chip"
+                                    href="https://joysfusion.com/"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    >Joysfusion
+                                    <span class="ms-sm" aria-hidden="true"
+                                        >open_in_new</span
+                                    ></a
+                                >
+                                <a
+                                    class="ext-link dfu-device-chip"
+                                    href="https://github.com/strengthen/iNFCAmiibo"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    >NFC emulator
+                                    <span class="ms-sm" aria-hidden="true"
+                                        >open_in_new</span
+                                    ></a
+                                >
+                                <span class="dfu-device-chip">NFC tool</span>
+                                <a
+                                    class="ext-link dfu-device-chip"
+                                    href="https://wuzplay-nfc.com"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    >Wuzplay
+                                    <span class="ms-sm" aria-hidden="true"
+                                        >open_in_new</span
+                                    ></a
+                                >
+                            </div>
+                        </details>
                     </div>
 
-                    <div class="dfu-file-divider">
+                    <div class="dfu-file-divider" hidden>
                         <span id="dfuFileDividerLabel"
                             >or use a file from your computer</span
                         >
                     </div>
 
-                    <button class="dfu-pick-btn" id="btnDfuPickFile">
+                    <button class="dfu-pick-btn" id="btnDfuPickFile" hidden>
                         <span class="ms-sm">folder_zip</span> Choose .zip file
                     </button>
                     <div class="dfu-picked-file" id="dfuPickedFile" hidden>
@@ -1103,10 +1129,24 @@
                         </button>
                     </div>
 
-                    <label class="dfu-dev-fail" id="dfuDevFailLabel" hidden>
-                        <input type="checkbox" id="dfuDevFailToggle" /> Simulate
-                        failure
-                    </label>
+                    <details class="dfu-dev-panel" id="dfuDevPanel" hidden>
+                        <summary class="dfu-dev-panel-head">
+                            <span class="dfu-dev-badge">DEV</span>
+                            <span class="dfu-dev-panel-title">Simulate failure</span>
+                        </summary>
+                        <div class="dfu-dev-panel-body">
+                            <label class="dfu-dev-row" for="dfuDevFailMode">
+                                <span class="dfu-dev-label">Outcome</span>
+                                <select id="dfuDevFailMode" class="dfu-dev-select">
+                                    <option value="none">No failure (happy path)</option>
+                                    <option value="mid_transfer">Disconnect mid-transfer</option>
+                                    <option value="init_packet">Init packet rejected</option>
+                                    <option value="picker_dismissed">User dismisses picker</option>
+                                </select>
+                            </label>
+                            <p class="dfu-dev-hint">Resets to "No failure" after each run.</p>
+                        </div>
+                    </details>
                 </div>
 
                 <!-- Progress section -->
@@ -1138,13 +1178,11 @@
                         don't see it, make sure it's powered on and nearby.
                     </div>
                     <div class="dfu-hint-box" id="dfuReconnectHint" hidden>
-                        Your device has restarted in update mode. Tap the button
-                        below to pick it from the Bluetooth list. It will
+                        Your device has restarted in update mode. Tap
+                        <strong>Connect to device</strong> next to this step
+                        to pick it from the Bluetooth list. It will
                         usually show as
                         <code class="dfu-code">DfuTarg</code>.
-                        <button class="dfu-reconnect-btn" id="btnDfuReconnectPicker">
-                            <span class="ms-sm">bluetooth_searching</span> Connect to device
-                        </button>
                     </div>
                     <div
                         class="dfu-progress-bar-wrap"
@@ -1222,17 +1260,17 @@
                     <div class="modal-body-title" id="dfuWarnTitle">
                         Almost there, one last check
                     </div>
-                    <p class="dfu-intro" id="dfuWarnBodyPrimary">
+                    <p class="dfu-type-desc" id="dfuWarnBodyPrimary">
                         Confirm you picked the right model. If LCD and OLED are
                         mixed up, the screen can go blank until you install the
                         correct version.
                     </p>
-                    <p class="dfu-intro" id="dfuWarnBodySecondary">
+                    <p class="dfu-type-desc" id="dfuWarnBodySecondary">
                         If something goes wrong mid-update, your device may
                         stay in update mode. Don't worry, you can retry with
                         the correct file to fix it.
                     </p>
-                    <p class="dfu-intro dfu-mobile-note" id="dfuMobileNote" hidden>
+                    <p class="dfu-type-desc dfu-type-desc-caution dfu-mobile-note" id="dfuMobileNote" hidden>
                         <span class="ms-sm">phone_android</span>
                         Bluetooth transfers on phones can be unstable. If the
                         update fails, try again from a desktop computer.
@@ -1270,11 +1308,31 @@
                         Cancel
                     </button>
                 </div>
+                <div
+                    class="dfu-modal-footer dfu-modal-footer-cancel-confirm"
+                    id="dfuFooterCancelConfirm"
+                    hidden
+                >
+                    <div class="dfu-cancel-confirm-msg">
+                        Cancel now? Your device may stay in update mode until you retry.
+                    </div>
+                    <div class="dfu-cancel-confirm-actions">
+                        <button class="btn-labeled ghost" id="btnDfuCancelKeep">
+                            Keep updating
+                        </button>
+                        <button
+                            class="btn-labeled danger"
+                            id="btnDfuCancelConfirmYes"
+                        >
+                            Cancel update
+                        </button>
+                    </div>
+                </div>
                 <div class="dfu-modal-footer" id="dfuFooterFailed" hidden>
                     <button class="btn-labeled ghost" id="btnDfuReconnect">
                         Back to device
                     </button>
-                    <button class="btn-labeled ghost" id="btnDfuReboot" hidden>
+                    <button class="btn-labeled ghost" id="btnDfuReboot" disabled>
                         <span class="ms-sm">restart_alt</span> Exit update mode
                     </button>
                     <button
@@ -1307,8 +1365,156 @@
             aria-live="polite"
         ></div>
 
-        <script src="./vendor/secure-dfu.js"></script>
-        <script src="https://cdn.jsdelivr.net/npm/jszip@3/dist/jszip.min.js"></script>
-        <script type="module" src="./app.js"></script>
+        <script>
+            // === BOOT LOADER ===
+            // Loads stylesheets, fonts, vendor scripts and the app module in
+            // sequenced stages. The full UI is hidden (via inline CSS) until
+            // every dependency has resolved, at which point `app-ready` is
+            // added to <body> and the boot screen fades out.
+            (function () {
+                "use strict";
+
+                // gtag stub so analytics events fired before gtag.js loads are
+                // queued in dataLayer and flushed once the script arrives.
+                window.dataLayer = window.dataLayer || [];
+                window.gtag = function () { window.dataLayer.push(arguments); };
+                window.gtag("js", new Date());
+                window.gtag("config", "G-20FR8YDBP3");
+
+                function loadStyle(href) {
+                    return new Promise(function (resolve, reject) {
+                        var l = document.createElement("link");
+                        l.rel = "stylesheet";
+                        l.href = href;
+                        l.onload = function () { resolve(); };
+                        l.onerror = function () { reject(new Error("stylesheet: " + href)); };
+                        document.head.appendChild(l);
+                    });
+                }
+
+                function loadScript(src) {
+                    return new Promise(function (resolve, reject) {
+                        var s = document.createElement("script");
+                        s.src = src;
+                        s.onload = function () { resolve(); };
+                        s.onerror = function () { reject(new Error("script: " + src)); };
+                        document.head.appendChild(s);
+                    });
+                }
+
+                function loadAnalytics() {
+                    var s = document.createElement("script");
+                    s.async = true;
+                    s.src = "https://www.googletagmanager.com/gtag/js?id=G-20FR8YDBP3";
+                    document.head.appendChild(s);
+                }
+
+                function showBootError(err) {
+                    console.error("[boot]", err);
+                    var spinner = document.querySelector(".boot-spinner");
+                    if (spinner) spinner.style.display = "none";
+                    var status = document.getElementById("bootStatus");
+                    if (status) {
+                        status.className = "boot-error";
+                        status.textContent = "Failed to load. Check your connection and refresh the page.";
+                    }
+                }
+
+                // Minimum time the boot screen stays visible, even when every
+                // dependency has already resolved. Prevents a jarring flash on
+                // fast / cached loads.
+                var MIN_BOOT_MS = 250;
+
+                async function start() {
+                    var bootStartedAt = performance.now();
+                    try {
+                        // Optional vendor scripts have no DOM/CSS dependency,
+                        // so kick them off in parallel with stylesheets/fonts.
+                        // Failures are non-fatal: the core file browser should
+                        // still boot even if DFU libraries fail to load.
+                        var vendorScriptsP = Promise.allSettled([
+                            loadScript("./vendor/secure-dfu.js"),
+                            loadScript("https://cdn.jsdelivr.net/npm/jszip@3/dist/jszip.min.js"),
+                        ]);
+
+                        // Stage 1 — Stylesheets. Local app CSS is required;
+                        // remote font CSS is best-effort only.
+                        await loadStyle("./styles.css");
+
+                        // All Google Fonts families are combined into a single CSS request.
+                        // Material Symbols is subset via `icon_names=` to ship
+                        // only the glyphs Mochi actually renders (~10 KB
+                        // instead of the full ~463 KB icon font). When adding
+                        // a new `<span class="ms">…</span>` icon, append its
+                        // name to the alphabetically-sorted list below or it
+                        // will render as the literal ligature text.
+                        await loadStyle("https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400&family=IBM+Plex+Sans:wght@400;700&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,1,0&icon_names=ar_stickers,arrow_back,block,bluetooth,bluetooth_disabled,bluetooth_searching,check,check_circle,close,cloud_upload,create_new_folder,delete,download,edit,error,favorite,folder,folder_open,folder_zip,hard_drive,home,inbox,info,insert_drive_file,keyboard_arrow_down,lock,match_case,memory,mop,open_in_new,phone_android,phone_iphone,play_arrow,progress_activity,refresh,replay,restart_alt,schedule,screen_lock_portrait,stop,sync,system_update,task_alt,terminal,upload,upload_file,warning,zoom_out_map&display=swap")
+                            .catch(function (err) {
+                                console.warn("[boot] Optional font stylesheet failed:", err);
+                            });
+
+                        // Stage 2 — Force fonts to download (best effort; never block on a single missing weight).
+                        if (document.fonts && document.fonts.load) {
+                            await Promise.allSettled([
+                                document.fonts.load('400 16px "IBM Plex Sans"'),
+                                document.fonts.load('700 16px "IBM Plex Sans"'),
+                                document.fonts.load('400 16px "IBM Plex Mono"'),
+                                document.fonts.load('400 24px "Material Symbols Rounded"'),
+                            ]);
+                        }
+
+                        // Stage 3 — Join optional vendor scripts (likely already resolved).
+                        var vendorResults = await vendorScriptsP;
+                        vendorResults.forEach(function (result) {
+                            if (result.status === "rejected") {
+                                console.warn("[boot] Optional vendor script failed:", result.reason);
+                            }
+                        });
+
+                        // Stage 4 — App module. app.js dispatches `app:ready` once initial render completes.
+                        var ready = new Promise(function (resolve) {
+                            document.addEventListener("app:ready", resolve, { once: true });
+                        });
+                        await import("./app.js");
+                        // Safety net: if app.js fails to dispatch within 1.5s, reveal anyway.
+                        await Promise.race([
+                            ready,
+                            new Promise(function (r) { setTimeout(r, 1500); }),
+                        ]);
+
+                        // Hold the boot screen for the minimum display window.
+                        var elapsed = performance.now() - bootStartedAt;
+                        var remaining = MIN_BOOT_MS - elapsed;
+                        if (remaining > 0) {
+                            await new Promise(function (r) { setTimeout(r, remaining); });
+                        }
+
+                        // Reveal.
+                        document.body.classList.add("app-ready");
+                        setTimeout(function () {
+                            var b = document.getElementById("bootScreen");
+                            if (b && b.parentNode) b.parentNode.removeChild(b);
+                        }, 1500);
+
+                        // Stage 5 — Analytics (deferred to the next idle frame).
+                        // Events queued via the gtag stub before this resolves
+                        // are flushed when the real gtag.js arrives.
+                        if ("requestIdleCallback" in window) {
+                            requestIdleCallback(loadAnalytics, { timeout: 3000 });
+                        } else {
+                            setTimeout(loadAnalytics, 1000);
+                        }
+                    } catch (err) {
+                        showBootError(err);
+                    }
+                }
+
+                if (document.readyState === "loading") {
+                    document.addEventListener("DOMContentLoaded", start);
+                } else {
+                    start();
+                }
+            })();
+        </script>
     </body>
 </html>

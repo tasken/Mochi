@@ -70,6 +70,14 @@ function joinChildPath(parent, child) {
   return parent.endsWith("/") ? `${parent}${c}` : `${parent}/${c}`;
 }
 
+function formatPathForUi(path) {
+  const raw = String(path || "").trim().replace(/\\/g, "/");
+  if (!raw) return "Root";
+  if (/^e:\/?$/i.test(raw)) return "Root";
+  if (/^e:\//i.test(raw)) return `/${raw.slice(3)}`;
+  return raw;
+}
+
 function triggerDownload(data, filename) {
   const url = URL.createObjectURL(new Blob([data]));
   const a = document.createElement("a");
@@ -266,8 +274,10 @@ const el = {
   dfuConfirmSection: document.getElementById("dfuConfirmSection"),
   dfuNativePanel: document.getElementById("dfuNativePanel"),
   dfuCustomPanel: document.getElementById("dfuCustomPanel"),
+  dfuCustomDevicesDetails: document.getElementById("dfuCustomDevicesDetails"),
   dfuReleaseContainer: document.getElementById("dfuReleaseContainer"),
   dfuFileDividerLabel: document.getElementById("dfuFileDividerLabel"),
+  dfuFileDivider: document.querySelector(".dfu-file-divider"),
   btnDfuPickFile: document.getElementById("btnDfuPickFile"),
   dfuPickedFile: document.getElementById("dfuPickedFile"),
   dfuPickedName: document.getElementById("dfuPickedName"),
@@ -276,8 +286,8 @@ const el = {
   btnDfuVariantLCD: document.getElementById("btnDfuVariantLCD"),
   btnDfuVariantOLED: document.getElementById("btnDfuVariantOLED"),
   btnDfuVariantCustom: document.getElementById("btnDfuVariantCustom"),
-  dfuDevFailLabel: document.getElementById("dfuDevFailLabel"),
-  dfuDevFailToggle: document.getElementById("dfuDevFailToggle"),
+  dfuDevPanel: document.getElementById("dfuDevPanel"),
+  dfuDevFailMode: document.getElementById("dfuDevFailMode"),
   dfuProgressSection: document.getElementById("dfuProgressSection"),
   dfuWarnTitle: document.getElementById("dfuWarnTitle"),
   dfuWarnBodyPrimary: document.getElementById("dfuWarnBodyPrimary"),
@@ -294,7 +304,6 @@ const el = {
   dfuSelectingHint: document.getElementById("dfuSelectingHint"),
   dfuReconnectHint: document.getElementById("dfuReconnectHint"),
   dfuMobileTransferNote: document.getElementById("dfuMobileTransferNote"),
-  btnDfuReconnectPicker: document.getElementById("btnDfuReconnectPicker"),
   dfuStageList: document.getElementById("dfuStageList"),
   dfuErrorBox: document.getElementById("dfuErrorBox"),
   dfuTroubleshootLinks: document.getElementById("dfuTroubleshootLinks"),
@@ -307,6 +316,9 @@ const el = {
   btnDfuBackToConfirm: document.getElementById("btnDfuBackToConfirm"),
   btnDfuProceed: document.getElementById("btnDfuProceed"),
   dfuFooterProgress: document.getElementById("dfuFooterProgress"),
+  dfuFooterCancelConfirm: document.getElementById("dfuFooterCancelConfirm"),
+  btnDfuCancelKeep: document.getElementById("btnDfuCancelKeep"),
+  btnDfuCancelConfirmYes: document.getElementById("btnDfuCancelConfirmYes"),
   btnDfuCancelTransfer: document.getElementById("btnDfuCancelTransfer"),
   dfuFooterFailed: document.getElementById("dfuFooterFailed"),
   btnDfuReconnect: document.getElementById("btnDfuReconnect"),
@@ -361,6 +373,7 @@ const state = {
   currentPath: "",
   entries: [],
   selectedNames: new Set(),
+  dirLoadingPath: null,
   drawerEntry: null,       // currently displayed file entry in panel
   panelMode: "folder",     // "folder" | "file" | "upload"
   panelPrevMode: "folder", // restored when upload panel closes
@@ -440,22 +453,34 @@ function isMobileViewport() { return window.innerWidth < 992; }
 function _lockScroll()   { document.body.classList.add("no-scroll"); }
 function _unlockScroll() { document.body.classList.remove("no-scroll"); }
 
+// Sheets toggle role="dialog" on open/close. The same DOM is the desktop
+// sidebar (where dialog semantics would be wrong) and the mobile bottom-sheet
+// (where they're correct), so we apply the role only while the sheet is in
+// its "open" overlay state.
 function openSheet() {
   el.sheetContainer.classList.add("open");
+  el.sheetContainer.setAttribute("role", "dialog");
+  el.sheetContainer.setAttribute("aria-modal", "true");
   _lockScroll();
 }
 function closeSheet() {
   el.sheetContainer.classList.remove("open");
   el.sheetContainer.classList.remove("is-upload");
-  if (!document.body.classList.contains("log-open")) _unlockScroll();
+  el.sheetContainer.removeAttribute("role");
+  el.sheetContainer.removeAttribute("aria-modal");
+  if (!document.body.classList.contains("log-open") && _openModalStack.length === 0) _unlockScroll();
 }
 function openDetailsSheet() {
   el.detailsSheetContainer.classList.add("open");
+  el.detailsSheetContainer.setAttribute("role", "dialog");
+  el.detailsSheetContainer.setAttribute("aria-modal", "true");
   _lockScroll();
 }
 function closeDetailsSheet() {
   el.detailsSheetContainer.classList.remove("open");
-  if (!document.body.classList.contains("log-open")) _unlockScroll();
+  el.detailsSheetContainer.removeAttribute("role");
+  el.detailsSheetContainer.removeAttribute("aria-modal");
+  if (!document.body.classList.contains("log-open") && _openModalStack.length === 0) _unlockScroll();
 }
 
 el.sheetBackdrop.addEventListener("click", closeSheet);
@@ -488,7 +513,7 @@ function setConnState(newState) {
   el.mainOverlay.classList.toggle("active", !connected);
   el.mainOverlayIcon.hidden = connecting || reconnecting;
   el.mainOverlaySpinner.hidden = !(connecting || reconnecting);
-  el.mainOverlayTitle.textContent = reconnecting ? "Reconnecting\u2026" : connecting ? "Connecting\u2026" : "No device connected";
+  el.mainOverlayTitle.textContent = reconnecting ? "Reconnecting\u2026" : connecting ? "Connecting\u2026" : "Connect your device to get started";
   el.mainOverlaySub.textContent = (connecting || reconnecting) ? "" : "Connect your device to browse and manage files.";
   el.btnConnectCta.hidden = connecting || reconnecting;
   el.btnConnectCta.disabled = connecting || reconnecting;
@@ -539,6 +564,10 @@ function setConnState(newState) {
 
 function showConnError(msg) {
   el.connError.textContent = msg;
+  // The visual element is truncated to ~200px with ellipsis. Mirror the full
+  // message into title= so hovering (or assistive tech reading the tooltip)
+  // surfaces the rest.
+  el.connError.title = msg;
   el.connError.hidden = false;
 }
 
@@ -565,6 +594,9 @@ function createToast(options) {
     actionLabel = "",
     actionUrl = "",
     onAction = null,
+    // Auto-dismiss timeout in ms (ignored when sticky=true). Defaults to 2.5s
+    // for transient confirmations; undoable toasts can ask for longer.
+    duration = 2500,
   } = options;
 
   // Resolve summary/detail from legacy `message` string if needed
@@ -633,7 +665,7 @@ function createToast(options) {
   appendToast(toast);
 
   if (!sticky) {
-    setTimeout(() => removeToast(toast), 2500);
+    setTimeout(() => removeToast(toast), duration);
   }
 
   return toast;
@@ -641,6 +673,19 @@ function createToast(options) {
 
 function showSuccessToast(summary, detail = "") {
   return createToast({ tone: "success", summary: normalizeToastPart(summary), detail: normalizeToastPart(detail), sticky: false });
+}
+
+// Show a success toast with an Undo affordance. The toast lingers a little
+// longer than a regular success toast so the user has time to react.
+function showUndoToast(summary, onUndo) {
+  return createToast({
+    tone: "success",
+    summary: normalizeToastPart(summary),
+    actionLabel: "Undo",
+    onAction: onUndo,
+    sticky: false,
+    duration: 5000,
+  });
 }
 
 function showErrorToast(summary, detail = "") {
@@ -700,8 +745,8 @@ async function checkFirmwareVersion(deviceVersion) {
       trackAnalyticsEvent("firmware_update_available", { current: deviceVersion, latest });
       createToast({
         tone: "info",
-        summary: `Firmware ${latest} is out!`,
-        detail: `You're on ${deviceVersion}. Want to update?`,
+        summary: `Update available: ${latest}`,
+        detail: `Current version: ${deviceVersion}. You can update now or later from Firmware.`,
         actionLabel: "Update",
         onAction: () => el.btnUpdateFirmware.click(),
       });
@@ -728,17 +773,17 @@ async function connectOrDisconnect() {
     if (state.disconnectToast) { removeToast(state.disconnectToast); state.disconnectToast = null; }
     invalidateCache();
     if (state.connState !== "disconnected") setConnState("disconnected");
-    if (wasReconnecting) showErrorToast("Reconnection timed out", "Disconnect and try again.");
+    if (wasReconnecting) showErrorToast("Couldn't reconnect", "Tap Connect to try again. If this keeps happening, move the device closer.");
   };
   state.client.onReconnecting = () => {
     if (state.abortController) state.abortController.abort();
     setConnState("reconnecting");
-    state.disconnectToast = showErrorToast("Connection lost", "Reconnecting…");
+    state.disconnectToast = showErrorToast("Connection lost", "Trying to reconnect automatically. Keep the device nearby.");
   };
   state.client.onReconnect = async () => {
     if (state.disconnectToast) { removeToast(state.disconnectToast); state.disconnectToast = null; }
     setConnState("connected");
-    showSuccessToast("Back online");
+    showSuccessToast("Reconnected");
     if (state.currentPath) {
       invalidateCache();
       await browseFolder(state.currentPath);
@@ -748,7 +793,7 @@ async function connectOrDisconnect() {
   try {
     await state.client.connect();
     setConnState("connected");
-    showSuccessToast("Connected");
+    showSuccessToast("Connected to device");
     trackAnalyticsEvent("device_connect");
 
     const ver = await state.client.getVersion();
@@ -773,7 +818,7 @@ async function connectOrDisconnect() {
   } catch (err) {
     log(`Connection failed: ${err.message}`);
     showConnError(err.message);
-    showErrorToast("Connection failed", err.message);
+    showErrorToast("Couldn't connect", err.message);
     trackAnalyticsEvent("device_connect_fail", { error: err.message });
     setConnState("disconnected");
   }
@@ -788,7 +833,7 @@ async function devConnect() {
     setConnState("disconnected");
   };
   setConnState("connected");
-  showSuccessToast("Connected");
+  showSuccessToast("Connected to mock device");
 
   log("\u2192 getVersion()", "cmd");
   const ver = await state.client.getVersion();
@@ -835,14 +880,87 @@ function renderDrive(driveData) {
 
 // === Format Modal ===
 
-function openModal(modalEl) { modalEl.classList.add("open"); }
+// Track which modals are currently open to scope scroll-lock and focus
+// restoration. Multiple modals can be open in unusual cases (toast actions
+// firing during a confirm prompt) — keep a stack.
+const _openModalStack = [];
+
+const _focusableSelector =
+  'a[href], button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+function _firstFocusable(modalEl) {
+  return modalEl.querySelector(_focusableSelector);
+}
+
+function _modalKeydown(e) {
+  if (e.key !== "Tab") return;
+  const top = _openModalStack[_openModalStack.length - 1];
+  if (!top) return;
+  if (!top.modalEl.contains(document.activeElement)) {
+    // Focus escaped the modal (e.g. landed on document.body after a blur).
+    // Re-trap it instead of letting Tab leave the modal entirely.
+    e.preventDefault();
+    const trapped = Array.from(top.modalEl.querySelectorAll(_focusableSelector))
+      .filter(n => !n.hasAttribute("hidden") && n.offsetParent !== null);
+    if (trapped.length > 0) (e.shiftKey ? trapped[trapped.length - 1] : trapped[0]).focus();
+    return;
+  }
+  const items = Array.from(top.modalEl.querySelectorAll(_focusableSelector))
+    .filter(node => !node.hasAttribute("hidden") && node.offsetParent !== null);
+  if (items.length === 0) return;
+  const first = items[0];
+  const last = items[items.length - 1];
+  if (e.shiftKey && document.activeElement === first) {
+    e.preventDefault();
+    last.focus();
+  } else if (!e.shiftKey && document.activeElement === last) {
+    e.preventDefault();
+    first.focus();
+  }
+}
+
+function openModal(modalEl) {
+  if (modalEl.classList.contains("open")) return;
+  const previouslyFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  _openModalStack.push({ modalEl, previouslyFocused });
+  if (_openModalStack.length === 1) {
+    _lockScroll();
+    document.addEventListener("keydown", _modalKeydown, true);
+  }
+  modalEl.classList.add("open");
+  // Focus the first focusable control (skip the X-close where possible so the
+  // primary affordance is what receives focus).
+  requestAnimationFrame(() => {
+    const focusables = modalEl.querySelectorAll(_focusableSelector);
+    const target = Array.from(focusables).find(node => !node.classList.contains("modal-close")) || _firstFocusable(modalEl);
+    target?.focus({ preventScroll: true });
+  });
+}
+
 function closeModal(modalEl) {
   if (modalEl === el.confirmModal) {
     clearInterval(_confirmCountdown);
     _confirmCountdown = null;
   }
   modalEl.classList.remove("open");
+  const idx = _openModalStack.findIndex(entry => entry.modalEl === modalEl);
+  let restoreTarget = null;
+  if (idx >= 0) {
+    restoreTarget = _openModalStack[idx].previouslyFocused;
+    _openModalStack.splice(idx, 1);
+  }
+  if (_openModalStack.length === 0) {
+    const sheetsOpen = el.sheetContainer.classList.contains("open") || el.detailsSheetContainer.classList.contains("open");
+    if (!document.body.classList.contains("log-open") && !sheetsOpen) _unlockScroll();
+    document.removeEventListener("keydown", _modalKeydown, true);
+  }
   modalEl.dispatchEvent(new Event("modal:close"));
+  // Return focus to whatever opened the modal so keyboard users don't lose
+  // their place. Skip if the previous element no longer exists or has been
+  // hidden.
+  if (restoreTarget && document.body.contains(restoreTarget) && restoreTarget.offsetParent !== null) {
+    restoreTarget.focus({ preventScroll: true });
+  }
 }
 
 // Generic close button delegate for all modals
@@ -955,8 +1073,8 @@ el.btnFormat.addEventListener("click", async () => {
     title: "Format drive",
     badge: "warning",
     icon: "warning",
-    heading: "Erase all files on your device?",
-    message: "Every file and folder will be permanently deleted. Firmware stays intact. You can't undo this.",
+    heading: "Erase all files from device storage?",
+    message: "This removes every file and folder on storage. Firmware is not changed. This action can't be undone.",
     okLabel: "Format drive",
     okClass: "danger",
     okDelay: 5,
@@ -966,7 +1084,7 @@ el.btnFormat.addEventListener("click", async () => {
     const res = await state.client.formatDrive("E");
     if (res.ok) {
       log("Drive E: formatted successfully.");
-      showSuccessToast("Drive formatted");
+      showSuccessToast("Drive erased", "Storage is now empty and ready for new files.");
       trackAnalyticsEvent("format_drive");
       invalidateCache();
       const dr = await state.client.listDrives();
@@ -977,11 +1095,11 @@ el.btnFormat.addEventListener("click", async () => {
       await browseFolder("E:/");
     } else {
       log(`Format failed: ${res.error}`, "err");
-      showErrorToast("Format failed", res.error);
+      showErrorToast("Couldn't format drive", res.error);
     }
   } catch (err) {
     log(`Format error: ${err.message}`, "err");
-    showErrorToast("Format failed", err.message);
+    showErrorToast("Couldn't format drive", err.message);
   }
 });
 
@@ -990,8 +1108,8 @@ document.addEventListener("keydown", e => {
   if (e.key !== "Escape") return;
   // 1. Image lightbox
   if (!el.imgLightbox.hidden) { e.preventDefault(); closeLightbox(); return; }
-  // 2. Open modals
-  const openModalEl = document.querySelector(".modal-overlay.open");
+  // 2. Open modals — use the stack so the topmost is closed, not the first in DOM order.
+  const openModalEl = _openModalStack.length > 0 ? _openModalStack[_openModalStack.length - 1].modalEl : null;
   if (openModalEl) {
     e.preventDefault();
     if (openModalEl === el.dfuModal) {
@@ -1041,7 +1159,7 @@ function updateControls() {
   el.btnSync.disabled = !connected || uploading || syncing || !queueHasItems;
   el.btnSync.innerHTML = state.syncState === "done"
     ? `<span class="ms-sm">sync</span> Rescan`
-    : `<span class="ms-sm">sync</span> Sync with device`;
+    : `<span class="ms-sm">sync</span> Compare with device`;
 
   // Execute zone: show when queue has items or upload is active
   el.uploadExecuteZone.style.display = (queueHasItems || uploading) ? "flex" : "none";
@@ -1088,21 +1206,38 @@ function invalidateCache() {
 async function browseFolder(path) {
   if (!state.client || state.connState !== "connected") return;
 
+  // Cancel any in-flight "stale" skeleton/render work from prior navigations.
+  // The skeleton loader sets `state.dirLoadingPath = path`; any earlier
+  // browseFolder() that resolves later will see a mismatch and return early.
+  state.dirLoadingPath = null;
+
   // Check cache first
   let entries, truncated = false;
   const cached = state.client.folderCache.get(path);
   if (cached) {
     entries = sortEntries(cached.entries);
     truncated = cached.truncated;
-  } else {    try {
+  } else {
+    // Cache miss: show skeleton rows immediately so the user sees that the
+    // navigation registered, even on slow BLE reads. Real listing replaces
+    // this once the await resolves below.
+    renderFileTableLoading(path);
+    try {
       let res;
       for (let attempt = 1; attempt <= 3; attempt++) {
         res = await state.client.readFolder(path);
         if (!res.ok || !res.truncated) break;
         log(`Directory listing for ${path} truncated on attempt ${attempt}, retrying…`, "err");
       }
+
+      // If navigation happened again while we were waiting on BLE, drop
+      // these results so we don't overwrite the newer folder UI.
+      if (state.dirLoadingPath !== path) return;
+
       if (!res.ok) {
         log(`Failed to read ${path}: ${res.error}`, "err");
+        state.dirLoadingPath = null;
+        renderFileTable();
         return;
       }
       entries = sortEntries(res.data);
@@ -1118,6 +1253,8 @@ async function browseFolder(path) {
       }
     } catch (err) {
       log(`Error reading ${path}: ${err.message}`, "err");
+      state.dirLoadingPath = null;
+      renderFileTable();
       return;
     }
   }
@@ -1125,10 +1262,10 @@ async function browseFolder(path) {
   // Update warning banner for current folder (always, whether cached or fresh)
   if (truncated) {
     el.folderWarningBanner.hidden = false;
-    el.folderWarningText.textContent = "This listing may be incomplete. Some items couldn't be loaded.";
+    el.folderWarningText.textContent = "This folder list is incomplete. The device returned a partial response, so some items may be missing.";
   } else if (entries.length >= LARGE_DIR_THRESHOLD) {
     el.folderWarningBanner.hidden = false;
-    el.folderWarningText.textContent = `This folder has ${entries.length} items and may be slow to load.`;
+    el.folderWarningText.textContent = `This folder has ${entries.length} items. Over Bluetooth, loading can take longer.`;
   } else {
     el.folderWarningBanner.hidden = true;
     el.folderWarningText.textContent = "";
@@ -1137,6 +1274,7 @@ async function browseFolder(path) {
   state.currentPath = path;
   state.entries = entries;
   state.selectedNames.clear();
+  state.dirLoadingPath = null;
   renderBreadcrumb(path);
   renderFileTable();
   if (state.panelMode !== "upload") setPanelState("folder");
@@ -1332,6 +1470,26 @@ function getBrowserEmptyStateContent() {
   };
 }
 
+// Show 5 placeholder skeleton rows while a folder is being fetched. The real
+// listing will replace this when browseFolder() resolves. Callers must guard
+// against this running for already-cached folders (it would flash stale
+// content).
+function renderFileTableLoading(targetPath) {
+  el.tableWrap.classList.remove("is-empty");
+  el.browserEmptyState.hidden = true;
+  el.fileTable.hidden = false;
+  // Stash the target path so a subsequent renderFileTable() for the same
+  // path is the only one that overwrites the skeleton.
+  state.dirLoadingPath = targetPath;
+  const cells =
+    `<td class="cell-check"><span class="skeleton skeleton-checkbox"></span></td>` +
+    `<td class="cell-name"><span class="cell-name-inner"><span class="skeleton skeleton-icon"></span><span class="skeleton skeleton-text"></span></span></td>` +
+    `<td class="cell-size"><span class="skeleton skeleton-size"></span></td>` +
+    `<td class="cell-actions"></td>`;
+  const row = `<tr class="skeleton-row" aria-hidden="true">${cells}</tr>`;
+  el.fileTableBody.innerHTML = row.repeat(5);
+}
+
 function renderFileTable() {
   const showEmptyState = state.connState === "connected" && !!state.currentPath && state.entries.length === 0;
   const showTable = state.connState === "connected" && state.entries.length > 0;
@@ -1482,7 +1640,7 @@ el.fileTableBody.addEventListener("click", async (e) => {
         badge: "danger",
         icon: "delete",
         heading: `Delete "${entry.name}"?`,
-        message: "It will be permanently removed from your device. You can't undo this.",
+        message: "This removes it from device storage permanently. This action can't be undone.",
         okLabel: "Delete",
         okClass: "danger",
       });
@@ -1537,7 +1695,7 @@ el.btnDeleteSelected.addEventListener("click", async () => {
     badge: "danger",
     icon: "delete",
     heading: `Delete ${pluralize(count, "item")}?`,
-    message: "They'll be permanently removed from your device. You can't undo this.",
+    message: "This removes the selected items from device storage permanently. This action can't be undone.",
     okLabel: "Delete",
     okClass: "danger",
   });
@@ -1553,7 +1711,7 @@ el.btnClearSelection.addEventListener("click", () => {
 el.btnDownloadSelected.addEventListener("click", async () => {
   const files = state.entries.filter(e => state.selectedNames.has(e.name) && e.type === "FILE");
   if (files.length === 0) return;
-  const toast = showSuccessToast(`Downloading ${pluralize(files.length, "file")}…`);
+  const toast = showSuccessToast(`Preparing ${pluralize(files.length, "file")} for download…`);
   let failed = 0;
   for (const entry of files) {
     try {
@@ -1572,7 +1730,7 @@ el.btnDownloadSelected.addEventListener("click", async () => {
   }
   if (toast) removeToast(toast);
   if (failed > 0) {
-    showErrorToast(`${pluralize(failed, "file")} failed to download`);
+    showErrorToast("Some files couldn't be downloaded", `${pluralize(failed, "file")} failed. Check the protocol log for details.`);
   } else {
     showSuccessToast(`Downloaded ${pluralize(files.length, "file")}`);
   }
@@ -1664,7 +1822,7 @@ el.btnNewFolder.addEventListener("click", async () => {
     title: "New folder",
     label: "Folder name",
     placeholder: "e.g. collection",
-    helper: `Created in ${state.currentPath || "E:/"}`,
+    helper: `Created in ${formatPathForUi(state.currentPath || "E:/")}`,
     okLabel: "Create",
   });
   if (!name) return;
@@ -1689,7 +1847,7 @@ el.btnNewFolder.addEventListener("click", async () => {
 
 // Normalize modal
 el.btnNormalize.addEventListener("click", () => {
-  el.sanitizeNonePath.textContent = state.currentPath || "E:/";
+  el.sanitizeNonePath.textContent = formatPathForUi(state.currentPath || "E:/");
   openModal(el.sanitizeModalNone);
 });
 
@@ -1701,8 +1859,9 @@ function populateFileDetails(entry) {
   el.panelFileSize.textContent = formatBytes(entry.size);
   el.detailsKind.textContent = entry.type === "FILE" ? "File" : "Folder";
   const fullPath = joinChildPath(state.currentPath, entry.name);
-  el.detailsFilePath.textContent = fullPath;
-  if (el.detailsPathInRow) el.detailsPathInRow.textContent = fullPath;
+  const fullPathUi = formatPathForUi(fullPath);
+  el.detailsFilePath.textContent = fullPathUi;
+  if (el.detailsPathInRow) el.detailsPathInRow.textContent = fullPathUi;
 
   el.detailsHeroImgArea.innerHTML = `<span class="ms details-hero-file-icon" id="detailsHeroIcon">insert_drive_file</span>`;
   el.detailsHeroBand.hidden = true;
@@ -1788,7 +1947,8 @@ function setPanelState(mode, entry) {
 
   if (state.currentPath) {
     el.panelFolderName.textContent = "Pixl.js";
-    el.panelFolderPath.textContent = state.drive ? state.drive.name : "E:/";
+    const drivePath = state.drive?.name ? `${state.drive.name}/` : "E:/";
+    el.panelFolderPath.textContent = formatPathForUi(drivePath);
     const folderBaseName = state.currentPath === "E:/" ? "Root" : (getBaseName(state.currentPath) || state.currentPath);
     el.panelCurrentFolderName.textContent = folderBaseName;
     const fileCount = state.entries.filter(e => e.type === "FILE").length;
@@ -1835,12 +1995,16 @@ async function openRenameModal(name) {
   if (!state.client) return;
   const entry = state.entries.find(e => e.name === name);
   const kind = entry && entry.type === "DIR" ? "folder" : "file";
+  // Capture before the first await: an undo toast for a prior rename can fire
+  // while the input modal is suspended, running browseFolder() and changing
+  // state.currentPath before showInputModal() resolves.
+  const capturedPath = state.currentPath;
   _inputValidate = (raw) => {
     try {
       const v = validateSingleName(raw, "Name");
       if (v === name) throw new Error("Name is unchanged");
       ensureSiblingNameAvailable(v, name);
-      validateRemotePath(joinChildPath(state.currentPath || "E:/", v), kind);
+      validateRemotePath(joinChildPath(capturedPath || "E:/", v), kind);
       return null;
     } catch (err) { return err.message; }
   };
@@ -1852,13 +2016,13 @@ async function openRenameModal(name) {
     okLabel: "Rename",
   });
   if (!newName) return;
+  const oldPath = joinChildPath(capturedPath, name);
+  const newPath = joinChildPath(capturedPath, newName);
   try {
-    const oldPath = joinChildPath(state.currentPath, name);
-    const newPath = joinChildPath(state.currentPath, newName);
     const res = await state.client.renamePath(oldPath, newPath);
     if (res.ok) {
       log(`Renamed: ${name} → ${newName}`);
-      showSuccessToast("Renamed");
+      showUndoToast(`Renamed to ${newName}`, () => undoRename(newPath, oldPath, newName, name, kind));
       trackAnalyticsEvent("file_rename");
     } else {
       log(`Rename failed: ${res.error}`, "err");
@@ -1869,7 +2033,33 @@ async function openRenameModal(name) {
     showErrorToast("Rename failed", err.message);
   } finally {
     invalidateCache();
-    await browseFolder(state.currentPath);
+    await browseFolder(getParentPath(oldPath));
+  }
+}
+
+async function undoRename(currentPath, originalPath, currentName, originalName, kind) {
+  if (!state.client) return;
+  try {
+    // Keep the same remote-path contract as all other BLE writes.
+    validateRemotePath(currentPath, kind);
+    validateRemotePath(originalPath, kind);
+
+    const res = await state.client.renamePath(currentPath, originalPath);
+    if (res.ok) {
+      log(`Reverted rename: ${currentName} → ${originalName}`);
+      showSuccessToast(`Reverted to ${originalName}`);
+      trackAnalyticsEvent("file_rename_undo");
+    } else {
+      showErrorToast("Couldn't undo rename", res.error);
+    }
+  } catch (err) {
+    showErrorToast("Couldn't undo rename", err.message);
+  } finally {
+    invalidateCache();
+    // Refresh the folder that contains the reverted filename. This matters
+    // because the user may have navigated away while the undo toast lingers.
+    const refreshPath = getParentPath(originalPath);
+    await browseFolder(refreshPath);
   }
 }
 
@@ -1883,7 +2073,7 @@ function openLogSheet() {
 function closeLogSheet() {
   el.logOverlay.classList.remove("open");
   document.body.classList.remove("log-open");
-  if (!el.sheetContainer.classList.contains("open") && !el.detailsSheetContainer.classList.contains("open")) _unlockScroll();
+  if (!el.sheetContainer.classList.contains("open") && !el.detailsSheetContainer.classList.contains("open") && _openModalStack.length === 0) _unlockScroll();
 }
 
 el.btnLogToggle.addEventListener("click", () => {
@@ -1958,9 +2148,8 @@ el.sidebarDropZone.addEventListener("click", () => {
   el.filesInput.click();
 });
 
-el.sidebarDropZone.addEventListener("keydown", (e) => {
-  if (e.key === "Enter" || e.key === " ") { e.preventDefault(); el.sidebarDropZone.click(); }
-});
+// Enter/Space activation is provided natively now that the drop zone is a
+// real <button> element (was previously a div with role="button").
 
 let _dropZoneCounter = 0;
 el.sidebarDropZone.addEventListener("dragenter", (e) => {
@@ -2067,9 +2256,9 @@ async function doDeleteSelected() {
     if (deleted === total) {
       showSuccessToast(`Deleted ${pluralize(deleted, "item")}`);
     } else if (deleted > 0) {
-      showErrorToast(`Deleted ${deleted} of ${total} (some failed)`, firstPlusMore(failedPaths));
+      showErrorToast(`Deleted ${deleted} of ${total}`, `Some items failed: ${firstPlusMore(failedPaths)}`);
     } else {
-      showErrorToast("Delete failed", firstPlusMore(failedPaths) || "Nothing was deleted");
+      showErrorToast("Couldn't delete items", firstPlusMore(failedPaths) || "No items were deleted.");
     }
     if (deleted > 0) trackAnalyticsEvent("file_delete", { count: deleted });
   } finally {
@@ -2167,13 +2356,13 @@ async function executeSanitize(allOps, allSkipped) {
   const totalText = pluralize(allOps.length, "item");
   const skippedText = allSkipped.length > 0 ? `Skipped ${pluralize(allSkipped.length, "item")}` : "";
   if (renamed === allOps.length && renamed > 0) {
-    showSuccessToast(`Lowercased ${renamedText}`, skippedText);
+    showSuccessToast(`Converted ${renamedText} to lowercase`, skippedText);
   } else if (renamed > 0) {
-    showErrorToast(`Lowercased ${renamedText} of ${totalText}`, skippedText);
+    showErrorToast(`Converted ${renamedText} of ${totalText} to lowercase`, skippedText);
   } else if (allOps.length > 0) {
-    showErrorToast("Normalize failed");
+    showErrorToast("Couldn't convert names to lowercase");
   } else {
-    showSuccessToast("Already lowercase", skippedText);
+    showSuccessToast("All names are already lowercase", skippedText);
   }
   if (renamed > 0) trackAnalyticsEvent("normalize_run", { count: renamed });
 }
@@ -2186,7 +2375,7 @@ async function withBrowserLock(title, fn) {
     await fn();
   } catch (err) {
     log(err.message, "err");
-    showErrorToast("Normalize failed", err.message);
+    showErrorToast("Couldn't convert names to lowercase", err.message);
   } finally {
     el.browserLockOverlay.classList.remove("active");
     updateControls();
@@ -2203,13 +2392,13 @@ el.btnSanitizeNoneConfirm.addEventListener("click", async () => {
 
   let scope;
   try {
-    scope = readCheckedRadioValue("sanitizeNoneScope", "Normalize scope");
+    scope = readCheckedRadioValue("sanitizeNoneScope", "Lowercase scope");
   } catch (err) {
-    showErrorToast("Normalize failed", err.message);
+    showErrorToast("Couldn't convert names to lowercase", err.message);
     return;
   }
 
-  await withBrowserLock("Normalizing…", async () => {
+  await withBrowserLock("Converting names…", async () => {
     const allOps = [];
     const allSkipped = [];
 
@@ -2425,16 +2614,16 @@ function renderSyncQueue() {
 
   // Summary chips
   const chipParts = [];
-  if (uploadFiles.length > 0) chipParts.push(`<span class="sync-chip sync-chip-upload">↑ ${uploadFiles.length} new</span>`);
-  if (unchangedCount > 0) chipParts.push(`<span class="sync-chip sync-chip-unchanged">${unchangedCount} up to date</span>`);
-  if (orphanCount > 0) chipParts.push(`<span class="sync-chip sync-chip-orphan">\u{1F5D1} ${orphanCount} orphaned</span>`);
+  if (uploadFiles.length > 0) chipParts.push(`<span class="sync-chip sync-chip-upload" title="Files on your computer that are missing on the device.">↑ ${uploadFiles.length} new</span>`);
+  if (unchangedCount > 0) chipParts.push(`<span class="sync-chip sync-chip-unchanged" title="Files already on the device that match the source — no action needed.">${unchangedCount} up to date</span>`);
+  if (orphanCount > 0) chipParts.push(`<span class="sync-chip sync-chip-orphan" title="Files on the device that aren't in the source folder. They'll be deleted if you check them.">\u{1F5D1} ${orphanCount} orphaned</span>`);
   html += `<div class="sync-chips">${chipParts.join("")}</div>`;
 
   // Upload section — only render header when there are files
   if (uploadFiles.length === 0) {
     html += `<div class="queue-empty"><span class="ms queue-empty-icon done">check_circle</span><span class="queue-empty-title">Everything is in sync</span></div>`;
   } else {
-    html += `<div class="sync-section-header sync-header-upload">TO UPLOAD · ${uploadFiles.length}</div>`;
+    html += `<div class="sync-section-header sync-header-upload">Upload to device · ${uploadFiles.length}</div>`;
     for (const item of uploadFiles) {
       const icon = getQueueStatusIcon(item.status);
       const baseName = escapeHtml(getBaseName(item.remotePath));
@@ -2450,7 +2639,7 @@ function renderSyncQueue() {
   // Orphan section
   if (orphanCount > 0) {
     html += `<div class="sync-section-header sync-header-orphan">` +
-      `ON DEVICE ONLY · ${orphanCount}` +
+      `Only on device · ${orphanCount}` +
       `<button class="sync-delete-all-btn" type="button">Delete all</button>` +
       `</div>`;
     for (const orphan of state.syncOrphans) {
@@ -2460,7 +2649,7 @@ function renderSyncQueue() {
       if (!orphan.deletable) {
         html += `<div class="queue-item queue-orphan-item">` +
           `<span class="queue-name" title="${title}">${baseName}${suffix}</span>` +
-          `<em class="queue-orphan-nondeletable">folder has contents</em>` +
+          `<em class="queue-orphan-nondeletable">contains files</em>` +
           `</div>`;
       } else if (orphan.status === "deleting") {
         html += `<div class="queue-item queue-orphan-item">` +
@@ -2516,7 +2705,7 @@ function renderUploadQueue() {
   if (state.uploadPlan.length === 0) {
     const [icon, title, sub] = state.uploadTotalCount > 0
       ? ["task_alt", "Upload complete", ""]
-      : ["inbox", "Queue is empty", `<span class="queue-empty-sub">Pick files or a folder above</span>`];
+      : ["inbox", "Queue is empty", `<span class="queue-empty-sub">Choose Folder or Files above to start</span>`];
     el.uploadQueue.innerHTML = `<div class="queue-empty"><span class="ms queue-empty-icon${state.uploadTotalCount > 0 ? " done" : ""}">${icon}</span><span class="queue-empty-title">${title}</span>${sub}</div>`;
     el.uploadWarningBanner.hidden = true;
     el.uploadWarningBanner.innerHTML = "";
@@ -2560,17 +2749,17 @@ function renderUploadQueue() {
     // Summary line (collapsed state)
     const summaryParts = [];
     for (const w of state.uploadWarnings) {
-      if (w.type === "large-dirs") summaryParts.push(pluralize(w.dirs.length, "crowded folder"));
+      if (w.type === "large-dirs") summaryParts.push(pluralize(w.dirs.length, "large folder"));
       else if (w.type === "large-batch") summaryParts.push(`~${w.mins} min upload`);
     }
     // Detail body (expanded state) — one block per problem, paths listed once
     let bodyHtml = "";
     for (const w of state.uploadWarnings) {
       if (w.type === "large-dirs") {
-        const pathList = w.dirs.map(({ dir }) => `<li>${escapeHtml(dir)}</li>`).join("");
+        const pathList = w.dirs.map(({ dir }) => `<li>${escapeHtml(formatPathForUi(dir))}</li>`).join("");
         bodyHtml += `<p>${pluralize(w.dirs.length, "folder")} with many files. These may transfer slowly or stall:</p><ul>${pathList}</ul>`;
       } else if (w.type === "large-batch") {
-        bodyHtml += `<p>${w.count} files total. Expect ${w.mins}+ minutes. Keep the device nearby and the screen on to avoid drops.</p>`;
+        bodyHtml += `<p>${w.count} files total. Estimated time: ${w.mins}+ minutes. Keep the device nearby and the screen awake to avoid interruptions.</p>`;
       }
     }
     el.uploadWarningBanner.className = "queue-warning";
@@ -2651,16 +2840,16 @@ function buildUploadPlan(folders, files) {
   const skippedFileCount = plan.filter(i => i.kind === "file" && i.status === "skipped").length;
   if (uploadable.length === 0) {
     if (skippedFileCount > 0) {
-      showErrorToast("No uploadable files", "All files have paths that exceed the device limit. Shorten the folder or file names.");
+      showErrorToast("No files can be uploaded", "Every selected file exceeds the device path limit. Shorten folder or file names and try again.");
     } else {
-      showWarningToast("No files added to queue", "That folder is empty.");
+      showWarningToast("Nothing to upload", "This selection is empty.");
     }
     return;
   }
 
   if (skippedFileCount > 0) {
     showWarningToast(
-      `${pluralize(skippedFileCount, "file")} can't be uploaded`,
+      `${pluralize(skippedFileCount, "file")} exceed device limits`,
       "Path or name exceeds the device limit. Shorten the folder or file names to include them."
     );
   }
@@ -2697,10 +2886,10 @@ function warningsToStrings(warnings) {
   for (const w of warnings) {
     if (w.type === "large-dirs") {
       for (const { dir } of w.dirs) {
-        lines.push(`${dir} has many files and may transfer slowly or stall`);
+        lines.push(`${formatPathForUi(dir)} has many files, transfers over Bluetooth may be slower`);
       }
     } else if (w.type === "large-batch") {
-      lines.push(`${w.count} files total. Expect ${w.mins}+ minutes. Keep the device nearby and screen on to avoid drops`);
+      lines.push(`${w.count} files total. Estimated time: ${w.mins}+ minutes. Keep the device nearby and the screen awake`);
     }
   }
   return lines;
@@ -2736,12 +2925,12 @@ function showUploadWarnModal(htmlContent) {
 function buildSystemFolderWarnHtml(affected) {
   const parts = [];
   if (affected.has("data")) parts.push(
-    `<p><strong>My Tags (amiibo/data)</strong>: files need sequential names like ` +
-    `<strong>00.bin, 01.bin</strong>… to show up as slots in AmiiDB.</p>`
+    `<p><strong>Tag database folder (/amiibo/data)</strong>: files should use sequential names like ` +
+    `<strong>00.bin, 01.bin</strong> to appear as numbered slots. This also helps advanced tools index them correctly.</p>`
   );
   if (affected.has("fav")) parts.push(
-    `<p><strong>My Favorites (amiibo/fav)</strong>: AmiiDB manages this folder's format. ` +
-    `Files you upload here won't appear in the app.</p>`
+    `<p><strong>Favorites folder (/amiibo/fav)</strong>: this folder is managed by your device app. ` +
+    `Files uploaded here may not appear.</p>`
   );
   return parts.join("") + `<p class="modal-note">You can still upload, but some files may not appear as expected.</p>`;
 }
@@ -2782,7 +2971,12 @@ async function runSync() {
     scanCount++;
     setScanText(`Scanning device… · ${pluralize(scanCount, "folder")}`);
     for (const entry of res.data) {
-      const entryPath = joinChildPath(path, entry.name);
+      // Normalize to lowercase so device paths match the plan paths produced
+      // by buildUploadPlan (which also lowercases via rel.toLowerCase()). FAT32
+      // can return names in any case ("00.BIN", "Sub"), and Map lookup is
+      // case-sensitive, so without this files are re-uploaded and folders show
+      // as orphans even when they're already in sync.
+      const entryPath = joinChildPath(path, entry.name.toLowerCase());
       if (isSyncExcluded(entryPath)) continue;
       const kind = entry.type === "DIR" ? "folder" : "file";
       deviceTree.set(entryPath, { size: entry.size, kind });
@@ -2815,7 +3009,7 @@ async function runSync() {
   } catch (err) {
     el.browserLockOverlay.classList.remove("active");
     log(`Sync scan failed: ${err.message}`, "err");
-    showErrorToast("Scan failed", err.message);
+    showErrorToast("Couldn't scan device", err.message);
     state.syncState = "error";
     updateControls();
     renderUploadQueue();
@@ -2890,7 +3084,7 @@ async function runOrphanDeletion() {
     renderUploadQueue();
   }
   if (errorCount > 0) {
-    showWarningToast(`Removed ${deletedCount} of ${deletedCount + errorCount} from device (${errorCount} failed)`);
+    showWarningToast(`Removed ${deletedCount} of ${deletedCount + errorCount} device-only files`, `${errorCount} failed. Check the protocol log for details.`);
   } else if (deletedCount > 0) {
     showSuccessToast(`Removed ${pluralize(deletedCount, "file")} from device`);
   }
@@ -2907,7 +3101,7 @@ async function runUpload() {
   if (state.uploadWarnings.length > 0) {
     const lines = warningsToStrings(state.uploadWarnings).map(w => `<li>${escapeHtml(w)}</li>`).join("");
     const html = `<ul class="modal-list">${lines}</ul>` +
-      `<p class="modal-note">You can still proceed, but the upload may be slow or fail partway through.</p>`;
+      `<p class="modal-note">You can continue now, but large transfers may take longer or fail if Bluetooth drops.</p>`;
     if (!await showUploadWarnModal(html)) return;
   }
 
@@ -2978,7 +3172,7 @@ async function runUpload() {
     }
 
     if (fileItems.length > 0) {
-      showSuccessToast(`Uploaded ${pluralize(fileItems.length, "file")}`);
+      showSuccessToast(`Uploaded ${pluralize(fileItems.length, "file")}`, "Transfer finished successfully.");
       trackAnalyticsEvent("file_upload_complete", { count: fileItems.length, size: uploadTotalSize });
     }
   } catch (err) {
@@ -2987,9 +3181,9 @@ async function runUpload() {
     const isConnectionLoss = !isReconnecting && /GATT|NetworkError|disconnected/i.test(err.message);
     const isUserAbort = !isReconnecting && !isConnectionLoss && state.abortController && state.abortController.signal.aborted;
     if (isUserAbort) {
-      showErrorToast("Upload cancelled");
+      showWarningToast("Upload canceled", "No problem, your queue is still here if you want to retry.");
     } else if (!isReconnecting && !isConnectionLoss) {
-      showErrorToast("Upload failed", err.message);
+      showErrorToast("Couldn't upload files", err.message);
     }
     const active = state.uploadPlan.find(i => i.status === "active");
     if (active) active.status = isUserAbort ? "aborted" : "error";
@@ -3045,7 +3239,7 @@ el.folderInput.addEventListener("change", async (e) => {
     buildUploadPlan(collected.folders, collected.files);
     setPanelState("upload");
   } catch (err) {
-    showErrorToast("Upload failed", err.message);
+    showErrorToast("Couldn't add folder", err.message);
   }
 });
 
@@ -3061,7 +3255,7 @@ el.filesInput.addEventListener("change", async (e) => {
     buildUploadPlan(collected.folders, collected.files);
     setPanelState("upload");
   } catch (err) {
-    showErrorToast("Upload failed", err.message);
+    showErrorToast("Couldn't add files", err.message);
   }
 });
 
@@ -3116,7 +3310,7 @@ const DFU_STAGES = [
   { id: "selecting",          label: "Connecting to device" },
   { id: "entering_dfu",       label: "Switching to update mode" },
   { id: "waiting",            label: "Waiting for device to restart" },
-  { id: "reconnecting",       label: "Reconnecting in update mode" },
+  { id: "reconnecting",       label: "Reconnect in update mode" },
   { id: "preparing",          label: "Preparing update file" },
   { id: "uploading_init",     label: "Preparing transfer" },
   { id: "uploading_firmware", label: "Transferring firmware" },
@@ -3265,7 +3459,7 @@ const MOCK_RELEASE = {
   ],
 };
 
-async function mockDfuTransfer(onProgress, fail = false) {
+async function mockDfuTransfer(onProgress, failMode = "none") {
   const delay = ms => new Promise(r => setTimeout(r, ms));
   async function sweep(stageId, label, steps, stepMs, cap = 100) {
     for (let i = 0; i <= steps; i++) {
@@ -3275,8 +3469,12 @@ async function mockDfuTransfer(onProgress, fail = false) {
     }
   }
   await delay(300);
+  if (failMode === "init_packet") {
+    await sweep("uploading_init", "Init packet", 4, 80, 50);
+    throw new Error("Init packet rejected by bootloader.");
+  }
   await sweep("uploading_init", "Init packet", 10, 80);
-  if (fail) {
+  if (failMode === "mid_transfer") {
     await sweep("uploading_firmware", "Firmware", 8, 100, 40);
     throw new Error("Transfer interrupted: device disconnected mid-transfer.");
   }
@@ -3308,6 +3506,7 @@ function dfuShowConfirmView() {
   el.dfuFooterConfirm.hidden = false;
   el.dfuFooterWarn.hidden = true;
   el.dfuFooterProgress.hidden = true;
+  el.dfuFooterCancelConfirm.hidden = true;
   el.dfuFooterFailed.hidden = true;
   el.dfuFooterSuccess.hidden = true;
 }
@@ -3347,6 +3546,7 @@ function dfuShowWarnView() {
   el.dfuFooterConfirm.hidden = true;
   el.dfuFooterWarn.hidden = false;
   el.dfuFooterProgress.hidden = true;
+  el.dfuFooterCancelConfirm.hidden = true;
   el.dfuFooterFailed.hidden = true;
   el.dfuFooterSuccess.hidden = true;
 
@@ -3374,8 +3574,11 @@ function dfuShowProgressView() {
   el.dfuFooterConfirm.hidden = true;
   el.dfuFooterWarn.hidden = true;
   el.dfuFooterProgress.hidden = false;
+  el.dfuFooterCancelConfirm.hidden = true;
   el.dfuFooterFailed.hidden = true;
   el.dfuFooterSuccess.hidden = true;
+  el.btnDfuCancelTransfer.disabled = false;
+  el.btnDfuCancelTransfer.textContent = "Cancel";
   el.dfuStatusSubhead.textContent = "UPDATING";
   el.dfuErrorBox.hidden = true;
   el.dfuTroubleshootLinks.hidden = true;
@@ -3389,17 +3592,19 @@ function dfuShowFailedView(errorText, { title = "Update failed", subhead = "UPDA
   el.dfuFooterConfirm.hidden = true;
   el.dfuFooterWarn.hidden = true;
   el.dfuFooterProgress.hidden = true;
+  el.dfuFooterCancelConfirm.hidden = true;
   el.dfuFooterFailed.hidden = false;
   el.dfuFooterSuccess.hidden = true;
   el.dfuStatusSubhead.textContent = subhead;
   el.dfuActiveIcon.className = "modal-icon-badge danger";
-  el.dfuActiveIcon.querySelector(".ms").textContent = "error_outline";
+  el.dfuActiveIcon.querySelector(".ms").textContent = "error";
   el.dfuActiveLabel.textContent = title;
   el.dfuErrorBox.hidden = false;
   el.dfuErrorBox.textContent = errorText;
   el.dfuTroubleshootLinks.hidden = false;
   el.dfuSuccessBox.hidden = true;
-  el.btnDfuReboot.hidden = !dfuState.dfuDevice;
+  el.btnDfuReboot.disabled = !dfuState.dfuDevice;
+  el.btnDfuReboot.setAttribute("aria-disabled", String(!dfuState.dfuDevice));
   el.btnDfuRetryConnect.hidden = !dfuState.pickerDismissed;
   el.btnDfuRetry.hidden = dfuState.pickerDismissed;
   const hadRealSession = !!(state.currentPath && state.client && !(state.client instanceof DevMockClient));
@@ -3413,6 +3618,7 @@ function dfuShowSuccessView() {
   el.dfuFooterConfirm.hidden = true;
   el.dfuFooterWarn.hidden = true;
   el.dfuFooterProgress.hidden = true;
+  el.dfuFooterCancelConfirm.hidden = true;
   el.dfuFooterFailed.hidden = true;
   el.dfuFooterSuccess.hidden = false;
   el.dfuStatusSubhead.textContent = "COMPLETE";
@@ -3435,13 +3641,26 @@ function renderDfuStageList(currentStageId) {
   // so the active stage's CSS animation never gets destroyed mid-spin.
   if (el.dfuStageList.children.length !== DFU_STAGES.length) {
     el.dfuStageList.innerHTML = DFU_STAGES.map(s =>
-      `<li class="dfu-stage-item pending"><span class="dfu-stage-dot"></span><span class="dfu-stage-item-label">${s.label}</span></li>`
+      `<li class="dfu-stage-item pending">` +
+      `<span class="dfu-stage-dot"></span>` +
+      `<span class="dfu-stage-item-label">${s.label}</span>` +
+      `<button type="button" class="dfu-stage-item-hint" hidden disabled aria-disabled="true">` +
+      `<span class="ms-sm">bluetooth_searching</span> Connect to device` +
+      `</button>` +
+      `</li>`
     ).join("");
   }
 
   Array.from(el.dfuStageList.children).forEach((li, i) => {
     const dot = li.querySelector(".dfu-stage-dot");
+    const hint = li.querySelector(".dfu-stage-item-hint");
     const stageId = DFU_STAGES[i].id;
+    const reconnectActive = stageId === "reconnecting" && i === currentIdx && !dfuState.skippedStages.has(stageId);
+    if (hint) {
+      hint.hidden = !reconnectActive;
+      hint.disabled = !reconnectActive;
+      hint.setAttribute("aria-disabled", String(!reconnectActive));
+    }
     if (dfuState.skippedStages.has(stageId)) {
       if (!li.classList.contains("skipped")) {
         li.className = "dfu-stage-item skipped";
@@ -3472,9 +3691,10 @@ function dfuSetStage(stageId, { progress = null, progressFile = "", speed = "" }
   dfuState.phase = stageId;
   el.dfuActiveLabel.textContent = stage.label;
   el.dfuActiveIcon.className = "modal-icon-badge primary spinning";
-  el.dfuActiveIcon.querySelector(".ms").textContent = "autorenew";
+  el.dfuActiveIcon.querySelector(".ms").textContent = "sync";
   el.dfuSelectingHint.hidden = stageId !== "selecting";
-  el.dfuReconnectHint.hidden = stageId !== "reconnecting";
+  const reconnecting = stageId === "reconnecting";
+  el.dfuReconnectHint.hidden = !reconnecting;
   const transferring = stageId === "uploading_init" || stageId === "uploading_firmware";
   el.dfuMobileTransferNote.hidden = !(DFU_IS_MOBILE && transferring);
 
@@ -3572,11 +3792,11 @@ function selectDfuSource(source) {
   } else if (dfuState.firmwareType === "native" && dfuState.variant) {
     dfuState.chosenVariant = dfuState.variant;
   }
-  el.dfuPickedFile.hidden = source.type !== "file";
-  el.btnDfuPickFile.hidden = source.type === "file";
+
   if (source.type === "file") el.dfuPickedName.textContent = source.name;
   updateDfuVariantUI();
   updateDfuStartButton();
+  updateDfuFilePickerUI();
 }
 
 
@@ -3591,6 +3811,17 @@ function updateDfuStartButton() {
   const isCustom = dfuState.firmwareType === "custom";
   const ready = !!dfuState.source && (isCustom || !!dfuState.chosenVariant);
   el.btnDfuStart.disabled = !ready;
+}
+
+function updateDfuFilePickerUI() {
+  const isCustom = dfuState.firmwareType === "custom";
+  const hasPickedFile = dfuState.source?.type === "file";
+
+  // Divider + "Pick file" button are only for custom mode *before* selecting
+  // a file. Once a file is picked, the picked-file row replaces them.
+  if (el.dfuFileDivider) el.dfuFileDivider.hidden = !isCustom || hasPickedFile;
+  el.btnDfuPickFile.hidden = !isCustom || hasPickedFile;
+  el.dfuPickedFile.hidden = !hasPickedFile;
 }
 
 function setDfuFirmwareType(type) {
@@ -3609,6 +3840,7 @@ function setDfuFirmwareType(type) {
   }
   updateDfuVariantUI();
   updateDfuStartButton();
+  updateDfuFilePickerUI();
 }
 
 function resetDfuUi() {
@@ -3628,11 +3860,12 @@ function resetDfuUi() {
 
   el.dfuWarnSection.hidden = true;
   el.dfuFooterWarn.hidden = true;
+  el.dfuFooterCancelConfirm.hidden = true;
+  el.btnDfuCancelTransfer.disabled = false;
+  el.btnDfuCancelTransfer.textContent = "Cancel";
   el.dfuSelectingHint.hidden = true;
   el.dfuReconnectHint.hidden = true;
   el.dfuMobileTransferNote.hidden = true;
-  el.dfuPickedFile.hidden = true;
-  el.btnDfuPickFile.hidden = false;
   el.dfuPickedName.textContent = "";
   el.dfuProgressBarWrap.hidden = true;
   el.dfuErrorBox.hidden = true;
@@ -3643,8 +3876,12 @@ function resetDfuUi() {
   el.dfuActiveIcon.className = "modal-icon-badge primary";
   el.dfuActiveIcon.querySelector(".ms").textContent = "sync";
   el.dfuStageList.innerHTML = "";
-  el.dfuDevFailLabel.hidden = !dfuIsDev();
-  el.dfuDevFailToggle.checked = false;
+  el.dfuDevPanel.hidden = !dfuIsDev();
+  el.dfuDevPanel.open = false;
+  el.btnDfuReboot.disabled = true;
+  el.btnDfuReboot.setAttribute("aria-disabled", "true");
+  el.dfuDevFailMode.value = "none";
+  el.dfuCustomDevicesDetails.open = false;
   el.btnDfuStart.disabled = true;
   updateControls();
 }
@@ -3673,13 +3910,22 @@ async function runDfuTransfer() {
     if (!src) throw new Error("Pick an update file first.");
 
     if (dfuIsDev()) {
-      // Simulate the full flow without real BLE or real ZIP
-      const shouldFail = el.dfuDevFailToggle.checked;
-      el.dfuDevFailToggle.checked = false;
+      // Simulate the full flow without real BLE or real ZIP. The dev panel
+      // selects which failure shape (if any) to inject.
+      const failMode = el.dfuDevFailMode.value;
+      el.dfuDevFailMode.value = "none";
+      if (failMode === "picker_dismissed") {
+        const err = new Error("User dismissed the picker.");
+        err.name = "NotFoundError";
+        throw err;
+      }
       dfuSetStage("selecting");
       await new Promise(r => setTimeout(r, 300));
       dfuSetStage("entering_dfu");
       await new Promise(r => setTimeout(r, 500));
+      // Once we cross entering_dfu the device is in DFU mode; mirror the real
+      // flow so simulated failures get the matching retry guidance.
+      dfuState.enterDfuDone = true;
       dfuSetStage("waiting");
       await new Promise(r => setTimeout(r, 700));
       if (dfuState.cancelFlag) throw new Error("Cancelled");
@@ -3688,7 +3934,7 @@ async function runDfuTransfer() {
       if (dfuState.cancelFlag) throw new Error("Cancelled");
       dfuSetStage("preparing");
       await new Promise(r => setTimeout(r, 400));
-      await mockDfuTransfer((stageId, opts) => dfuSetStage(stageId, opts), shouldFail);
+      await mockDfuTransfer((stageId, opts) => dfuSetStage(stageId, opts), failMode);
     } else {
       const DFU_UUID = window.SecureDfu.SERVICE_UUID;
       const dfu = createSecureDfu();
@@ -3736,19 +3982,23 @@ async function runDfuTransfer() {
       function waitForReconnectClick() {
         return new Promise((resolve, reject) => {
           function cleanup() {
-            el.btnDfuReconnectPicker.removeEventListener("click", onClick);
-            el.btnDfuCancelTransfer.removeEventListener("click", onCancel);
+            el.dfuStageList.removeEventListener("click", onClick);
+            el.btnDfuCancelConfirmYes.removeEventListener("click", onCancel);
           }
-          function onClick() {
+          function onClick(e) {
+            const reconnectBtn = e.target.closest(".dfu-stage-item-hint");
+            if (!reconnectBtn || reconnectBtn.hidden || reconnectBtn.disabled) return;
             cleanup();
             dfu.requestDevice(false, [{ services: [DFU_UUID] }]).then(resolve, reject);
           }
+          // During reconnect, "Cancel" first opens inline confirmation.
+          // Abort only after the user confirms with "Cancel update".
           function onCancel() {
             cleanup();
             reject(new Error("Cancelled"));
           }
-          el.btnDfuReconnectPicker.addEventListener("click", onClick);
-          el.btnDfuCancelTransfer.addEventListener("click", onCancel);
+          el.dfuStageList.addEventListener("click", onClick);
+          el.btnDfuCancelConfirmYes.addEventListener("click", onCancel);
         });
       }
 
@@ -3773,6 +4023,7 @@ async function runDfuTransfer() {
         log(`[DFU] "${deviceName}" is connected, rebooting into update mode...`, "cmd");
         const enterRes = await state.client.enterDfu();
         if (!enterRes.ok) throw new Error(`Couldn't switch to update mode: ${enterRes.error}`);
+        dfuState.enterDfuDone = true;
 
         dfuSetStage("waiting");
         await new Promise(r => setTimeout(r, 3000));
@@ -3809,6 +4060,7 @@ async function runDfuTransfer() {
           const nusClient = await (async () => { const c = new PixlToolsClient(msg => log(`[DFU] ${msg}`, "cmd")); await c.connectTo(picked); return c; })();
           const enterRes = await nusClient.enterDfu();
           if (!enterRes.ok) throw new Error(`Couldn't switch to update mode: ${enterRes.error}`);
+          dfuState.enterDfuDone = true;
 
           dfuSetStage("waiting");
           await new Promise(r => setTimeout(r, 3000));
@@ -3885,12 +4137,12 @@ async function runDfuTransfer() {
       dfuState.pickerDismissed = true;
       if (dfuState.enterDfuDone) {
         dfuShowFailedView(
-          "Your device may still be in update mode. Tap Retry to pick it from the Bluetooth list and continue.",
+          "No device was selected. Your device may still be in update mode. Tap Retry and pick it from the Bluetooth list to continue.",
           { title: "No device selected", subhead: "NOT CONNECTED" }
         );
       } else {
         dfuShowFailedView(
-          "No device was selected. Tap Retry to try again.",
+          "No device was selected. Tap Retry and choose your device to continue.",
           { title: "No device selected", subhead: "NOT CONNECTED" }
         );
       }
@@ -3924,7 +4176,7 @@ async function runDfuTransfer() {
 
 el.btnUpdateFirmware.addEventListener("click", () => {
   if (!dfuIsDev() && (!window.JSZip || !window.SecureDfu)) {
-    showErrorToast("Still loading", "Refresh the page and try again.");
+    showErrorToast("Update tools are still loading", "Wait a moment, then try again. If it keeps happening, refresh the page.");
     return;
   }
   el.dfuUpdateDot.hidden = true;
@@ -3940,7 +4192,7 @@ el.btnUpdateFirmware.addEventListener("click", () => {
 
 el.btnDfuFromDfu.addEventListener("click", () => {
   if (!dfuIsDev() && (!window.JSZip || !window.SecureDfu)) {
-    showErrorToast("Still loading", "Refresh the page and try again.");
+    showErrorToast("Update tools are still loading", "Wait a moment, then try again. If it keeps happening, refresh the page.");
     return;
   }
   resetDfuUi();
@@ -3953,7 +4205,9 @@ el.btnDfuFromDfu.addEventListener("click", () => {
 });
 
 el.btnDfuClose.addEventListener("click", () => {
-  if (!dfuInProgress()) closeDfuModal();
+  // Use the same guard as Esc and backdrop so the three close paths agree.
+  // Previously the X allowed dismissal mid-warn (where Esc/backdrop did not).
+  if (dfuCanCloseFromBackdrop()) closeDfuModal();
 });
 
 el.btnDfuPickFile.addEventListener("click", () => {
@@ -3973,7 +4227,7 @@ el.dfuFileInput.addEventListener("change", async () => {
   try {
     await validateDfuZip(file);
   } catch (err) {
-    showErrorToast("Invalid file", err.message);
+    showErrorToast("Couldn't use this update file", err.message);
     el.dfuFileInput.value = "";
     return;
   }
@@ -4018,19 +4272,34 @@ el.btnDfuProceed.addEventListener("click", async () => {
   await runDfuTransfer();
 });
 
-el.btnDfuCancelTransfer.addEventListener("click", async () => {
+el.btnDfuCancelTransfer.addEventListener("click", () => {
   if (!dfuState.enterDfuDone) {
+    // Pre-DFU cancel is unambiguous (nothing has been written yet) — no
+    // confirmation needed; the in-flight transfer will throw on next tick.
     dfuState.cancelFlag = true;
     return;
   }
-  if (el.confirmModal.classList.contains("open")) return;
-  const confirmed = await showConfirmModal({
-    title: "Cancel update",
-    icon: "warning",
-    message: "Cancelling mid-update may leave your device in update mode. Are you sure?",
-    okLabel: "Cancel update",
-  });
-  if (confirmed) dfuState.cancelFlag = true;
+  // Mid-DFU: swap the progress footer for an inline confirmation. Keeps
+  // the live progress visible behind the prompt and avoids stacking a
+  // second modal-overlay on top of the DFU modal.
+  el.dfuFooterProgress.hidden = true;
+  el.dfuFooterCancelConfirm.hidden = false;
+});
+
+el.btnDfuCancelKeep.addEventListener("click", () => {
+  el.dfuFooterCancelConfirm.hidden = true;
+  el.dfuFooterProgress.hidden = false;
+});
+
+el.btnDfuCancelConfirmYes.addEventListener("click", () => {
+  dfuState.cancelFlag = true;
+  // Swap back to the progress footer but lock the cancel button so the user
+  // can't double-fire while we're waiting for the next loop iteration to
+  // observe the flag and bail out.
+  el.dfuFooterCancelConfirm.hidden = true;
+  el.dfuFooterProgress.hidden = false;
+  el.btnDfuCancelTransfer.disabled = true;
+  el.btnDfuCancelTransfer.textContent = "Cancelling…";
 });
 
 function dfuReconnect() {
@@ -4059,7 +4328,7 @@ el.btnDfuReboot.addEventListener("click", () => {
     device.gatt.disconnect();
   }
   closeDfuModal();
-  showSuccessToast("Exiting update mode", "Power cycle your device to go back to normal.");
+  showSuccessToast("Exit update mode requested", "Power-cycle your device to return to normal mode.");
 });
 
 el.btnDfuRetry.addEventListener("click", async () => {
@@ -4096,10 +4365,9 @@ function stampFooters(commitText) {
 }
 
 const _buildCommit = document.querySelector('meta[name="build-commit"]')?.content;
-const _buildBranch = document.querySelector('meta[name="build-branch"]')?.content;
 
-const isDevMode = _buildCommit === "dev" || (_buildBranch && _buildBranch !== "main") || (!_buildCommit && !_buildBranch);
-stampFooters((_buildCommit && _buildCommit !== "dev") ? _buildCommit : "dev");
+const isDevMode = !_buildCommit || _buildCommit === "dev";
+stampFooters(isDevMode ? "dev" : _buildCommit);
 
 if (isDevMode) {
   el.btnDev.addEventListener("click", devConnect);
@@ -4123,12 +4391,12 @@ if (!navigator.bluetooth) {
     ? isIOS
       ? [
           "Bluetooth not available",
-          "iOS browsers don't support Web Bluetooth. Open Mochi in Bluefy, a free iOS browser built for Bluetooth web apps.",
+          "Most iOS browsers don't support Web Bluetooth yet. Open Mochi in Bluefy to connect over Bluetooth.",
           "Open Mochi in Bluefy to connect to your Pixl.js.",
         ]
       : [
           "Chrome or Edge required",
-          "Your browser doesn't support device connections. Switch to Chrome or Edge to use Mochi.",
+          "This browser doesn't support Web Bluetooth device connections. Use Chrome or Edge.",
           "Open Mochi in Chrome or Edge to connect to your Pixl.js.",
         ]
     : [
@@ -4140,3 +4408,7 @@ if (!navigator.bluetooth) {
   el.btnConnectCta.disabled = true;
   showErrorToast(summary, detail);
 }
+
+// Signal the boot loader (index.html) that the app finished its initial
+// synchronous render and is safe to reveal.
+document.dispatchEvent(new CustomEvent("app:ready"));
