@@ -4,7 +4,7 @@ Usage (via invoke):
     inv serve
 
 Direct usage:
-    python3 scripts/server.py [--bind 0.0.0.0] [--port 8443] [--cert F] [--key F] [--host DISPLAY] [--directory DIR]
+    python3 server.py [--bind 0.0.0.0] [--port 8443] [--cert F] [--key F] [--host DISPLAY] [--directory DIR]
 """
 
 import argparse
@@ -12,6 +12,22 @@ import functools
 import http.server
 import ssl
 import subprocess
+
+
+class _NoCacheHandler(http.server.SimpleHTTPRequestHandler):
+    """SimpleHTTPRequestHandler that disables client caching.
+
+    Without this, Chrome heuristically caches HTML and CSS, so edits to
+    `index.html` (or anything else) only show up after a hard reload. In
+    dev that's confusing — clobber every cached response so a normal
+    refresh always picks up the latest file.
+    """
+
+    def end_headers(self):
+        self.send_header("Cache-Control", "no-store, must-revalidate")
+        self.send_header("Pragma", "no-cache")
+        self.send_header("Expires", "0")
+        super().end_headers()
 
 
 def _port_owner(port):
@@ -41,9 +57,7 @@ def _port_owner(port):
 
 
 def run(bind, port, certfile=None, keyfile=None, display_host=None, directory="app"):
-    handler = functools.partial(
-        http.server.SimpleHTTPRequestHandler, directory=directory
-    )
+    handler = functools.partial(_NoCacheHandler, directory=directory)
     try:
         httpd = http.server.ThreadingHTTPServer((bind, port), handler)
     except OSError as exc:
