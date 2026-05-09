@@ -734,6 +734,8 @@ function compareSemver(a, b) {
 }
 
 async function checkFirmwareVersion(deviceVersion) {
+  if (state.client.device?.name !== "Pixl.js") return;
+  if (!/^\d+\.\d+\.\d+$/.test(deviceVersion)) return;
   try {
     const resp = await fetch("https://api.github.com/repos/solosky/pixl.js/releases/latest");
     if (!resp.ok) return;
