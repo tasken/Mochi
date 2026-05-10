@@ -159,6 +159,19 @@ class SecureDfu {
         return buttonLess ? this.setDfuMode(device, uuids) : device;
     }
 
+    /**
+     * PATCH (mochi): documents the upstream caller contract (audit V-2).
+     *
+     * Resolves to:
+     *   - the original `device` if it was already in DFU mode (control + packet
+     *     characteristics found), in which case the caller can pass it straight
+     *     into `update()`.
+     *   - `null` after a buttonless DFU trigger succeeded. The device will
+     *     reboot into DFU mode under a new GATT identity. The caller MUST then
+     *     call `requestDevice(false)` to re-select the rebooted target before
+     *     calling `update()`. Passing `null` directly to `update()` throws
+     *     "Device not specified" and tells you nothing useful.
+     */
     async setDfuMode(device, uuids) {
         uuids = this.#mergeUuids(uuids);
         const chars = await this.#gattConnect(device, uuids.service);
@@ -177,7 +190,7 @@ class SecureDfu {
             throw new Error("Buttonless characteristic does not allow notifications");
         }
 
-        return new Promise(resolve => {
+        return new Promise((resolve, reject) => {
             let done = false;
             const finish = () => {
                 if (done) return;
@@ -194,7 +207,7 @@ class SecureDfu {
             }).then(() => {
                 this.#log("sent DFU mode");
                 return this.#sleep(this.rebootTime);
-            }).then(finish);
+            }).then(finish).catch(reject); // PATCH (mochi): surface rejections so the outer promise settles (audit V-1)
         });
     }
 
