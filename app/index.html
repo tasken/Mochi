@@ -2,7 +2,10 @@
 <html lang="en">
     <head>
         <meta charset="utf-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+        <meta
+            name="viewport"
+            content="width=device-width, initial-scale=1, viewport-fit=cover"
+        />
         <meta name="theme-color" content="#9ca3af" />
         <meta name="build-commit" content="dev" />
         <title>Mochi</title>
@@ -12,11 +15,14 @@
         <style>
             /* === BOOT === */
             /* Inline so the loading screen renders before any external CSS. */
-            html, body {
+            html,
+            body {
                 margin: 0;
                 background: #ffffff;
                 min-height: 100vh;
-                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+                font-family:
+                    -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui,
+                    sans-serif;
                 color: #111827;
             }
             /* Hide everything except the boot screen until the app is fully loaded. */
@@ -47,7 +53,11 @@
                 border-top-color: rgba(17, 24, 39, 0.55);
                 animation: boot-spin 0.85s linear infinite;
             }
-            @keyframes boot-spin { to { transform: rotate(360deg); } }
+            @keyframes boot-spin {
+                to {
+                    transform: rotate(360deg);
+                }
+            }
             .boot-mark {
                 font-size: 13px;
                 letter-spacing: 0.6px;
@@ -62,8 +72,12 @@
                 line-height: 1.4;
             }
             @keyframes ui-fade {
-                from { opacity: 0; }
-                to   { opacity: 1; }
+                from {
+                    opacity: 0;
+                }
+                to {
+                    opacity: 1;
+                }
             }
             .app-body {
                 animation: ui-fade 0.45s 0.07s ease-out backwards;
@@ -71,7 +85,12 @@
         </style>
     </head>
     <body>
-        <div class="boot-screen" id="bootScreen" role="status" aria-live="polite">
+        <div
+            class="boot-screen"
+            id="bootScreen"
+            role="status"
+            aria-live="polite"
+        >
             <div class="boot-spinner" aria-hidden="true"></div>
             <div class="boot-mark" id="bootStatus">Mochi</div>
         </div>
@@ -108,7 +127,9 @@
                     aria-label="Update firmware"
                     hidden
                 >
-                    <span class="ms-sm">memory</span><span class="topbar-chip-label">Firmware</span><span
+                    <span class="ms-sm">memory</span
+                    ><span class="topbar-chip-label">Firmware</span
+                    ><span
                         class="topbar-update-dot"
                         id="dfuUpdateDot"
                         hidden
@@ -121,7 +142,8 @@
                     aria-label="Format drive"
                     hidden
                 >
-                    <span class="ms-sm">mop</span><span class="topbar-chip-label">Format</span>
+                    <span class="ms-sm">mop</span
+                    ><span class="topbar-chip-label">Format</span>
                 </button>
                 <button
                     class="topbar-chip"
@@ -130,7 +152,8 @@
                     aria-label="Convert names to lowercase"
                     hidden
                 >
-                    <span class="ms-sm">match_case</span><span class="topbar-chip-label">Lowercase</span>
+                    <span class="ms-sm">match_case</span
+                    ><span class="topbar-chip-label">Lowercase</span>
                 </button>
                 <button
                     class="btn-icon ghost"
@@ -141,7 +164,13 @@
                 >
                     <span class="ms">terminal</span>
                 </button>
-                <span class="topbar-error" id="connError" role="status" aria-live="polite" hidden></span>
+                <span
+                    class="topbar-error"
+                    id="connError"
+                    role="status"
+                    aria-live="polite"
+                    hidden
+                ></span>
             </header>
 
             <!-- iOS Bluetooth banner -->
@@ -149,9 +178,9 @@
                 <span class="ms-sm ios-ble-banner-icon">phone_iphone</span>
                 <div class="ios-ble-banner-body">
                     <span class="ios-ble-banner-text">
-                        Most iOS browsers don't support Web Bluetooth yet.
-                        Open Mochi in <strong>Bluefy</strong> to connect your
-                        device over Bluetooth.
+                        Most iOS browsers don't support Web Bluetooth yet. Open
+                        Mochi in <strong>Bluefy</strong> to connect your device
+                        over Bluetooth.
                     </span>
                     <a
                         class="ext-link ios-ble-banner-link"
@@ -183,7 +212,10 @@
                             <span class="ms">bluetooth_disabled</span>
                         </div>
                         <div id="mainOverlaySpinner" hidden>
-                            <div class="overlay-spinner" aria-hidden="true"></div>
+                            <div
+                                class="overlay-spinner"
+                                aria-hidden="true"
+                            ></div>
                         </div>
                         <span class="title" id="mainOverlayTitle"
                             >Connect your device to get started</span
@@ -197,7 +229,8 @@
                             id="btnDfuFromDfu"
                             hidden
                         >
-                            <span class="ms-sm">system_update</span> Update firmware
+                            <span class="ms-sm">system_update</span> Update
+                            firmware
                         </button>
                     </div>
                     <div class="main-overlay-footer panel-footer"></div>
@@ -326,7 +359,8 @@
                                 id="btnSync"
                                 disabled
                             >
-                                <span class="ms-sm">sync</span> Compare with device
+                                <span class="ms-sm">sync</span> Compare with
+                                device
                             </button>
 
                             <!-- Zone 2: execute (shown when queue has items or uploading) -->
@@ -377,7 +411,8 @@
                                         >Queue is empty</span
                                     >
                                     <span class="queue-empty-sub"
-                                        >Choose Folder or Files above to start</span
+                                        >Choose Folder or Files above to
+                                        start</span
                                     >
                                 </div>
                             </div>
@@ -414,13 +449,19 @@
                                 >Working…</span
                             >
                             <span class="browser-lock-sub"
-                                >Transfers are in progress. Browsing resumes automatically.</span
+                                >Transfers are in progress. Browsing resumes
+                                automatically.</span
                             >
                         </div>
                     </div>
 
                     <!-- Navigation bar -->
-                    <div id="selectionBar" class="selection-bar" role="status" aria-live="polite">
+                    <div
+                        id="selectionBar"
+                        class="selection-bar"
+                        role="status"
+                        aria-live="polite"
+                    >
                         <!-- Nav state -->
                         <div class="sb-nav">
                             <button
@@ -576,7 +617,8 @@
                                 <span
                                     class="browser-empty-sub"
                                     id="browserEmptySub"
-                                    >Upload files or create a folder to get started.</span
+                                    >Upload files or create a folder to get
+                                    started.</span
                                 >
                             </div>
                         </div>
@@ -702,7 +744,12 @@
 
         <!-- Log overlay -->
         <div class="log-sheet-backdrop" id="logSheetBackdrop"></div>
-        <aside class="log-sheet" id="logOverlay" role="dialog" aria-labelledby="logSheetTitle">
+        <aside
+            class="log-sheet"
+            id="logOverlay"
+            role="dialog"
+            aria-labelledby="logSheetTitle"
+        >
             <div class="log-sheet-header">
                 <span class="log-sheet-title" id="logSheetTitle"
                     ><span class="ms-sm">terminal</span> Protocol log</span
@@ -749,7 +796,13 @@
         </div>
 
         <!-- Shared confirm modal (format, delete, …) -->
-        <div id="confirmModal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="confirmTitle">
+        <div
+            id="confirmModal"
+            class="modal-overlay"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="confirmTitle"
+        >
             <div class="modal-box">
                 <div class="modal-header">
                     <span class="modal-header-title" id="confirmTitle"></span>
@@ -781,7 +834,13 @@
         </div>
 
         <!-- Shared input modal (rename, new folder, …) -->
-        <div id="inputModal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="inputTitle">
+        <div
+            id="inputModal"
+            class="modal-overlay"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="inputTitle"
+        >
             <div class="modal-box">
                 <div class="modal-header">
                     <span class="modal-header-title" id="inputTitle"></span>
@@ -830,10 +889,18 @@
         </div>
 
         <!-- Upload warning modal -->
-        <div id="uploadWarnModal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="uploadWarnTitle">
+        <div
+            id="uploadWarnModal"
+            class="modal-overlay"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="uploadWarnTitle"
+        >
             <div class="modal-box">
                 <div class="modal-header">
-                    <span class="modal-header-title" id="uploadWarnTitle">Upload warning</span>
+                    <span class="modal-header-title" id="uploadWarnTitle"
+                        >Upload warning</span
+                    >
                     <button
                         class="modal-close"
                         data-modal-close
@@ -846,9 +913,7 @@
                     <div class="modal-icon-badge warning">
                         <span class="ms">warning</span>
                     </div>
-                    <div class="modal-body-title">
-                        Heads up before upload
-                    </div>
+                    <div class="modal-body-title">Heads up before upload</div>
                     <div id="uploadWarnMsg"></div>
                     <div class="modal-actions">
                         <button class="btn-labeled ghost" data-modal-close>
@@ -866,10 +931,18 @@
         </div>
 
         <!-- Sanitize names modal — nothing selected -->
-        <div id="sanitizeModalNone" class="modal-overlay sanitize-modal" role="dialog" aria-modal="true" aria-labelledby="sanitizeNoneTitle">
+        <div
+            id="sanitizeModalNone"
+            class="modal-overlay sanitize-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="sanitizeNoneTitle"
+        >
             <div class="modal-box">
                 <div class="modal-header">
-                    <span class="modal-header-title" id="sanitizeNoneTitle">Convert names to lowercase</span>
+                    <span class="modal-header-title" id="sanitizeNoneTitle"
+                        >Convert names to lowercase</span
+                    >
                     <button
                         class="modal-close"
                         data-modal-close
@@ -885,7 +958,13 @@
                     <div class="modal-body-title">
                         Choose what to lowercase in this location
                     </div>
-                    <p class="modal-note">Location: <strong class="modal-inline-mono" id="sanitizeNonePath"></strong></p>
+                    <p class="modal-note">
+                        Location:
+                        <strong
+                            class="modal-inline-mono"
+                            id="sanitizeNonePath"
+                        ></strong>
+                    </p>
                     <div class="modal-choice-list">
                         <label class="modal-choice-option">
                             <input
@@ -929,10 +1008,18 @@
         </div>
 
         <!-- DFU modal — confirm + progress in one surface -->
-        <div id="dfuModal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="dfuModalTitle">
+        <div
+            id="dfuModal"
+            class="modal-overlay"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="dfuModalTitle"
+        >
             <div class="modal-box dfu-modal-box">
                 <div class="modal-header">
-                    <span class="modal-header-title" id="dfuModalTitle">Update firmware</span>
+                    <span class="modal-header-title" id="dfuModalTitle"
+                        >Update firmware</span
+                    >
                     <button
                         class="modal-close"
                         id="btnDfuClose"
@@ -1022,22 +1109,28 @@
                                 id="dfuReleaseContainer"
                                 class="dfu-release-inline"
                             >
-                                <span class="ms dfu-release-spinner">progress_activity</span>
-                                <span class="dfu-release-status-text">Checking the latest official update…</span>
+                                <span class="ms dfu-release-spinner"
+                                    >progress_activity</span
+                                >
+                                <span class="dfu-release-status-text"
+                                    >Checking the latest official update…</span
+                                >
                             </div>
                         </div>
                     </div>
 
                     <div id="dfuCustomPanel" class="dfu-selector-panel" hidden>
                         <p class="dfu-type-desc">
-                            Make sure the file matches your device model.
-                            Using the wrong one can leave the screen blank.
+                            Make sure the file matches your device model. Using
+                            the wrong one can leave the screen blank.
                         </p>
                         <p class="dfu-type-desc dfu-type-desc-caution">
-                            <span class="ms-sm" aria-hidden="true">warning</span>
-                            Caution: flashing firmware for a different device type
-                            is still experimental and should only be done if you
-                            understand recovery steps.
+                            <span class="ms-sm" aria-hidden="true"
+                                >warning</span
+                            >
+                            Caution: flashing firmware for a different device
+                            type is still experimental and should only be done
+                            if you understand recovery steps.
                         </p>
                         <details
                             class="dfu-custom-devices-details"
@@ -1132,19 +1225,34 @@
                     <details class="dfu-dev-panel" id="dfuDevPanel" hidden>
                         <summary class="dfu-dev-panel-head">
                             <span class="dfu-dev-badge">DEV</span>
-                            <span class="dfu-dev-panel-title">Simulate failure</span>
+                            <span class="dfu-dev-panel-title"
+                                >Simulate failure</span
+                            >
                         </summary>
                         <div class="dfu-dev-panel-body">
                             <label class="dfu-dev-row" for="dfuDevFailMode">
                                 <span class="dfu-dev-label">Outcome</span>
-                                <select id="dfuDevFailMode" class="dfu-dev-select">
-                                    <option value="none">No failure (happy path)</option>
-                                    <option value="mid_transfer">Disconnect mid-transfer</option>
-                                    <option value="init_packet">Init packet rejected</option>
-                                    <option value="picker_dismissed">User dismisses picker</option>
+                                <select
+                                    id="dfuDevFailMode"
+                                    class="dfu-dev-select"
+                                >
+                                    <option value="none">
+                                        No failure (happy path)
+                                    </option>
+                                    <option value="mid_transfer">
+                                        Disconnect mid-transfer
+                                    </option>
+                                    <option value="init_packet">
+                                        Init packet rejected
+                                    </option>
+                                    <option value="picker_dismissed">
+                                        User dismisses picker
+                                    </option>
                                 </select>
                             </label>
-                            <p class="dfu-dev-hint">Resets to "No failure" after each run.</p>
+                            <p class="dfu-dev-hint">
+                                Resets to "No failure" after each run.
+                            </p>
                         </div>
                     </details>
                 </div>
@@ -1179,9 +1287,8 @@
                     </div>
                     <div class="dfu-hint-box" id="dfuReconnectHint" hidden>
                         Your device has restarted in update mode. Tap
-                        <strong>Connect to device</strong> next to this step
-                        to pick it from the Bluetooth list. It will
-                        usually show as
+                        <strong>Connect to device</strong> next to this step to
+                        pick it from the Bluetooth list. It will usually show as
                         <code class="dfu-code">DfuTarg</code>.
                     </div>
                     <div
@@ -1204,7 +1311,11 @@
                             ></span>
                         </div>
                     </div>
-                    <div class="dfu-mobile-transfer-note" id="dfuMobileTransferNote" hidden>
+                    <div
+                        class="dfu-mobile-transfer-note"
+                        id="dfuMobileTransferNote"
+                        hidden
+                    >
                         <span class="ms-sm">screen_lock_portrait</span>
                         Keep this screen open until the transfer is done.
                         Switching apps may interrupt the update.
@@ -1266,11 +1377,15 @@
                         correct version.
                     </p>
                     <p class="dfu-type-desc" id="dfuWarnBodySecondary">
-                        If something goes wrong mid-update, your device may
-                        stay in update mode. Don't worry, you can retry with
-                        the correct file to fix it.
+                        If something goes wrong mid-update, your device may stay
+                        in update mode. Don't worry, you can retry with the
+                        correct file to fix it.
                     </p>
-                    <p class="dfu-type-desc dfu-type-desc-caution dfu-mobile-note" id="dfuMobileNote" hidden>
+                    <p
+                        class="dfu-type-desc dfu-type-desc-caution dfu-mobile-note"
+                        id="dfuMobileNote"
+                        hidden
+                    >
                         <span class="ms-sm">phone_android</span>
                         Bluetooth transfers on phones can be unstable. If the
                         update fails, try again from a desktop computer.
@@ -1314,7 +1429,8 @@
                     hidden
                 >
                     <div class="dfu-cancel-confirm-msg">
-                        Cancel now? Your device may stay in update mode until you retry.
+                        Cancel now? Your device may stay in update mode until
+                        you retry.
                     </div>
                     <div class="dfu-cancel-confirm-actions">
                         <button class="btn-labeled ghost" id="btnDfuCancelKeep">
@@ -1332,7 +1448,11 @@
                     <button class="btn-labeled ghost" id="btnDfuReconnect">
                         Back to device
                     </button>
-                    <button class="btn-labeled ghost" id="btnDfuReboot" disabled>
+                    <button
+                        class="btn-labeled ghost"
+                        id="btnDfuReboot"
+                        disabled
+                    >
                         <span class="ms-sm">restart_alt</span> Exit update mode
                     </button>
                     <button
@@ -1340,18 +1460,14 @@
                         id="btnDfuRetryConnect"
                         hidden
                     >
-                        <span class="ms-sm">bluetooth_searching</span> Try
-                        again
+                        <span class="ms-sm">bluetooth_searching</span> Try again
                     </button>
                     <button class="btn-labeled primary" id="btnDfuRetry">
                         <span class="ms-sm">replay</span> Retry
                     </button>
                 </div>
                 <div class="dfu-modal-footer" id="dfuFooterSuccess" hidden>
-                    <button
-                        class="btn-labeled primary"
-                        id="btnDfuCloseSuccess"
-                    >
+                    <button class="btn-labeled primary" id="btnDfuCloseSuccess">
                         Close
                     </button>
                 </div>
@@ -1377,7 +1493,9 @@
                 // gtag stub so analytics events fired before gtag.js loads are
                 // queued in dataLayer and flushed once the script arrives.
                 window.dataLayer = window.dataLayer || [];
-                window.gtag = function () { window.dataLayer.push(arguments); };
+                window.gtag = function () {
+                    window.dataLayer.push(arguments);
+                };
                 window.gtag("js", new Date());
                 window.gtag("config", "G-20FR8YDBP3");
 
@@ -1386,18 +1504,30 @@
                         var l = document.createElement("link");
                         l.rel = "stylesheet";
                         l.href = href;
-                        l.onload = function () { resolve(); };
-                        l.onerror = function () { reject(new Error("stylesheet: " + href)); };
+                        l.onload = function () {
+                            resolve();
+                        };
+                        l.onerror = function () {
+                            reject(new Error("stylesheet: " + href));
+                        };
                         document.head.appendChild(l);
                     });
                 }
 
-                function loadScript(src) {
+                function loadScript(src, opts) {
                     return new Promise(function (resolve, reject) {
                         var s = document.createElement("script");
                         s.src = src;
-                        s.onload = function () { resolve(); };
-                        s.onerror = function () { reject(new Error("script: " + src)); };
+                        if (opts && opts.integrity) {
+                            s.integrity = opts.integrity;
+                            s.crossOrigin = opts.crossOrigin || "anonymous";
+                        }
+                        s.onload = function () {
+                            resolve();
+                        };
+                        s.onerror = function () {
+                            reject(new Error("script: " + src));
+                        };
                         document.head.appendChild(s);
                     });
                 }
@@ -1405,7 +1535,8 @@
                 function loadAnalytics() {
                     var s = document.createElement("script");
                     s.async = true;
-                    s.src = "https://www.googletagmanager.com/gtag/js?id=G-20FR8YDBP3";
+                    s.src =
+                        "https://www.googletagmanager.com/gtag/js?id=G-20FR8YDBP3";
                     document.head.appendChild(s);
                 }
 
@@ -1416,7 +1547,8 @@
                     var status = document.getElementById("bootStatus");
                     if (status) {
                         status.className = "boot-error";
-                        status.textContent = "Failed to load. Check your connection and refresh the page.";
+                        status.textContent =
+                            "Failed to load. Check your connection and refresh the page.";
                     }
                 }
 
@@ -1434,7 +1566,13 @@
                         // still boot even if DFU libraries fail to load.
                         var vendorScriptsP = Promise.allSettled([
                             loadScript("./vendor/secure-dfu.js"),
-                            loadScript("https://cdn.jsdelivr.net/npm/jszip@3/dist/jszip.min.js"),
+                            loadScript(
+                                "https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js",
+                                {
+                                    integrity:
+                                        "sha384-+mbV2IY1Zk/X1p/nWllGySJSUN8uMs+gUAN10Or95UBH0fpj6GfKgPmgC5EXieXG",
+                                },
+                            ),
                         ]);
 
                         // Stage 1 — Stylesheets. Local app CSS is required;
@@ -1448,10 +1586,14 @@
                         // a new `<span class="ms">…</span>` icon, append its
                         // name to the alphabetically-sorted list below or it
                         // will render as the literal ligature text.
-                        await loadStyle("https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400&family=IBM+Plex+Sans:wght@400;700&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,1,0&icon_names=ar_stickers,arrow_back,block,bluetooth,bluetooth_disabled,bluetooth_searching,check,check_circle,close,cloud_upload,create_new_folder,delete,download,edit,error,favorite,folder,folder_open,folder_zip,hard_drive,home,inbox,info,insert_drive_file,keyboard_arrow_down,lock,match_case,memory,mop,open_in_new,phone_android,phone_iphone,play_arrow,progress_activity,refresh,replay,restart_alt,schedule,screen_lock_portrait,stop,sync,system_update,task_alt,terminal,upload,upload_file,warning,zoom_out_map&display=swap")
-                            .catch(function (err) {
-                                console.warn("[boot] Optional font stylesheet failed:", err);
-                            });
+                        await loadStyle(
+                            "https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400&family=IBM+Plex+Sans:wght@400;700&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,1,0&icon_names=ar_stickers,arrow_back,block,bluetooth,bluetooth_disabled,bluetooth_searching,check,check_circle,close,cloud_upload,create_new_folder,delete,download,edit,error,favorite,folder,folder_open,folder_zip,hard_drive,home,inbox,info,insert_drive_file,keyboard_arrow_down,lock,match_case,memory,mop,open_in_new,phone_android,phone_iphone,play_arrow,progress_activity,refresh,replay,restart_alt,schedule,screen_lock_portrait,stop,sync,system_update,task_alt,terminal,upload,upload_file,warning,zoom_out_map&display=swap",
+                        ).catch(function (err) {
+                            console.warn(
+                                "[boot] Optional font stylesheet failed:",
+                                err,
+                            );
+                        });
 
                         // Stage 2 — Force fonts to download (best effort; never block on a single missing weight).
                         if (document.fonts && document.fonts.load) {
@@ -1459,7 +1601,9 @@
                                 document.fonts.load('400 16px "IBM Plex Sans"'),
                                 document.fonts.load('700 16px "IBM Plex Sans"'),
                                 document.fonts.load('400 16px "IBM Plex Mono"'),
-                                document.fonts.load('400 24px "Material Symbols Rounded"'),
+                                document.fonts.load(
+                                    '400 24px "Material Symbols Rounded"',
+                                ),
                             ]);
                         }
 
@@ -1467,26 +1611,35 @@
                         var vendorResults = await vendorScriptsP;
                         vendorResults.forEach(function (result) {
                             if (result.status === "rejected") {
-                                console.warn("[boot] Optional vendor script failed:", result.reason);
+                                console.warn(
+                                    "[boot] Optional vendor script failed:",
+                                    result.reason,
+                                );
                             }
                         });
 
                         // Stage 4 — App module. app.js dispatches `app:ready` once initial render completes.
                         var ready = new Promise(function (resolve) {
-                            document.addEventListener("app:ready", resolve, { once: true });
+                            document.addEventListener("app:ready", resolve, {
+                                once: true,
+                            });
                         });
                         await import("./app.js");
                         // Safety net: if app.js fails to dispatch within 1.5s, reveal anyway.
                         await Promise.race([
                             ready,
-                            new Promise(function (r) { setTimeout(r, 1500); }),
+                            new Promise(function (r) {
+                                setTimeout(r, 1500);
+                            }),
                         ]);
 
                         // Hold the boot screen for the minimum display window.
                         var elapsed = performance.now() - bootStartedAt;
                         var remaining = MIN_BOOT_MS - elapsed;
                         if (remaining > 0) {
-                            await new Promise(function (r) { setTimeout(r, remaining); });
+                            await new Promise(function (r) {
+                                setTimeout(r, remaining);
+                            });
                         }
 
                         // Reveal.
@@ -1500,7 +1653,9 @@
                         // Events queued via the gtag stub before this resolves
                         // are flushed when the real gtag.js arrives.
                         if ("requestIdleCallback" in window) {
-                            requestIdleCallback(loadAnalytics, { timeout: 3000 });
+                            requestIdleCallback(loadAnalytics, {
+                                timeout: 3000,
+                            });
                         } else {
                             setTimeout(loadAnalytics, 1000);
                         }
