@@ -2777,6 +2777,14 @@ button .ms,
     font-size: 3rem;
     color: #d1d5db;
 }
+.details-hero-spinner {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    border: 3px solid rgba(156, 163, 175, 0.25);
+    border-top-color: #9ca3af;
+    animation: spin 0.85s linear infinite;
+}
 
 .details-hero-band[hidden] {
     display: none;
