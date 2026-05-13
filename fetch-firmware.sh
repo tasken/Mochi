@@ -34,8 +34,12 @@ echo "$RELEASE_JSON" | jq -r '.assets[] | select(.name | test("\\.zip$"; "i")) |
     echo "  [skip] $NAME (already exists)"
   else
     echo "  [download] $NAME"
-    curl -fsSL -o "$DEST" -L "$URL"
+    curl -fsSL -o "$DEST" -L "$URL" || { echo "Failed to download $NAME from $URL" >&2; exit 1; }
   fi
 done
+
+# Note: upstream (solosky/pixl.js) does not publish SHA256SUMS alongside
+# release assets, so checksum validation is not possible at this time.
+# Downloads use HTTPS to the same GitHub origin. Accepted risk.
 
 echo "Done."
