@@ -189,17 +189,22 @@ export class PixlToolsClient {
     }
 
     async _setupGatt(device) {
+        if (this.device && this.device !== device)
+            this.device.removeEventListener(
+                "gattserverdisconnected",
+                this._onDisconnect,
+            );
         device.removeEventListener(
             "gattserverdisconnected",
             this._onDisconnect,
         );
-        device.addEventListener("gattserverdisconnected", this._onDisconnect);
         if (this.rxChar)
             this.rxChar.removeEventListener(
                 "characteristicvaluechanged",
                 this._onNotification,
             );
         const server = await device.gatt.connect();
+        device.addEventListener("gattserverdisconnected", this._onDisconnect);
         try {
             const service = await server.getPrimaryService(NUS_SERVICE_UUID);
             this.txChar = await service.getCharacteristic(NUS_CHAR_TX_UUID);
@@ -425,7 +430,7 @@ export class PixlToolsClient {
             }
             entries.push({ name, size, type, meta });
         }
-        truncated = truncated || c.remaining() > 0;
+        truncated = truncated || c.remaining() >= 2;
         return { ok: true, error: null, data: entries, truncated };
     }
 
@@ -885,8 +890,8 @@ export class DevMockClient {
                     type: "FILE",
                     size: 540,
                     meta: {
-                        nfcTagHead: 0x01000000 + i,
-                        nfcTagTail: 0x03530902,
+                        nfcTagHead: null,
+                        nfcTagTail: null,
                     },
                 })),
             ],
@@ -1000,12 +1005,7 @@ export class DevMockClient {
             /^E:\/amiibo\/large-set\/tag_(\d+)\.bin$/,
         );
         if (largeMatch) {
-            const idx = parseInt(largeMatch[1], 10) - 1;
-            const data = new Uint8Array(540);
-            const dv = new DataView(data.buffer);
-            dv.setUint32(84, 0x01000000 + idx, false);
-            dv.setUint32(88, 0x03530902, false);
-            return { ok: true, data };
+            return { ok: true, data: new Uint8Array(540) };
         }
         const meta = mockFiles[path];
         const size = meta?.size ?? 32;
