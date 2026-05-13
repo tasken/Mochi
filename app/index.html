@@ -8,6 +8,7 @@
         />
         <meta name="theme-color" content="#9ca3af" />
         <meta name="build-commit" content="dev" />
+        <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://www.googletagmanager.com https://esm.sh; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https://amiiboapi.org https://www.google-analytics.com https://analytics.google.com https://api.github.com;" />
         <title>Mochi</title>
         <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -186,7 +187,7 @@
                         class="ext-link ios-ble-banner-link"
                         href="https://apps.apple.com/app/bluefy-web-ble-browser/id1492822055"
                         target="_blank"
-                        rel="noopener"
+                        rel="noopener noreferrer"
                     >
                         Get Bluefy <span class="ms-sm">open_in_new</span>
                     </a>
@@ -1335,14 +1336,14 @@
                         <a
                             href="https://github.com/solosky/pixl.js/blob/main/docs/en/02-Flash-Firmware.md"
                             target="_blank"
-                            rel="noopener"
+                            rel="noopener noreferrer"
                             >firmware recovery guide</a
                         >
                         or
                         <a
                             href="https://www.reddit.com/r/Amiibomb/comments/1attsxx/how_to_reset_frozen_allmiibo/"
                             target="_blank"
-                            rel="noopener"
+                            rel="noopener noreferrer"
                             >how to reset a frozen device</a
                         >.
                     </div>
@@ -1619,10 +1620,12 @@
                         });
 
                         // Stage 4 — App module. app.js dispatches `app:ready` once initial render completes.
+                        var appReady = false;
                         var ready = new Promise(function (resolve) {
-                            document.addEventListener("app:ready", resolve, {
-                                once: true,
-                            });
+                            document.addEventListener("app:ready", function () {
+                                appReady = true;
+                                resolve();
+                            }, { once: true });
                         });
                         await import("./app.js");
                         // Safety net: if app.js fails to dispatch within 1.5s, reveal anyway.
@@ -1632,6 +1635,9 @@
                                 setTimeout(r, 1500);
                             }),
                         ]);
+                        if (!appReady) {
+                            console.warn("[boot] app:ready not received within 1.5s, revealing anyway.");
+                        }
 
                         // Hold the boot screen for the minimum display window.
                         var elapsed = performance.now() - bootStartedAt;
