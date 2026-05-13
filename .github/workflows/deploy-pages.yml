@@ -15,6 +15,7 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -31,7 +32,8 @@ jobs:
           mkdir -p "$RUNNER_TEMP/site"
           rsync -av ./app/ "$RUNNER_TEMP/site/"
           touch "$RUNNER_TEMP/site/.nojekyll"
-          sed -i "s/content=\"dev\"/content=\"$(git rev-parse --short HEAD)\"/" "$RUNNER_TEMP/site/index.html"
+          SHA=$(git rev-parse --short HEAD)
+          python3 -c "import sys,pathlib;p=pathlib.Path(sys.argv[1]);p.write_text(p.read_text().replace('content=\"dev\"','content=\"'+sys.argv[2]+'\"'))" "$RUNNER_TEMP/site/index.html" "$SHA"
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v4
@@ -42,6 +44,7 @@ jobs:
   deploy:
     needs: build
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       pages: write
       id-token: write
