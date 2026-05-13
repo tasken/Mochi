@@ -8,6 +8,7 @@ Direct usage:
 """
 
 import argparse
+import errno
 import functools
 import http.server
 import ssl
@@ -61,7 +62,7 @@ def run(bind, port, certfile=None, keyfile=None, display_host=None, directory="a
     try:
         httpd = http.server.ThreadingHTTPServer((bind, port), handler)
     except OSError as exc:
-        if exc.errno == 98:  # Address already in use
+        if exc.errno == errno.EADDRINUSE:
             info = _port_owner(port)
             msg = f"error: port {port} is already in use."
             if info:
@@ -70,6 +71,7 @@ def run(bind, port, certfile=None, keyfile=None, display_host=None, directory="a
         raise
     if certfile and keyfile:
         ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        ctx.minimum_version = ssl.TLSVersion.TLSv1_2
         ctx.load_cert_chain(certfile, keyfile)
         httpd.socket = ctx.wrap_socket(httpd.socket, server_side=True)
         scheme = "https"
