@@ -237,7 +237,10 @@ class SecureDfu {
                 const onDc = () => { this.#log("disconnected"); resolve(); };
                 device.addEventListener("gattserverdisconnected", onDc, { once: true });
                 if (device.gatt?.connected) {
-                    try { device.gatt.disconnect(); } catch { resolve(); }
+                    try { device.gatt.disconnect(); } catch {
+                        device.removeEventListener("gattserverdisconnected", onDc);
+                        resolve();
+                    }
                 } else {
                     resolve();
                 }
@@ -544,6 +547,12 @@ class SecureDfu {
                 console.warn("[DFU]", `Write failed for op 0x${opKey.toString(16)}, retrying:`, this.#asError(e).message);
                 this.#log(this.#asError(e).message);
                 await this.#sleep(500);
+                const t = this.#waiterTimers.get(opKey);
+                if (t) clearTimeout(t);
+                this.#waiterTimers.set(opKey, setTimeout(() => {
+                    console.error("[DFU]", `Operation 0x${opKey.toString(16)} timed out (${this.operationTimeout}ms)`);
+                    this.#clearWaiter(opKey, new Error(`Operation 0x${opKey.toString(16)} timed out`));
+                }, this.operationTimeout));
                 try {
                     await (char.writeValueWithResponse
                         ? char.writeValueWithResponse(value)
