@@ -945,6 +945,10 @@ async function connectOrDisconnect() {
     };
     state.client.onReconnecting = () => {
         if (state.abortController) state.abortController.abort();
+        if (state.disconnectToast) {
+            removeToast(state.disconnectToast);
+            state.disconnectToast = null;
+        }
         setConnState("reconnecting");
         state.disconnectToast = showErrorToast(
             "Connection lost",
@@ -958,12 +962,17 @@ async function connectOrDisconnect() {
         }
         setConnState("connected");
         showSuccessToast("Reconnected");
-        if (state.currentPath) {
-            invalidateCache();
-            await browseFolder(state.currentPath);
+        try {
+            if (state.currentPath) {
+                invalidateCache();
+                await browseFolder(state.currentPath);
+            }
+        } catch (err) {
+            showErrorToast("Couldn't refresh after reconnect", err.message);
         }
     };
 
+    const clientRef = state.client;
     try {
         await state.client.connect();
         setConnState("connected");
@@ -993,6 +1002,7 @@ async function connectOrDisconnect() {
         showConnError(err.message);
         showErrorToast("Couldn't connect", err.message);
         trackAnalyticsEvent("device_connect_fail", { error: err.message });
+        clientRef?.disconnect();
         setConnState("disconnected");
     }
 }
@@ -1008,24 +1018,29 @@ async function devConnect() {
     setConnState("connected");
     showSuccessToast("Connected to mock device");
 
-    log("\u2192 getVersion()", "cmd");
-    const ver = await state.client.getVersion();
-    log(`\u2190 version=${ver.data.version} ble=${ver.data.bleAddress}`, "ok");
-    el.topbarBadge.textContent = "Mock device";
-    el.topbarBadge.classList.add("dev");
-    checkFirmwareVersion(ver.data.version);
+    try {
+        log("\u2192 getVersion()", "cmd");
+        const ver = await state.client.getVersion();
+        log(`\u2190 version=${ver.data.version} ble=${ver.data.bleAddress}`, "ok");
+        el.topbarBadge.textContent = "Mock device";
+        el.topbarBadge.classList.add("dev");
+        checkFirmwareVersion(ver.data.version);
 
-    log("\u2192 listDrives()", "cmd");
-    const dr = await state.client.listDrives();
-    log("\u2190 drives=[E: 8.0 MB, 2.0 MB used]", "ok");
-    if (dr.ok && dr.data.length > 0) {
-        state.drive = dr.data[0];
-        renderDrive(state.drive);
+        log("\u2192 listDrives()", "cmd");
+        const dr = await state.client.listDrives();
+        log("\u2190 drives=[E: 8.0 MB, 2.0 MB used]", "ok");
+        if (dr.ok && dr.data.length > 0) {
+            state.drive = dr.data[0];
+            renderDrive(state.drive);
+        }
+
+        log("\u2192 readFolder(E:/)", "cmd");
+        await browseFolder("E:/");
+        log("\u2190 3 entries (2 dirs, 1 file)", "ok");
+    } catch (err) {
+        showErrorToast("Mock device error", err.message);
+        setConnState("disconnected");
     }
-
-    log("\u2192 readFolder(E:/)", "cmd");
-    await browseFolder("E:/");
-    log("\u2190 3 entries (2 dirs, 1 file)", "ok");
 }
 
 // === Drive Panel ===
@@ -1115,6 +1130,7 @@ function openModal(modalEl) {
     // Focus the first focusable control (skip the X-close where possible so the
     // primary affordance is what receives focus).
     requestAnimationFrame(() => {
+        if (!modalEl.classList.contains("open")) return;
         const focusables = modalEl.querySelectorAll(_focusableSelector);
         const target =
             Array.from(focusables).find(
@@ -1525,6 +1541,7 @@ async function browseFolder(path) {
 
             if (!res.ok) {
                 log(`Failed to read ${path}: ${res.error}`, "err");
+                showErrorToast("Couldn't open folder", res.error);
                 state.dirLoadingPath = null;
                 renderFileTable();
                 return;
@@ -1551,6 +1568,7 @@ async function browseFolder(path) {
             }
         } catch (err) {
             log(`Error reading ${path}: ${err.message}`, "err");
+            showErrorToast("Couldn't open folder", err.message);
             state.dirLoadingPath = null;
             renderFileTable();
             return;
@@ -1710,16 +1728,21 @@ function applyNfcTagDisplay(entry, head, tail) {
     if (!el.detailsHeroImgArea.querySelector(".details-hero-spinner")) {
         el.detailsHeroImgArea.innerHTML = `<div class="details-hero-spinner"></div>`;
     }
-    lookupNfcTag(head, tail).then((info) => {
-        if (state.drawerEntry !== entry) return;
-        el.panelNfcTagContent.innerHTML = renderNfcTagField(head, tail, info);
-        wireNfcTagCopyButtons();
-        if (info) {
-            _applyNfcHero(entry, info, head, tail);
-        } else {
-            el.detailsHeroImgArea.innerHTML = `<span class="ms details-hero-file-icon">insert_drive_file</span>`;
-        }
-    });
+    lookupNfcTag(head, tail)
+        .then((info) => {
+            if (state.drawerEntry !== entry) return;
+            el.panelNfcTagContent.innerHTML = renderNfcTagField(head, tail, info);
+            wireNfcTagCopyButtons();
+            if (info) {
+                _applyNfcHero(entry, info, head, tail);
+            } else {
+                el.detailsHeroImgArea.innerHTML = `<span class="ms details-hero-file-icon">insert_drive_file</span>`;
+            }
+        })
+        .catch(() => {
+            if (state.drawerEntry === entry)
+                el.panelNfcTagContent.innerHTML = nfcDetailRow("Figure ID", formatNfcUid(head, tail));
+        });
 }
 
 function _gradientTextColor(gradientCss) {
@@ -1763,6 +1786,10 @@ function _applyNfcHero(entry, info, head, tail) {
         }
         img.alt = info.name || entry.name;
         img.loading = "lazy";
+        img.onerror = () => {
+            el.detailsHeroImgArea.innerHTML =
+                '<span class="ms details-hero-file-icon">insert_drive_file</span>';
+        };
         const zoomIcon = document.createElement("span");
         zoomIcon.className = "details-hero-zoom-icon";
         wrap.appendChild(img);
@@ -2020,17 +2047,22 @@ el.fileTableBody.addEventListener("click", async (e) => {
             });
             if (confirmed) await doDeleteSelected();
         } else if (actionBtn.dataset.action === "download") {
+            if (!state.client) return;
             const filePath = joinChildPath(state.currentPath, entry.name);
             state.client
                 .readFileData(filePath)
                 .then((res) => {
                     if (!res.ok) {
                         log(`Download failed: ${res.error}`, "err");
+                        showErrorToast("Download failed", res.error);
                         return;
                     }
                     triggerDownload(res.data, entry.name);
                 })
-                .catch((err) => log(`Download failed: ${err.message}`));
+                .catch((err) => {
+                    log(`Download failed: ${err.message}`, "err");
+                    showErrorToast("Download failed", err.message);
+                });
         }
         return;
     }
@@ -2099,6 +2131,7 @@ el.btnDownloadSelected.addEventListener("click", async () => {
     );
     let failed = 0;
     for (const entry of files) {
+        if (!state.client) { failed++; continue; }
         try {
             const res = await state.client.readFileData(
                 joinChildPath(state.currentPath, entry.name),
@@ -2302,7 +2335,7 @@ function populateFileDetails(entry) {
     } else {
         const metaHead = entry.meta ? entry.meta.nfcTagHead : null;
         const metaTail = entry.meta ? entry.meta.nfcTagTail : null;
-        if (metaHead != null) {
+        if (metaHead != null && metaTail != null) {
             applyNfcTagDisplay(entry, metaHead, metaTail);
         } else if (state.client) {
             el.panelNfcTagContent.innerHTML = `<div class="details-nfc-row"><span class="details-nfc-label">Figure ID</span><span class="details-nfc-value" style="color:#9ca3af">Loading\u2026</span></div>`;
@@ -2722,13 +2755,8 @@ async function doDeleteSelected() {
         name: e.name,
     }));
 
-    // Sort: deepest-first by "/" count, files before folders at same depth
-    const depthOf = new Map(
-        paths.map((p) => [p, (p.path.match(/\//g) || []).length]),
-    );
+    // Sort: files before folders so file handles are closed before rmdir
     paths.sort((a, b) => {
-        const d = depthOf.get(b) - depthOf.get(a);
-        if (d !== 0) return d;
         if (a.type !== b.type) return a.type === "FILE" ? -1 : 1;
         return 0;
     });
@@ -2773,7 +2801,11 @@ async function doDeleteSelected() {
         el.browserLockOverlay.classList.remove("active");
         updateControls();
         invalidateCache();
-        await browseFolder(state.currentPath);
+        try {
+            await browseFolder(state.currentPath);
+        } catch (_) {
+            /* stale connection */
+        }
     }
 }
 
@@ -2825,12 +2857,10 @@ async function collectEntriesRecursive(path) {
     const snapshots = [];
     const queue = [path];
     while (queue.length > 0) {
+        if (!state.client) throw new Error("Device disconnected during scan.");
         const folder = queue.shift();
         const res = await state.client.readFolder(folder);
-        if (!res.ok) {
-            log(`Scan failed: ${folder}: ${res.error}`, "err");
-            continue;
-        }
+        if (!res.ok) throw new Error(`Scan failed: ${folder}: ${res.error}`);
         const entries = sortEntries(res.data);
         snapshots.push({ parentPath: folder, entries });
         for (const e of entries) {
@@ -2879,7 +2909,7 @@ async function executeSanitize(allOps, allSkipped) {
     if (renamed === allOps.length && renamed > 0) {
         showSuccessToast(`Converted ${renamedText} to lowercase`, skippedText);
     } else if (renamed > 0) {
-        showErrorToast(
+        showWarningToast(
             `Converted ${renamedText} of ${totalText} to lowercase`,
             skippedText,
         );
@@ -3668,6 +3698,7 @@ async function runSync() {
     }
 
     async function walk(path) {
+        if (!state.client) throw new Error("Device disconnected.");
         const res = await state.client.readFolder(path);
         if (!res.ok) throw new Error(`readFolder(${path}): ${res.error}`);
         if (res.truncated)
@@ -3713,6 +3744,17 @@ async function runSync() {
                 .slice(normBase.length)
                 .includes("/");
             if (isFolder || hasNested) scanRoots.add(rootPath);
+        }
+        // Always scan the base directory so flat files (e.g. E:/foo.bin) are
+        // detected as already present and not re-uploaded every sync.
+        const baseRes = await state.client.readFolder(base);
+        if (baseRes.ok) {
+            for (const entry of baseRes.data) {
+                const entryPath = joinChildPath(base, entry.name.toLowerCase());
+                if (isSyncExcluded(entryPath)) continue;
+                const kind = entry.type === "DIR" ? "folder" : "file";
+                deviceTree.set(entryPath, { size: entry.size, kind });
+            }
         }
         for (const root of scanRoots) {
             try {
@@ -3799,6 +3841,7 @@ async function runOrphanDeletion() {
     let deletedCount = 0;
     let errorCount = 0;
     for (const orphan of toDelete) {
+        if (!state.client) throw new Error("Device disconnected.");
         orphan.status = "deleting";
         renderUploadQueue();
         try {
@@ -3817,12 +3860,12 @@ async function runOrphanDeletion() {
     }
     if (errorCount > 0) {
         showWarningToast(
-            `Removed ${deletedCount} of ${deletedCount + errorCount} device-only files`,
+            `Removed ${deletedCount} of ${deletedCount + errorCount} device-only items`,
             `${errorCount} failed. Check the protocol log for details.`,
         );
     } else if (deletedCount > 0) {
         showSuccessToast(
-            `Removed ${pluralize(deletedCount, "file")} from device`,
+            `Removed ${pluralize(deletedCount, "item")} from device`,
         );
     }
 }
@@ -3845,6 +3888,7 @@ async function runUpload() {
             `<ul class="modal-list">${lines}</ul>` +
             `<p class="modal-note">You can continue now, but large transfers may take longer or fail if Bluetooth drops.</p>`;
         if (!(await showUploadWarnModal(html))) return;
+        if (!state.client || state.connState !== "connected") return;
     }
 
     state.uploadActive = true;
@@ -4988,6 +5032,7 @@ async function runDfuTransfer() {
                 }
 
                 if (isDfuMode) {
+                    server.disconnect();
                     log(
                         `[DFU] "${picked.name || "device"}" is already in update mode.`,
                         "ok",
@@ -5319,6 +5364,7 @@ el.btnDfuReboot.addEventListener("click", () => {
 });
 
 el.btnDfuRetry.addEventListener("click", async () => {
+    if (dfuInProgress()) return;
     if (!dfuState.source) {
         closeDfuModal();
         return;
@@ -5327,6 +5373,7 @@ el.btnDfuRetry.addEventListener("click", async () => {
 });
 
 el.btnDfuRetryConnect.addEventListener("click", async () => {
+    if (dfuInProgress()) return;
     dfuState.pickerDismissed = true; // preserved so wait is skipped
     await runDfuTransfer();
 });
@@ -5345,7 +5392,7 @@ function stampFooters(commitText) {
     const html = `
     <div class="footer-made">Made with <span class="ms-sm footer-heart">favorite</span> from Argentina</div>
     <div class="footer-meta">
-      <span class="nav-commit">${commitText}</span>
+      <span class="nav-commit">${escapeHtml(commitText)}</span>
       <span class="panel-footer-sep">&middot;</span>
       <a href="https://github.com/tasken/Mochi" target="_blank" rel="noopener">Mochi &copy; 2026 Nimbo</a>
       <span class="panel-footer-sep">&middot;</span>
