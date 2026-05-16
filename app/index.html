@@ -1100,6 +1100,16 @@
                         </div>
                     </div>
 
+                    <div class="dfu-callout dfu-callout-info dfu-prep-hint" id="dfuPrepHint" hidden>
+                        <span class="ms-sm">info</span>
+                        <span>
+                            <strong>Before you start:</strong> on your device, go to
+                            <span class="dfu-menu-path"><span class="ms-sm">settings</span> Settings
+                            <span class="ms-sm">arrow_forward</span> Firmware Update</span>.
+                            If your device is already connected, Mochi will switch it automatically.
+                        </span>
+                    </div>
+
                     <div id="dfuNativePanel" class="dfu-selector-panel">
                         <p class="dfu-type-desc">
                             Mochi will download the latest official Pixl.js
@@ -1121,89 +1131,28 @@
                     </div>
 
                     <div id="dfuCustomPanel" class="dfu-selector-panel" hidden>
-                        <p class="dfu-type-desc">
-                            Make sure the file matches your device model. Using
-                            the wrong one can leave the screen blank.
-                        </p>
-                        <p class="dfu-type-desc dfu-type-desc-caution">
+                        <div class="dfu-callout dfu-callout-warn">
                             <span class="ms-sm" aria-hidden="true"
                                 >warning</span
                             >
-                            Caution: flashing firmware for a different device
-                            type is still experimental and should only be done
-                            if you understand recovery steps.
-                        </p>
-                        <details
-                            class="dfu-custom-devices-details"
+                            <span><strong>Important:</strong> make sure the firmware
+                            file matches your device model. Flashing the wrong
+                            file can leave it unresponsive until you reflash
+                            the correct one.</span>
+                        </div>
+                        <div class="dfu-custom-devices"
                             id="dfuCustomDevicesDetails"
                         >
-                            <summary class="dfu-custom-devices-summary">
-                                Device project links
-                            </summary>
-                            <div class="dfu-custom-devices">
-                                <a
-                                    class="ext-link dfu-device-chip"
-                                    href="https://github.com/solosky/pixl.js"
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    >allmiibo
-                                    <span class="ms-sm" aria-hidden="true"
-                                        >open_in_new</span
-                                    ></a
-                                >
-                                <a
-                                    class="ext-link dfu-device-chip"
-                                    href="https://github.com/strengthen/iNFCAmiibo"
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    >amiibotool
-                                    <span class="ms-sm" aria-hidden="true"
-                                        >open_in_new</span
-                                    ></a
-                                >
-                                <a
-                                    class="ext-link dfu-device-chip"
-                                    href="https://www.flashiibo.com/"
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    >Flashiibo
-                                    <span class="ms-sm" aria-hidden="true"
-                                        >open_in_new</span
-                                    ></a
-                                >
-                                <a
-                                    class="ext-link dfu-device-chip"
-                                    href="https://joysfusion.com/"
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    >Joysfusion
-                                    <span class="ms-sm" aria-hidden="true"
-                                        >open_in_new</span
-                                    ></a
-                                >
-                                <a
-                                    class="ext-link dfu-device-chip"
-                                    href="https://github.com/strengthen/iNFCAmiibo"
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    >NFC emulator
-                                    <span class="ms-sm" aria-hidden="true"
-                                        >open_in_new</span
-                                    ></a
-                                >
-                                <span class="dfu-device-chip">NFC tool</span>
-                                <a
-                                    class="ext-link dfu-device-chip"
-                                    href="https://wuzplay-nfc.com"
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    >Wuzplay
-                                    <span class="ms-sm" aria-hidden="true"
-                                        >open_in_new</span
-                                    ></a
-                                >
+                            <span class="dfu-custom-devices-label">Related NFC device projects</span>
+                            <div class="dfu-custom-devices-chips">
+                                <a class="ext-link dfu-device-chip" href="https://github.com/solosky/pixl.js" target="_blank" rel="noopener noreferrer">allmiibo <span class="ms-sm" aria-hidden="true">open_in_new</span></a>
+                                <a class="ext-link dfu-device-chip" href="https://github.com/strengthen/iNFCAmiibo" target="_blank" rel="noopener noreferrer">amiibotool <span class="ms-sm" aria-hidden="true">open_in_new</span></a>
+                                <a class="ext-link dfu-device-chip" href="https://www.flashiibo.com/" target="_blank" rel="noopener noreferrer">Flashiibo <span class="ms-sm" aria-hidden="true">open_in_new</span></a>
+                                <a class="ext-link dfu-device-chip" href="https://joysfusion.com/" target="_blank" rel="noopener noreferrer">Joysfusion <span class="ms-sm" aria-hidden="true">open_in_new</span></a>
+                                <a class="ext-link dfu-device-chip" href="https://github.com/strengthen/iNFCAmiibo" target="_blank" rel="noopener noreferrer">NFC emulator <span class="ms-sm" aria-hidden="true">open_in_new</span></a>
+<a class="ext-link dfu-device-chip" href="https://wuzplay-nfc.com" target="_blank" rel="noopener noreferrer">Wuzplay <span class="ms-sm" aria-hidden="true">open_in_new</span></a>
                             </div>
-                        </details>
+                        </div>
                     </div>
 
                     <div class="dfu-file-divider" hidden>
@@ -1278,7 +1227,7 @@
                             id="dfuActiveLabel"
                         ></span>
                     </div>
-                    <div class="dfu-hint-box" id="dfuSelectingHint" hidden>
+                    <div class="dfu-callout dfu-callout-info dfu-callout-block" id="dfuSelectingHint" hidden>
                         A Bluetooth chooser will appear. Pick your device. It
                         may show as
                         <code class="dfu-code">Pixl.js</code>,
@@ -1286,10 +1235,14 @@
                         name. Mochi will detect the mode automatically. If you
                         don't see it, make sure it's powered on and nearby.
                     </div>
-                    <div class="dfu-hint-box" id="dfuReconnectHint" hidden>
+                    <div class="dfu-callout dfu-callout-info dfu-callout-block" id="dfuEnteringDfuHint" hidden>
+                        Your device is restarting in update mode. This takes
+                        a few seconds.
+                    </div>
+                    <div class="dfu-callout dfu-callout-info dfu-callout-block" id="dfuReconnectHint" hidden>
                         Your device has restarted in update mode. Tap
-                        <strong>Connect to device</strong> next to this step to
-                        pick it from the Bluetooth list. It will usually show as
+                        <strong>Connect to device</strong> below, then pick
+                        it from the Bluetooth list. It will usually appear as
                         <code class="dfu-code">DfuTarg</code>.
                     </div>
                     <div
@@ -1370,107 +1323,95 @@
                         <span class="ms">warning</span>
                     </div>
                     <div class="modal-body-title" id="dfuWarnTitle">
-                        Almost there, one last check
+                        Confirm before updating
                     </div>
-                    <p class="dfu-type-desc" id="dfuWarnBodyPrimary">
-                        Confirm you picked the right model. If LCD and OLED are
-                        mixed up, the screen can go blank until you install the
-                        correct version.
-                    </p>
+                    <dl class="dfu-callout dfu-callout-info dfu-callout-grid" id="dfuWarnSummary"></dl>
+                    <p class="dfu-type-desc" id="dfuWarnBodyPrimary"></p>
                     <p class="dfu-type-desc" id="dfuWarnBodySecondary">
                         If something goes wrong mid-update, your device may stay
                         in update mode. Don't worry, you can retry with the
                         correct file to fix it.
                     </p>
                     <p
-                        class="dfu-type-desc dfu-type-desc-caution dfu-mobile-note"
+                        class="dfu-type-desc dfu-callout dfu-callout-warn dfu-mobile-note"
                         id="dfuMobileNote"
                         hidden
                     >
                         <span class="ms-sm">phone_android</span>
-                        Bluetooth transfers on phones can be unstable. If the
-                        update fails, try again from a desktop computer.
+                        <span><strong>Mobile:</strong> Bluetooth transfers on phones can be unstable. If the
+                        update fails, try again from a desktop computer.</span>
                     </p>
                 </div>
 
-                <!-- Footers (one visible at a time) -->
-                <div class="dfu-modal-footer" id="dfuFooterConfirm">
-                    <button class="btn-labeled ghost" id="btnDfuCancelConfirm">
-                        Cancel
-                    </button>
-                    <button
-                        class="btn-labeled primary"
-                        id="btnDfuStart"
-                        disabled
-                    >
-                        <span class="ms-sm">upload</span> Start update
-                    </button>
-                </div>
-                <div class="dfu-modal-footer" id="dfuFooterWarn" hidden>
-                    <button class="btn-labeled ghost" id="btnDfuBackToConfirm">
-                        Back
-                    </button>
-                    <button
-                        class="btn-labeled danger"
-                        id="btnDfuProceed"
-                        disabled
-                    ></button>
-                </div>
-                <div class="dfu-modal-footer" id="dfuFooterProgress" hidden>
-                    <button
-                        class="btn-labeled danger"
-                        id="btnDfuCancelTransfer"
-                    >
-                        Cancel
-                    </button>
-                </div>
-                <div
-                    class="dfu-modal-footer dfu-modal-footer-cancel-confirm"
-                    id="dfuFooterCancelConfirm"
-                    hidden
-                >
-                    <div class="dfu-cancel-confirm-msg">
-                        Cancel now? Your device may stay in update mode until
-                        you retry.
+                <div class="dfu-modal-footer" id="dfuFooter">
+                    <div class="dfu-footer-row" id="dfuFooterConfirm">
+                        <button class="btn-labeled ghost" id="btnDfuCancelConfirm">
+                            Cancel
+                        </button>
+                        <button
+                            class="btn-labeled primary"
+                            id="btnDfuStart"
+                            disabled
+                        >
+                            <span class="ms-sm">upload</span> Start update
+                        </button>
                     </div>
-                    <div class="dfu-cancel-confirm-actions">
-                        <button class="btn-labeled ghost" id="btnDfuCancelKeep">
-                            Keep updating
+                    <div class="dfu-footer-row" id="dfuFooterWarn" hidden>
+                        <button class="btn-labeled ghost" id="btnDfuBackToConfirm">
+                            Back
                         </button>
                         <button
                             class="btn-labeled danger"
-                            id="btnDfuCancelConfirmYes"
+                            id="btnDfuProceed"
+                            disabled
+                        ></button>
+                    </div>
+                    <div class="dfu-footer-row" id="dfuFooterProgress" hidden>
+                        <button
+                            class="btn-labeled danger"
+                            id="btnDfuCancelTransfer"
                         >
-                            Cancel update
+                            Cancel
                         </button>
                     </div>
-                </div>
-                <div class="dfu-modal-footer" id="dfuFooterFailed" hidden>
-                    <button class="btn-labeled ghost" id="btnDfuReconnect">
-                        Back to device
-                    </button>
-                    <button
-                        class="btn-labeled ghost"
-                        id="btnDfuReboot"
-                        disabled
-                    >
-                        <span class="ms-sm">restart_alt</span> Exit update mode
-                    </button>
-                    <button
-                        class="btn-labeled ghost"
-                        id="btnDfuRetryConnect"
+                    <div
+                        class="dfu-footer-row dfu-footer-cancel-confirm"
+                        id="dfuFooterCancelConfirm"
                         hidden
                     >
-                        <span class="ms-sm">bluetooth_searching</span> Try again
-                    </button>
-                    <button class="btn-labeled primary" id="btnDfuRetry">
-                        <span class="ms-sm">replay</span> Retry
-                    </button>
-                </div>
-                <div class="dfu-modal-footer" id="dfuFooterSuccess" hidden>
-                    <button class="btn-labeled primary" id="btnDfuCloseSuccess">
-                        Close
-                    </button>
+                        <div class="dfu-cancel-confirm-msg">
+                            Cancel now? Your device may stay in update mode until
+                            you retry.
+                        </div>
+                        <div class="dfu-cancel-confirm-actions">
+                            <button class="btn-labeled ghost" id="btnDfuCancelKeep">
+                                Keep updating
+                            </button>
+                            <button
+                                class="btn-labeled danger"
+                                id="btnDfuCancelConfirmYes"
+                            >
+                                Cancel update
+                            </button>
+                        </div>
+                    </div>
+                    <div class="dfu-footer-row" id="dfuFooterFailed" hidden>
+                        <button class="btn-labeled ghost" id="btnDfuReconnect">
+                            Back to device
+                        </button>
+                        <button
+                            class="btn-labeled ghost"
+                            id="btnDfuReboot"
+                            disabled
+                        >
+                            <span class="ms-sm">restart_alt</span> Exit update mode
+                        </button>
+                    </div>
+                    <div class="dfu-footer-row" id="dfuFooterSuccess" hidden>
+                        <button class="btn-labeled primary" id="btnDfuCloseSuccess">
+                            Close
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -1588,7 +1529,7 @@
                         // name to the alphabetically-sorted list below or it
                         // will render as the literal ligature text.
                         await loadStyle(
-                            "https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400&family=IBM+Plex+Sans:wght@400;700&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,1,0&icon_names=ar_stickers,arrow_back,block,bluetooth,bluetooth_disabled,bluetooth_searching,check,check_circle,close,cloud_upload,create_new_folder,delete,download,edit,error,favorite,folder,folder_open,folder_zip,hard_drive,home,inbox,info,insert_drive_file,keyboard_arrow_down,lock,match_case,memory,mop,open_in_new,phone_android,phone_iphone,play_arrow,progress_activity,refresh,replay,restart_alt,schedule,screen_lock_portrait,stop,sync,system_update,task_alt,terminal,upload,upload_file,warning,zoom_out_map&display=swap",
+                            "https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400&family=IBM+Plex+Sans:wght@400;700&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,1,0&icon_names=ar_stickers,arrow_back,arrow_forward,block,bluetooth,bluetooth_disabled,bluetooth_searching,check,check_circle,close,cloud_upload,create_new_folder,delete,download,edit,error,favorite,folder,folder_open,folder_zip,hard_drive,home,inbox,info,insert_drive_file,keyboard_arrow_down,lock,match_case,memory,mop,open_in_new,phone_android,phone_iphone,play_arrow,progress_activity,refresh,replay,restart_alt,schedule,screen_lock_portrait,settings,stop,sync,system_update,task_alt,terminal,upload,upload_file,warning,zoom_out_map&display=swap",
                         ).catch(function (err) {
                             console.warn(
                                 "[boot] Optional font stylesheet failed:",
