@@ -369,6 +369,7 @@ const el = {
     dfuProgressSpeed: document.getElementById("dfuProgressSpeed"),
     dfuProgressPct: document.getElementById("dfuProgressPct"),
     dfuSelectingHint: document.getElementById("dfuSelectingHint"),
+    dfuEnteringDfuHint: document.getElementById("dfuEnteringDfuHint"),
     dfuReconnectHint: document.getElementById("dfuReconnectHint"),
     dfuMobileTransferNote: document.getElementById("dfuMobileTransferNote"),
     dfuStageList: document.getElementById("dfuStageList"),
@@ -376,9 +377,12 @@ const el = {
     dfuTroubleshootLinks: document.getElementById("dfuTroubleshootLinks"),
     dfuSuccessBox: document.getElementById("dfuSuccessBox"),
     dfuWarnSection: document.getElementById("dfuWarnSection"),
+    dfuFooter: document.getElementById("dfuFooter"),
     dfuFooterConfirm: document.getElementById("dfuFooterConfirm"),
     btnDfuCancelConfirm: document.getElementById("btnDfuCancelConfirm"),
     btnDfuStart: document.getElementById("btnDfuStart"),
+    dfuWarnSummary: document.getElementById("dfuWarnSummary"),
+    dfuPrepHint: document.getElementById("dfuPrepHint"),
     dfuFooterWarn: document.getElementById("dfuFooterWarn"),
     btnDfuBackToConfirm: document.getElementById("btnDfuBackToConfirm"),
     btnDfuProceed: document.getElementById("btnDfuProceed"),
@@ -390,8 +394,6 @@ const el = {
     dfuFooterFailed: document.getElementById("dfuFooterFailed"),
     btnDfuReconnect: document.getElementById("btnDfuReconnect"),
     btnDfuReboot: document.getElementById("btnDfuReboot"),
-    btnDfuRetryConnect: document.getElementById("btnDfuRetryConnect"),
-    btnDfuRetry: document.getElementById("btnDfuRetry"),
     dfuFooterSuccess: document.getElementById("dfuFooterSuccess"),
     btnDfuCloseSuccess: document.getElementById("btnDfuCloseSuccess"),
 };
@@ -462,6 +464,7 @@ const state = {
     syncSkippedFiles: [], // [{ remotePath, size }]
     syncOrphans: [], // [{ remotePath, size, kind, deletable, status }]
     syncOrphanChecked: new Set(), // Set<remotePath>
+    deviceVersion: null,
 };
 
 function showInputError(inputEl, errorEl, message) {
@@ -921,6 +924,7 @@ async function connectOrDisconnect() {
         }
         if (state.client) state.client.disconnect();
         invalidateCache();
+        state.deviceVersion = null;
         setConnState("disconnected");
         return;
     }
@@ -985,9 +989,11 @@ async function connectOrDisconnect() {
             if (ver.data.version) parts.push(ver.data.version);
             if (ver.data.bleAddress) parts.push(ver.data.bleAddress);
             el.topbarBadge.textContent = `Pixl.js${parts.length ? " · " + parts.join(" · ") : ""}`;
+            state.deviceVersion = ver.data.version || null;
             checkFirmwareVersion(ver.data.version);
         } else {
             el.topbarBadge.textContent = "Pixl.js";
+            state.deviceVersion = null;
         }
 
         const dr = await state.client.listDrives();
@@ -4415,18 +4421,36 @@ function updateDfuWarnCopy() {
     const isCustom = dfuState.firmwareType === "custom";
     const isLocalFile = dfuState.source?.type === "file";
 
-    el.dfuWarnTitle.textContent = "Almost there, one last check";
+    const rows = [];
+    if (isCustom || isLocalFile) {
+        rows.push(["File", dfuState.source?.name || "Unknown"]);
+        const detectedVariant = dfuState.variant;
+        if (detectedVariant) rows.push(["Detected model", detectedVariant]);
+        const detectedVersion = detectVersionFromName(dfuState.source?.name);
+        if (detectedVersion) rows.push(["File version", detectedVersion]);
+        if (state.deviceVersion)
+            rows.push(["Current version", state.deviceVersion]);
+    } else {
+        if (dfuState.chosenVariant)
+            rows.push(["Model", dfuState.chosenVariant]);
+        if (state.deviceVersion)
+            rows.push(["Current version", state.deviceVersion]);
+        if (dfuState.release?.tag_name)
+            rows.push(["Update to", dfuState.release.tag_name]);
+    }
+
+    el.dfuWarnSummary.innerHTML = rows
+        .map(([label, value]) => `<dt>${escapeHtml(label)}</dt><dd>${escapeHtml(value)}</dd>`)
+        .join("");
+    el.dfuWarnSummary.hidden = rows.length === 0;
 
     if (isCustom || isLocalFile) {
         el.dfuWarnBodyPrimary.textContent =
-            "Make sure this file matches your device model (LCD or OLED). Using the wrong one can leave the screen blank until you flash the correct version.";
+            "Make sure this file matches your device model (LCD or OLED). Flashing the wrong firmware can leave the screen blank until you install the correct version.";
     } else {
         el.dfuWarnBodyPrimary.textContent =
-            "Confirm you picked the right model above. If LCD and OLED are mixed up, the screen can go blank until you install the correct version.";
+            "If the selected model is wrong (LCD vs OLED), the screen can go blank until you install the correct version.";
     }
-
-    el.dfuWarnBodySecondary.textContent =
-        "If something goes wrong mid-update, your device may stay in update mode. Don't worry, you can retry with the correct file to fix it.";
 
     el.dfuMobileNote.hidden = !DFU_IS_MOBILE;
 }
@@ -4489,26 +4513,23 @@ function dfuShowFailedView(
     el.dfuFooterWarn.hidden = true;
     el.dfuFooterProgress.hidden = true;
     el.dfuFooterCancelConfirm.hidden = true;
-    el.dfuFooterFailed.hidden = false;
     el.dfuFooterSuccess.hidden = true;
     el.dfuStatusSubhead.textContent = subhead;
     el.dfuActiveIcon.className = "modal-icon-badge danger";
     el.dfuActiveIcon.querySelector(".ms").textContent = "error";
     el.dfuActiveLabel.textContent = title;
     el.dfuErrorBox.hidden = false;
-    el.dfuErrorBox.textContent = errorText;
+    el.dfuErrorBox.innerHTML = errorText;
     el.dfuTroubleshootLinks.hidden = false;
     el.dfuSuccessBox.hidden = true;
-    el.btnDfuReboot.disabled = !dfuState.dfuDevice;
-    el.btnDfuReboot.setAttribute("aria-disabled", String(!dfuState.dfuDevice));
-    el.btnDfuRetryConnect.hidden = !dfuState.pickerDismissed;
-    el.btnDfuRetry.hidden = dfuState.pickerDismissed;
+    el.btnDfuReboot.hidden = !dfuState.dfuDevice;
     const hadRealSession = !!(
         state.currentPath &&
         state.client &&
         !(state.client instanceof DevMockClient)
     );
     el.btnDfuReconnect.hidden = !hadRealSession;
+    el.dfuFooterFailed.hidden = !dfuState.dfuDevice && !hadRealSession;
 }
 
 function dfuShowSuccessView() {
@@ -4600,6 +4621,7 @@ function dfuSetStage(
     el.dfuActiveIcon.className = "modal-icon-badge primary spinning";
     el.dfuActiveIcon.querySelector(".ms").textContent = "sync";
     el.dfuSelectingHint.hidden = stageId !== "selecting";
+    el.dfuEnteringDfuHint.hidden = stageId !== "entering_dfu";
     const reconnecting = stageId === "reconnecting";
     el.dfuReconnectHint.hidden = !reconnecting;
     const transferring =
@@ -4674,9 +4696,13 @@ function renderDfuReleaseList() {
         return;
     }
     const tagName = dfuState.release.tag_name || "";
-    const releaseUrl = dfuState.release.html_url || PIXL_RELEASES_URL;
+    let releaseUrl = PIXL_RELEASES_URL;
+    try {
+        const parsed = new URL(dfuState.release.html_url);
+        if (parsed.protocol === "https:" || parsed.protocol === "http:") releaseUrl = dfuState.release.html_url;
+    } catch { /* use fallback */ }
     c.innerHTML = tagName
-        ? `<span class="dfu-release-status-text">Latest official version:</span><span class="dfu-release-tag">${escapeHtml(tagName)}</span><a class="ext-link dfu-release-link" href="${escapeHtml(releaseUrl)}" target="_blank" rel="noopener">View release notes <span class="ms-sm">open_in_new</span></a>`
+        ? `<span class="dfu-release-status-text">Latest official version:</span><span class="dfu-release-tag">${escapeHtml(tagName)}</span><a class="ext-link dfu-release-link" href="${escapeHtml(releaseUrl)}" target="_blank" rel="noopener noreferrer">View release notes <span class="ms-sm">open_in_new</span></a>`
         : "";
 }
 
@@ -4705,6 +4731,15 @@ function detectVariantFromName(name) {
         : lower.includes("_oled")
           ? "OLED"
           : null;
+}
+
+function detectVersionFromName(name) {
+    const s = (name || "").replace(/\.zip$/i, "");
+    const semver = s.match(/(\d+\.\d+\.\d+)/);
+    if (semver) return semver[1];
+    const tagged = s.match(/[_-]v?(\d{3,})/i);
+    if (tagged) return tagged[1];
+    return null;
 }
 
 function selectDfuSource(source) {
@@ -4739,6 +4774,7 @@ function updateDfuStartButton() {
     const isCustom = dfuState.firmwareType === "custom";
     const ready = !!dfuState.source && (isCustom || !!dfuState.chosenVariant);
     el.btnDfuStart.disabled = !ready;
+    el.dfuPrepHint.hidden = !ready || isCustom;
 }
 
 function updateDfuFilePickerUI() {
@@ -4797,6 +4833,7 @@ function resetDfuUi() {
     el.btnDfuCancelTransfer.disabled = false;
     el.btnDfuCancelTransfer.textContent = "Cancel";
     el.dfuSelectingHint.hidden = true;
+    el.dfuEnteringDfuHint.hidden = true;
     el.dfuReconnectHint.hidden = true;
     el.dfuMobileTransferNote.hidden = true;
     el.dfuPickedName.textContent = "";
@@ -4814,7 +4851,6 @@ function resetDfuUi() {
     el.btnDfuReboot.disabled = true;
     el.btnDfuReboot.setAttribute("aria-disabled", "true");
     el.dfuDevFailMode.value = "none";
-    el.dfuCustomDevicesDetails.open = false;
     el.btnDfuStart.disabled = true;
     updateControls();
 }
@@ -5154,14 +5190,15 @@ async function runDfuTransfer() {
             log("[DFU] Bluetooth picker dismissed.", "err");
             dfuState.phase = "failed";
             dfuState.pickerDismissed = true;
+            const retryLink = '<a href="#" class="dfu-error-action" data-dfu-retry>try again</a>';
             if (dfuState.enterDfuDone) {
                 dfuShowFailedView(
-                    "No device was selected. Your device may still be in update mode. Tap Retry and pick it from the Bluetooth list to continue.",
+                    "The Bluetooth picker was closed before a device was selected. Your device is still in update mode and waiting for a connection. Pick it from the list to " + retryLink + ".",
                     { title: "No device selected", subhead: "NOT CONNECTED" },
                 );
             } else {
                 dfuShowFailedView(
-                    "No device was selected. Tap Retry and choose your device to continue.",
+                    "The Bluetooth picker was closed before a device was selected. Make sure your device is powered on and nearby, then " + retryLink + ".",
                     { title: "No device selected", subhead: "NOT CONNECTED" },
                 );
             }
@@ -5184,10 +5221,12 @@ async function runDfuTransfer() {
                     error: err.message,
                 });
             }
+            const retryLink = '<a href="#" class="dfu-error-action" data-dfu-retry>try again</a>';
             const guidance = dfuState.enterDfuDone
-                ? " Your device may still be in update mode. Tap Retry to try again."
-                : " Tap Retry to start over.";
-            dfuShowFailedView(err.message + guidance);
+                ? " Your device may still be in update mode and waiting for a connection."
+                : "";
+            const safeMsg = escapeHtml(err.message).replace(/\.+$/, "");
+            dfuShowFailedView(safeMsg + "." + guidance + " You can " + retryLink + ".");
             updateControls();
         }
     } finally {
@@ -5363,18 +5402,15 @@ el.btnDfuReboot.addEventListener("click", () => {
     );
 });
 
-el.btnDfuRetry.addEventListener("click", async () => {
+el.dfuErrorBox.addEventListener("click", async (e) => {
+    const link = e.target.closest("[data-dfu-retry]");
+    if (!link) return;
+    e.preventDefault();
     if (dfuInProgress()) return;
     if (!dfuState.source) {
         closeDfuModal();
         return;
     }
-    await runDfuTransfer();
-});
-
-el.btnDfuRetryConnect.addEventListener("click", async () => {
-    if (dfuInProgress()) return;
-    dfuState.pickerDismissed = true; // preserved so wait is skipped
     await runDfuTransfer();
 });
 
