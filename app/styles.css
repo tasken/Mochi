@@ -375,8 +375,8 @@ button.dev:hover:not(:disabled) {
 .ios-ble-banner {
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding: 10px 16px;
+    gap: 8px;
+    padding: 8px 16px;
     background: rgba(59, 130, 246, 0.08);
     border-bottom: 1px solid rgba(59, 130, 246, 0.18);
     flex-shrink: 0;
@@ -1210,8 +1210,10 @@ details[open] .queue-warning-toggle {
 .field-error {
     color: var(--destructive);
     font-size: var(--fs-s);
-    margin: -8px 0 14px;
     min-height: 1em;
+}
+.modal-body > .field-error {
+    margin-top: -8px;
 }
 
 /* --- Buttons --- */
@@ -1505,7 +1507,7 @@ tbody tr[data-name] {
 .cell-name-inner {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 8px;
     overflow: hidden;
     min-width: 0;
 }
@@ -1827,7 +1829,7 @@ tr:focus-within .cell-actions button {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 18px 20px 0;
+    padding: 16px 24px 0;
     margin-bottom: 16px;
 }
 
@@ -1864,8 +1866,19 @@ tr:focus-within .cell-actions button {
     font-size: 18px;
 }
 
-.modal-body {
-    padding: 0 20px 20px;
+.modal-body:not([hidden]) {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 0 24px 24px;
+}
+.modal-body:has(> .modal-actions) {
+    padding-bottom: 0;
+}
+
+.modal-body > * {
+    margin-top: 0;
+    margin-bottom: 0;
 }
 
 .modal-icon-badge {
@@ -1875,7 +1888,6 @@ tr:focus-within .cell-actions button {
     display: flex;
     align-items: center;
     justify-content: center;
-    margin-bottom: 12px;
     flex-shrink: 0;
 }
 .modal-icon-badge.primary {
@@ -1903,7 +1915,6 @@ tr:focus-within .cell-actions button {
     font-weight: 600;
     color: #374151;
     line-height: 1.3;
-    margin-bottom: 6px;
 }
 
 .modal-field-label {
@@ -1911,13 +1922,11 @@ tr:focus-within .cell-actions button {
     font-size: var(--fs-s);
     font-weight: 400;
     color: #374151;
-    margin-bottom: 6px;
 }
 
 .modal-box p {
     font-size: var(--fs-md);
     color: #555;
-    margin-bottom: 14px;
     line-height: 1.5;
 }
 
@@ -1927,20 +1936,17 @@ tr:focus-within .cell-actions button {
 
 .modal-input {
     width: 100%;
-    margin-bottom: 6px;
 }
 
 .modal-helper-text {
     font-size: var(--fs-s);
     color: #9ca3af;
-    margin-bottom: 14px;
 }
 
 .modal-choice-list {
     display: flex;
     flex-direction: column;
     gap: 8px;
-    margin-bottom: 14px;
 }
 
 .modal-choice-option {
@@ -1962,7 +1968,6 @@ tr:focus-within .cell-actions button {
 }
 
 .modal-note {
-    margin: 8px 0 0;
     font-size: var(--fs-s);
     color: #666;
 }
@@ -1971,9 +1976,9 @@ tr:focus-within .cell-actions button {
     display: flex;
     gap: 8px;
     justify-content: flex-end;
-    padding-top: 16px;
+    padding: 16px 24px;
     border-top: 1px solid var(--border);
-    margin-top: 8px;
+    margin: 0 -24px;
 }
 
 /* --- Animations --- */
@@ -1995,7 +2000,7 @@ tr:focus-within .cell-actions button {
 }
 .spin {
     display: inline-block;
-    animation: spin 1s linear infinite;
+    animation: spin 1s linear infinite reverse;
 }
 
 /* --- Disconnected / connecting states --- */
@@ -2020,16 +2025,19 @@ tr:focus-within .cell-actions button {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 10px;
+    gap: 8px;
     box-shadow: var(--shadow-md);
     text-align: center;
-    max-width: 380px;
-    width: 90%;
+    width: 380px;
+    height: 314px;
+    justify-content: flex-start;
+    padding-top: 48px;
 }
 
 .main-overlay-icon-wrap {
     width: 64px;
     height: 64px;
+    flex-shrink: 0;
     border-radius: 16px;
     background: linear-gradient(135deg, #8b5cf6, #d946ef);
     display: flex;
@@ -2037,7 +2045,6 @@ tr:focus-within .cell-actions button {
     justify-content: center;
     color: #fff;
     box-shadow: 0 8px 24px rgba(139, 92, 246, 0.3);
-    margin-bottom: 4px;
 }
 
 .main-overlay-icon-wrap .ms {
@@ -2057,13 +2064,20 @@ tr:focus-within .cell-actions button {
     align-self: center;
     margin-top: 6px;
 }
+#mainOverlaySpinner:not([hidden]) {
+    width: 64px;
+    height: 64px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
 .overlay-spinner {
     width: 40px;
     height: 40px;
     border-radius: 50%;
     border: 3px solid rgba(139, 92, 246, 0.18);
     border-top-color: #8b5cf6;
-    animation: spin 0.85s linear infinite;
+    animation: spin 0.85s linear infinite reverse;
 }
 .main-overlay-card .title {
     font-weight: 700;
@@ -2320,8 +2334,9 @@ button .ms,
     }
 
     .main-overlay-card {
-        width: 100%;
-        max-width: 28rem;
+        width: 90%;
+        max-width: 380px;
+        height: auto;
     }
 
     /* Topbar: brand + badge stay visible; hide text labels and drive chip */
@@ -2460,8 +2475,8 @@ button .ms,
         white-space: normal;
         border-radius: 16px;
         font-size: var(--fs-s);
-        padding: 10px 14px 10px 10px;
-        gap: 10px;
+        padding: 8px 16px 8px 8px;
+        gap: 8px;
     }
     .toast-icon {
         width: 24px;
@@ -2783,7 +2798,7 @@ button .ms,
     border-radius: 50%;
     border: 3px solid rgba(156, 163, 175, 0.25);
     border-top-color: #9ca3af;
-    animation: spin 0.85s linear infinite;
+    animation: spin 0.85s linear infinite reverse;
 }
 
 .details-hero-band[hidden] {
@@ -3004,7 +3019,7 @@ button .ms,
         color: var(--violet);
     }
     .ptr-indicator.ptr-loading .ptr-icon {
-        animation: spin 0.7s linear infinite;
+        animation: spin 0.7s linear infinite reverse;
         color: var(--violet);
     }
     .ptr-icon {
@@ -3046,7 +3061,7 @@ button .ms,
     transform: translateY(-6px);
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 8px;
     width: max-content;
     max-width: min(480px, calc(100vw - 32px));
     box-sizing: border-box;
@@ -3158,12 +3173,9 @@ button .ms,
 .dfu-modal-body:not([hidden]) {
     overflow-y: auto;
     flex: 1;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
     animation: dfu-section-enter 220ms ease-out backwards;
 }
-.dfu-modal-footer:not([hidden]) {
+.dfu-footer-row:not([hidden]) {
     animation: dfu-section-enter 220ms ease-out backwards;
 }
 @keyframes dfu-section-enter {
@@ -3178,13 +3190,9 @@ button .ms,
 }
 @media (prefers-reduced-motion: reduce) {
     .dfu-modal-body:not([hidden]),
-    .dfu-modal-footer:not([hidden]) {
+    .dfu-footer-row:not([hidden]) {
         animation: none;
     }
-}
-
-.dfu-modal-body .modal-body-title {
-    margin-bottom: 0;
 }
 
 .dfu-modal-body .modal-body-title + .dfu-intro,
@@ -3192,25 +3200,27 @@ button .ms,
     margin-top: -8px;
 }
 
-.dfu-modal-body .modal-icon-badge + .modal-body-title {
-    margin-top: -2px;
+.dfu-modal-footer {
+    flex-shrink: 0;
 }
-
-.dfu-modal-footer:not([hidden]) {
+.dfu-modal-footer:has(.dfu-footer-row:not([hidden])) {
+    border-top: 1px solid var(--border);
+}
+.dfu-footer-row:not([hidden]) {
     display: flex;
     align-items: center;
     justify-content: flex-end;
     gap: 8px;
-    padding: 14px 20px 16px;
-    border-top: 1px solid var(--border);
-    flex-shrink: 0;
+    padding: 16px 24px;
 }
-.dfu-modal-footer-cancel-confirm:not([hidden]) {
+.dfu-modal-footer:has(.dfu-footer-cancel-confirm:not([hidden])) {
+    border-top-color: #fed7aa;
+}
+.dfu-footer-cancel-confirm:not([hidden]) {
     flex-direction: column;
     align-items: stretch;
-    gap: 12px;
+    gap: 16px;
     background: #fff7ed;
-    border-top-color: #fed7aa;
 }
 .dfu-cancel-confirm-msg {
     font-size: var(--fs-s);
@@ -3225,26 +3235,23 @@ button .ms,
 
 .dfu-mobile-note:not([hidden]) {
     display: flex;
-    margin-top: 8px;
 }
 
 .dfu-mobile-note .ms-sm {
-    margin-top: 1px;
     flex-shrink: 0;
 }
 
 .dfu-mobile-transfer-note:not([hidden]) {
     display: flex;
     align-items: baseline;
-    gap: 6px;
+    gap: 8px;
     font-size: var(--fs-sm);
     color: var(--muted-foreground);
-    margin-top: 4px;
 }
 
 .dfu-custom-devices {
     display: flex;
-    flex-wrap: wrap;
+    flex-direction: column;
     gap: 6px;
 }
 
@@ -3263,67 +3270,50 @@ button .ms,
     margin: 0;
 }
 
-.dfu-type-desc-caution:not([hidden]) {
+/* Callout — shared base for info/warning boxes in DFU flow */
+.dfu-callout:not([hidden]) {
     display: flex;
     align-items: flex-start;
-    gap: 6px;
-    color: #9a3412;
-    background: #fff7ed;
-    border: 1px solid #fed7aa;
+    gap: 8px;
     border-radius: calc(var(--radius) - 2px);
-    padding: 8px 10px;
+    padding: 8px;
+    font-size: var(--fs-s);
+    line-height: 1.5;
+    margin: 0;
 }
 
-.dfu-type-desc-caution .ms-sm {
-    color: #d97706;
-    margin-top: 1px;
+.dfu-callout > .ms-sm:first-child {
     flex-shrink: 0;
-}
-
-.dfu-custom-devices-details {
-    border: 1px solid var(--border);
-    border-radius: calc(var(--radius) - 2px);
-    background: #fafafa;
-}
-
-.dfu-custom-devices-summary {
-    list-style: none;
-    cursor: pointer;
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-    padding: 8px 10px;
+    height: calc(var(--fs-s) * 1.5);
+}
+
+.dfu-callout-info {
+    background: #ede9fe;
+    border: 1px solid #c4b5fd;
+    color: #5b21b6;
+}
+
+.dfu-callout-warn {
+    background: #fff7ed;
+    border: 1px solid #fed7aa;
+    color: #9a3412;
+}
+
+.dfu-callout-warn > .ms-sm:first-child {
+    color: #d97706;
+}
+
+.dfu-custom-devices-label {
     font-size: var(--fs-xs);
-    font-weight: 600;
     color: var(--muted-foreground);
 }
 
-.dfu-custom-devices-summary::-webkit-details-marker {
-    display: none;
-}
-
-.dfu-custom-devices-summary::after {
-    content: "keyboard_arrow_down";
-    font-family: "Material Symbols Rounded";
-    font-size: 16px;
-    line-height: 1;
-    color: #9ca3af;
-    transition: transform 0.12s ease;
-}
-
-.dfu-custom-devices-summary:focus-visible {
-    outline: 2px solid #7c3aed;
-    outline-offset: 1px;
-    border-radius: 6px;
-}
-
-.dfu-custom-devices-details[open] .dfu-custom-devices-summary::after {
-    transform: rotate(180deg);
-}
-
-.dfu-custom-devices-details .dfu-custom-devices {
-    padding: 0 10px 10px;
+.dfu-custom-devices-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
 }
 .dfu-device-chip {
     background: var(--secondary);
@@ -3373,14 +3363,14 @@ span.dfu-device-chip {
 .dfu-selector-panel {
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 8px;
 }
 
 /* Release source row */
 .dfu-release-status-row {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 8px;
     padding-top: 2px;
     min-height: 28px;
 }
@@ -3403,7 +3393,7 @@ span.dfu-device-chip {
 }
 
 .dfu-release-spinner {
-    animation: dfu-spin 0.8s linear infinite;
+    animation: spin 0.8s linear infinite reverse;
     font-size: 16px;
 }
 
@@ -3481,7 +3471,7 @@ span.dfu-device-chip {
 .dfu-file-divider {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 8px;
     font-size: var(--fs-xs);
     color: var(--muted-foreground);
 }
@@ -3496,7 +3486,7 @@ span.dfu-device-chip {
 .dfu-variant-grid {
     display: flex;
     flex-wrap: wrap;
-    gap: 10px;
+    gap: 8px;
 }
 
 .dfu-variant-grid > .dfu-variant-card {
@@ -3598,7 +3588,7 @@ span.dfu-device-chip {
     .dfu-device-selector-grid {
         display: grid;
         grid-template-columns: 1fr 1fr;
-        gap: 10px;
+        gap: 8px;
     }
 
     .dfu-device-selector-grid > .dfu-variant-card {
@@ -3633,34 +3623,42 @@ span.dfu-device-chip {
     font-size: var(--fs-base);
 }
 
-/* badge used inline inside the row — cancel the vertical margin */
-.dfu-active-stage .modal-icon-badge {
-    margin-bottom: 0;
-}
-/* badge used as a section header inside the flex column body — gap handles spacing */
-.dfu-modal-body .modal-icon-badge {
-    margin-bottom: 0;
-}
 .dfu-active-stage .modal-icon-badge.spinning .ms {
-    animation: dfu-spin 1s linear infinite;
+    animation: spin 1s linear infinite reverse;
 }
 
-@keyframes dfu-spin {
-    to {
-        transform: rotate(360deg);
-    }
-}
 
-/* Hint box — shown during specific stages (e.g. selecting DfuTarg) */
-.dfu-hint-box:not([hidden]) {
+/* Block-level callout variant (no leading icon, text flows as paragraph) */
+.dfu-callout-block:not([hidden]) {
     display: block;
-    background: #ede9fe;
-    border: 1px solid #c4b5fd;
-    border-radius: calc(var(--radius) - 2px);
-    padding: 10px 12px;
-    font-size: var(--fs-s);
-    color: #5b21b6;
-    line-height: 1.5;
+}
+
+/* Prep hint — confirm screen */
+.dfu-prep-hint {
+    margin: 0;
+}
+
+.dfu-menu-path .ms-sm {
+    font-size: 14px;
+    vertical-align: -2px;
+    opacity: 0.7;
+}
+
+/* Callout grid variant — key/value pairs instead of icon + text */
+.dfu-callout-grid:not([hidden]) {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 8px 16px;
+}
+
+.dfu-callout-grid dt {
+    font-weight: 500;
+    opacity: 0.7;
+}
+
+.dfu-callout-grid dd {
+    margin: 0;
+    font-weight: 600;
 }
 
 /* Progress bar */
@@ -3709,7 +3707,7 @@ span.dfu-device-chip {
 .dfu-stage-item {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 8px;
     font-size: var(--fs-s);
 }
 
@@ -3738,7 +3736,7 @@ span.dfu-device-chip {
 }
 .dfu-stage-item.active .dfu-stage-dot .ms {
     font-size: 11px;
-    animation: dfu-spin 1s linear infinite;
+    animation: spin 1s linear infinite reverse;
 }
 .dfu-stage-item.pending .dfu-stage-dot::after {
     content: "";
@@ -3826,7 +3824,7 @@ span.dfu-device-chip {
 /* Result boxes */
 .dfu-result-box {
     border-radius: calc(var(--radius) - 2px);
-    padding: 12px;
+    padding: 8px;
     font-size: var(--fs-s);
 }
 .dfu-result-title {
@@ -3847,6 +3845,13 @@ span.dfu-device-chip {
     margin: 4px 0 0;
     line-height: 1.45;
 }
+.dfu-error-action {
+    color: inherit;
+    font-weight: 700;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    cursor: pointer;
+}
 
 .dfu-troubleshoot:not([hidden]) {
     display: block;
@@ -3856,7 +3861,8 @@ span.dfu-device-chip {
 }
 .dfu-troubleshoot a {
     color: inherit;
-    text-decoration: none;
+    text-decoration: underline;
+    text-underline-offset: 2px;
 }
 .dfu-troubleshoot a:hover {
     opacity: 0.8;
@@ -3864,8 +3870,7 @@ span.dfu-device-chip {
 
 .dfu-dev-panel:not([hidden]) {
     display: block;
-    margin-top: 16px;
-    padding: 10px 12px 12px;
+    padding: 8px;
     border: 1px dashed rgba(245, 158, 11, 0.55);
     border-radius: 8px;
     background: rgba(245, 158, 11, 0.06);
