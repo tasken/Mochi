@@ -13,6 +13,14 @@ const FORMAT_TIMEOUT_MS = 60000;
 // through one FILE_READ command) while still bounding runaway reassembly.
 const MAX_RESPONSE_BYTES = 1024 * 1024;
 
+// MTU probe: 0x70 is not handled by any firmware; the default handler echoes
+// it back with status 255 immediately. A response proves a frame of that size
+// fits the negotiated ATT MTU. Ladder: 242 needs MTU >= 250 (firmware max),
+// 177 needs MTU >= 185 (common macOS value), 15 fits the BLE minimum (23).
+const PROBE_CMD = 0x70;
+const PROBE_TIMEOUT_MS = 3000;
+const CHUNK_SIZE_LADDER = [242, 177, 15];
+
 export const NUS_SERVICE = NUS_SERVICE_UUID;
 export const MAX_FILE_NAME_BYTES = 47;
 const MAX_FILE_PATH_BYTES = 63;
@@ -168,6 +176,7 @@ export class PixlToolsClient {
         this.chunking = false;
         this.rxParts = [];
         this.rxBytes = 0;
+        this.maxChunkSize = CHUNK_SIZE_LADDER[0];
         this.createdFolders = new Set();
         this.folderCache = new Map();
         this._pendingTimer = null;
@@ -237,15 +246,38 @@ export class PixlToolsClient {
         this.createdFolders.clear();
         this._log(`Connected to ${device.name || "BLE device"}.`);
 
-        // Stale handle cleanup: close any dangling file handle from a prior session.
-        // The device returns an error if no file was open; suppress that log entry.
+        // Connection housekeeping, with protocol-log noise suppressed: the
+        // stale-handle close errors when no file was open, and the MTU probe
+        // intentionally elicits an unknown-command error response.
         const savedLog = this._log;
         this._log = () => {};
         try {
+            // Close any dangling file handle from a prior session.
             await this._sendCommand(0x13, Uint8Array.of(0));
+            await this._negotiateChunkSize();
         } finally {
             this._log = savedLog;
         }
+        this._log(`Max write chunk: ${this.maxChunkSize}B`);
+    }
+
+    async _negotiateChunkSize() {
+        for (const chunk of CHUNK_SIZE_LADDER) {
+            try {
+                // +1 mirrors the fileId byte of FILE_WRITE, so the probed
+                // frame is exactly as large as a real upload frame.
+                await this._sendCommand(
+                    PROBE_CMD,
+                    new Uint8Array(chunk + 1),
+                    PROBE_TIMEOUT_MS,
+                );
+                this.maxChunkSize = chunk;
+                return;
+            } catch (_) {
+                // Frame too large for this link's MTU — try the next size down.
+            }
+        }
+        this.maxChunkSize = CHUNK_SIZE_LADDER[CHUNK_SIZE_LADDER.length - 1];
     }
 
     disconnect() {
@@ -574,8 +606,9 @@ export class PixlToolsClient {
         file,
         onProgress,
         abortSignal,
-        chunkSize = 242,
+        chunkSize = null,
     ) {
+        const effectiveChunkSize = chunkSize ?? this.maxChunkSize;
         validateRemotePath(remotePath, "file");
         const openRes = await this.openFile(remotePath, "w");
         if (!openRes.ok) throw new Error(openRes.error);
@@ -589,7 +622,7 @@ export class PixlToolsClient {
             while (offset < file.size) {
                 if (abortSignal && abortSignal.aborted)
                     throw new Error("Upload aborted by user.");
-                const end = Math.min(offset + chunkSize, file.size);
+                const end = Math.min(offset + effectiveChunkSize, file.size);
                 const chunk = new Uint8Array(
                     await file.slice(offset, end).arrayBuffer(),
                 );
