@@ -622,6 +622,24 @@ export class PixlToolsClient {
         return this.queue;
     }
 
+    _writeFrame(frame) {
+        const c = this.txChar;
+        // Write-without-response skips the redundant ATT-level ack; the
+        // protocol's response notification is the real confirmation. The link
+        // layer still guarantees delivery and ordering.
+        if (
+            c.properties &&
+            c.properties.writeWithoutResponse &&
+            typeof c.writeValueWithoutResponse === "function"
+        ) {
+            return c.writeValueWithoutResponse(frame);
+        }
+        if (typeof c.writeValueWithResponse === "function") {
+            return c.writeValueWithResponse(frame);
+        }
+        return c.writeValue(frame);
+    }
+
     _performCommand(cmd, payload, cmdName, timeoutMs) {
         if (!this.txChar) return Promise.reject(new Error("Not connected."));
         this._log(
@@ -659,11 +677,7 @@ export class PixlToolsClient {
             frame[2] = 0;
             frame[3] = 0;
             frame.set(payload, FRAME_HEADER_SIZE);
-            const write =
-                typeof this.txChar.writeValueWithResponse === "function"
-                    ? this.txChar.writeValueWithResponse(frame)
-                    : this.txChar.writeValue(frame);
-            write
+            this._writeFrame(frame)
                 .then(() => {
                     if (this.pending !== pendingRef) return;
                     pendingRef.armTimer();
