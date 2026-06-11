@@ -9,6 +9,9 @@ const FRAME_HEADER_SIZE = 4;
 const COMMAND_TIMEOUT_MS = 15000;
 // Formatting an 8 MB LFS drive touches every block; give it a bigger budget.
 const FORMAT_TIMEOUT_MS = 60000;
+// Reassembly cap for a single chunked response. Generous (full files stream
+// through one FILE_READ command) while still bounding runaway reassembly.
+const MAX_RESPONSE_BYTES = 1024 * 1024;
 
 export const NUS_SERVICE = NUS_SERVICE_UUID;
 export const MAX_FILE_NAME_BYTES = 47;
@@ -164,6 +167,7 @@ export class PixlToolsClient {
         this.pending = null;
         this.chunking = false;
         this.rxParts = [];
+        this.rxBytes = 0;
         this.createdFolders = new Set();
         this.folderCache = new Map();
         this._pendingTimer = null;
@@ -280,6 +284,7 @@ export class PixlToolsClient {
         this.queue = Promise.resolve();
         this.chunking = false;
         this.rxParts = [];
+        this.rxBytes = 0;
         this.createdFolders.clear();
         this.folderCache.clear();
     }
@@ -632,6 +637,7 @@ export class PixlToolsClient {
                 // does not inherit stale reassembly state.
                 this.chunking = false;
                 this.rxParts = [];
+                this.rxBytes = 0;
                 // Reset the queue so subsequent commands are not poisoned by this
                 // rejection propagating through the chain. We intentionally do NOT
                 // call _resetTransport here — the GATT connection may still be live.
@@ -686,17 +692,19 @@ export class PixlToolsClient {
             if (hasMore) {
                 if (!this.chunking) {
                     this.rxParts = [incoming];
+                    this.rxBytes = incoming.length;
                     this.chunking = true;
                 } else {
-                    if (this.rxParts.length > 64) {
+                    if (this.rxBytes + incoming.length > MAX_RESPONSE_BYTES) {
                         // Guard against runaway reassembly from duplicate/out-of-order packets.
                         this.chunking = false;
                         this.rxParts = [];
+                        this.rxBytes = 0;
                         clearTimeout(this._pendingTimer);
                         this._pendingTimer = null;
                         if (this.pending) {
                             const err = new Error(
-                                "RX overflow: too many chunks for a single response",
+                                `RX overflow: response exceeds ${MAX_RESPONSE_BYTES} bytes`,
                             );
                             console.error("[BLE]", err.message);
                             // Reset the queue chain before rejecting, for the same reason
@@ -709,6 +717,7 @@ export class PixlToolsClient {
                         return;
                     }
                     this.rxParts.push(incoming.slice(FRAME_HEADER_SIZE));
+                    this.rxBytes += incoming.length - FRAME_HEADER_SIZE;
                 }
                 if (this.pending && this.pending.armTimer) this.pending.armTimer();
                 return;
@@ -719,6 +728,7 @@ export class PixlToolsClient {
                 frame = concatBytes(...this.rxParts);
                 this.rxParts = [];
                 this.chunking = false;
+                this.rxBytes = 0;
             }
             const response = {
                 cmd: frame[0],
@@ -762,6 +772,7 @@ export class PixlToolsClient {
             }
             this.chunking = false;
             this.rxParts = [];
+            this.rxBytes = 0;
         }
     }
 }
