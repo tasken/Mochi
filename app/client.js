@@ -6,6 +6,10 @@ const NUS_CHAR_RX_UUID = "6e400003-b5a3-f393-e0a9-e50e24dcca9e";
 
 const FRAME_HEADER_SIZE = 4;
 
+const COMMAND_TIMEOUT_MS = 15000;
+// Formatting an 8 MB LFS drive touches every block; give it a bigger budget.
+const FORMAT_TIMEOUT_MS = 60000;
+
 export const NUS_SERVICE = NUS_SERVICE_UUID;
 export const MAX_FILE_NAME_BYTES = 47;
 const MAX_FILE_PATH_BYTES = 63;
@@ -365,7 +369,7 @@ export class PixlToolsClient {
 
     async formatDrive(label) {
         const payload = Uint8Array.of(label.charCodeAt(0));
-        const r = await this._sendCommand(0x11, payload);
+        const r = await this._sendCommand(0x11, payload, FORMAT_TIMEOUT_MS);
         if (r.status !== 0)
             return { ok: false, error: this._vfsError(r.status), data: null };
         return { ok: true, error: null, data: null };
@@ -601,9 +605,9 @@ export class PixlToolsClient {
         return VFS_ERRORS[signed] || `Unknown error (status ${signed})`;
     }
 
-    _sendCommand(cmd, payload = new Uint8Array()) {
+    _sendCommand(cmd, payload = new Uint8Array(), timeoutMs = COMMAND_TIMEOUT_MS) {
         const cmdName = CMD_NAMES[cmd] || `0x${cmd.toString(16)}`;
-        const run = () => this._performCommand(cmd, payload, cmdName);
+        const run = () => this._performCommand(cmd, payload, cmdName, timeoutMs);
         this.queue = this.queue
             .catch((err) => {
                 if (!this.txChar) return;
@@ -613,13 +617,36 @@ export class PixlToolsClient {
         return this.queue;
     }
 
-    _performCommand(cmd, payload, cmdName) {
+    _performCommand(cmd, payload, cmdName, timeoutMs) {
         if (!this.txChar) return Promise.reject(new Error("Not connected."));
         this._log(
             `→ ${cmdName}${payload.length > 0 ? ` (${payload.length}B)` : ""}`,
         );
         return new Promise((resolve, reject) => {
-            this.pending = { resolve, reject, cmd };
+            const pendingRef = { resolve, reject, cmd };
+            pendingRef.onTimeout = () => {
+                if (this.pending !== pendingRef) return;
+                this.pending = null;
+                this._pendingTimer = null;
+                // Drop any half-assembled chunked response so the next command
+                // does not inherit stale reassembly state.
+                this.chunking = false;
+                this.rxParts = [];
+                // Reset the queue so subsequent commands are not poisoned by this
+                // rejection propagating through the chain. We intentionally do NOT
+                // call _resetTransport here — the GATT connection may still be live.
+                this.queue = Promise.resolve();
+                const err = new Error(`Command timed out: ${cmdName}`);
+                console.error("[BLE]", err.message);
+                reject(err);
+            };
+            // The timeout means "no progress for timeoutMs", not "not finished in
+            // timeoutMs": _onNotification re-arms it on every received chunk.
+            pendingRef.armTimer = () => {
+                clearTimeout(this._pendingTimer);
+                this._pendingTimer = setTimeout(pendingRef.onTimeout, timeoutMs);
+            };
+            this.pending = pendingRef;
             const frame = new Uint8Array(FRAME_HEADER_SIZE + payload.length);
             frame[0] = cmd;
             frame[1] = 0;
@@ -632,26 +659,11 @@ export class PixlToolsClient {
                     : this.txChar.writeValue(frame);
             write
                 .then(() => {
-                    if (!this.pending) return;
-                    const pendingRef = this.pending;
-                    this._pendingTimer = setTimeout(() => {
-                        if (this.pending === pendingRef) {
-                            this.pending = null;
-                            this._pendingTimer = null;
-                            // Reset the queue so subsequent commands are not poisoned by this
-                            // rejection propagating through the chain. We intentionally do NOT
-                            // call _resetTransport here — the GATT connection may still be live.
-                            this.queue = Promise.resolve();
-                            const err = new Error(
-                                `Command timed out: ${cmdName}`,
-                            );
-                            console.error("[BLE]", err.message);
-                            reject(err);
-                        }
-                    }, 15000);
+                    if (this.pending !== pendingRef) return;
+                    pendingRef.armTimer();
                 })
                 .catch((err) => {
-                    this.pending = null;
+                    if (this.pending === pendingRef) this.pending = null;
                     console.error(
                         "[BLE]",
                         `Write failed (${cmdName}):`,
@@ -698,6 +710,7 @@ export class PixlToolsClient {
                     }
                     this.rxParts.push(incoming.slice(FRAME_HEADER_SIZE));
                 }
+                if (this.pending && this.pending.armTimer) this.pending.armTimer();
                 return;
             }
             let frame = incoming;
