@@ -195,6 +195,9 @@ const el = {
     topbarDrive: document.getElementById("topbarDrive"),
     topbarDriveInfo: document.getElementById("topbarDriveInfo"),
     topbarActionSep: document.getElementById("topbarActionSep"),
+    moreActionsWrap: document.getElementById("moreActionsWrap"),
+    btnMoreActions: document.getElementById("btnMoreActions"),
+    moreActionsMenu: document.getElementById("moreActionsMenu"),
     btnFormat: document.getElementById("btnFormat"),
     btnRefresh: document.getElementById("btnRefresh"),
     btnNewFolder: document.getElementById("btnNewFolder"),
@@ -668,11 +671,9 @@ function setConnState(newState) {
         el.topbarBadge,
         el.topbarDrive,
         el.topbarActionSep,
-        el.btnFormat,
+        el.btnMoreActions,
         el.btnRefresh,
         el.btnNewFolder,
-        el.btnNormalize,
-        el.btnUpdateFirmware,
         el.btnLogToggle,
         el.btnSheetInfo,
         el.btnSheetUpload,
@@ -686,6 +687,7 @@ function setConnState(newState) {
 
     if (disconnected) {
         el.dfuUpdateDot.hidden = true;
+        closeMoreActionsMenu();
         clearToasts({ keepErrors: true });
         closeSheet();
         closeDetailsSheet();
@@ -1348,6 +1350,30 @@ el.btnInputOk.addEventListener("click", () => {
     r?.(raw.trim());
 });
 
+// === More Actions Menu ===
+
+function closeMoreActionsMenu() {
+    el.moreActionsMenu.hidden = true;
+    el.btnMoreActions.setAttribute("aria-expanded", "false");
+}
+
+el.btnMoreActions.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const opening = el.moreActionsMenu.hidden;
+    el.moreActionsMenu.hidden = !opening;
+    el.btnMoreActions.setAttribute("aria-expanded", String(opening));
+});
+
+el.moreActionsMenu.addEventListener("click", (e) => {
+    if (e.target.closest("button")) closeMoreActionsMenu();
+});
+
+document.addEventListener("click", (e) => {
+    if (!el.moreActionsMenu.hidden && !el.moreActionsWrap.contains(e.target)) {
+        closeMoreActionsMenu();
+    }
+});
+
 // === Format drive ===
 
 el.btnFormat.addEventListener("click", async () => {
@@ -1392,13 +1418,19 @@ el.btnFormat.addEventListener("click", async () => {
 // Escape key — close surfaces from most to least prominent
 document.addEventListener("keydown", (e) => {
     if (e.key !== "Escape") return;
-    // 1. Image lightbox
+    // 1. More actions menu
+    if (!el.moreActionsMenu.hidden) {
+        e.preventDefault();
+        closeMoreActionsMenu();
+        return;
+    }
+    // 2. Image lightbox
     if (!el.imgLightbox.hidden) {
         e.preventDefault();
         closeLightbox();
         return;
     }
-    // 2. Open modals — use the stack so the topmost is closed, not the first in DOM order.
+    // 3. Open modals — use the stack so the topmost is closed, not the first in DOM order.
     const openModalEl =
         _openModalStack.length > 0
             ? _openModalStack[_openModalStack.length - 1].modalEl
@@ -1412,13 +1444,13 @@ document.addEventListener("keydown", (e) => {
         closeModal(openModalEl);
         return;
     }
-    // 3. Log sheet
+    // 4. Log sheet
     if (el.logOverlay.classList.contains("open")) {
         e.preventDefault();
         closeLogSheet();
         return;
     }
-    // 4. Details sheet (mobile) or details panel (desktop)
+    // 5. Details sheet (mobile) or details panel (desktop)
     if (el.detailsSheetContainer.classList.contains("open")) {
         e.preventDefault();
         setPanelState("folder");
@@ -1430,13 +1462,13 @@ document.addEventListener("keydown", (e) => {
         setPanelState("folder");
         return;
     }
-    // 5. Search
+    // 6. Search
     if (state.searchActive) {
         e.preventDefault();
         exitSearchMode();
         return;
     }
-    // 6. Upload panel (desktop — simulate close button if not disabled)
+    // 7. Upload panel (desktop — simulate close button if not disabled)
     if (
         !isMobileViewport() &&
         state.panelMode === "upload" &&
@@ -1446,7 +1478,7 @@ document.addEventListener("keydown", (e) => {
         el.btnUploadClose.click();
         return;
     }
-    // 7. Context sheet (mobile)
+    // 8. Context sheet (mobile)
     if (el.sheetContainer.classList.contains("open")) {
         e.preventDefault();
         closeSheet();
