@@ -473,6 +473,7 @@ const state = {
     searchActive: false,
     searchScanning: false,
     searchResults: [], // [{ name, type, size, parentPath }]
+    searchSelected: new Set(), // Set of entry object refs from searchResults — not name strings, since names can collide across folders
     searchQuery: "",
     searchFoldersScanned: 0,
     activeSearchId: 0, // cancellation token for the recursive search walk
@@ -691,6 +692,7 @@ function setConnState(newState) {
         state.searchActive = false;
         state.searchScanning = false;
         state.searchResults = [];
+        state.searchSelected.clear();
         clearTimeout(_searchDebounceTimer);
         el.selectionBar.classList.remove("is-searching");
         el.txtSearch.value = "";
@@ -2001,19 +2003,33 @@ function renderSearchResults() {
     const rows = state.searchResults.map((entry) => {
         const isDir = entry.type === "DIR";
         const size = isDir ? "—" : formatBytes(entry.size);
+        const isSelected = state.searchSelected.has(entry);
+        const isPanelActive = state.drawerEntry === entry;
         const iconHtml = isDir
             ? `<span class="cell-name-icon folder"><span class="ms-sm">folder</span></span>`
             : `<span class="cell-name-icon file"><span class="ms-sm">insert_drive_file</span></span>`;
+        const classes = [
+            isPanelActive ? "panel-active" : "",
+            isSelected ? "selected" : "",
+        ]
+            .filter(Boolean)
+            .join(" ");
         return (
-            `<tr data-name="${escapeHtml(entry.name)}" data-parent-path="${escapeHtml(entry.parentPath)}">` +
-            `<td class="cell-check"></td>` +
+            `<tr data-name="${escapeHtml(entry.name)}" data-parent-path="${escapeHtml(entry.parentPath)}"${classes ? ` class="${classes}"` : ""}>` +
+            `<td class="cell-check"><input type="checkbox"${isSelected ? " checked" : ""}></td>` +
             `<td class="cell-name"><span class="cell-name-inner">${iconHtml}` +
             `<div class="cell-name-text-container">` +
             `<span class="cell-name-title">${escapeHtml(entry.name)}</span>` +
             `<span class="cell-name-subtitle">${escapeHtml(formatPathForUi(entry.parentPath))}</span>` +
             `</div></span></td>` +
             `<td class="cell-size">${size}</td>` +
-            `<td class="cell-actions"></td>` +
+            `<td class="cell-actions">` +
+            (!isDir
+                ? `<button class="btn-icon ghost" data-action="download" title="Download"><span class="ms-sm">download</span></button>`
+                : "") +
+            `<button class="btn-icon ghost" data-action="rename" title="Rename"><span class="ms-sm">edit</span></button>` +
+            `<button class="btn-icon ghost" data-action="delete" title="Delete"><span class="ms-sm">delete</span></button>` +
+            `</td>` +
             `</tr>`
         );
     });
@@ -2025,6 +2041,7 @@ function renderSearchResults() {
     }
 
     el.fileTableBody.innerHTML = rows.join("");
+    updateSelectionBar();
 }
 
 // === Navigation Breadcrumb ===
@@ -2077,6 +2094,22 @@ function renderBreadcrumb(path) {
 // === Selection Bar ===
 
 function updateSelectionBar() {
+    if (state.searchActive) {
+        const count = state.searchSelected.size;
+        const hasSelection = count > 0;
+        el.selectionBar.classList.toggle("has-selection", hasSelection);
+        el.selectionCount.textContent = `${count} selected`;
+        el.checkAll.checked =
+            state.searchResults.length > 0 &&
+            count === state.searchResults.length;
+        el.checkAll.indeterminate =
+            hasSelection && count < state.searchResults.length;
+        const fileCount = [...state.searchSelected].filter(
+            (e) => e.type === "FILE",
+        ).length;
+        el.btnDownloadSelected.hidden = fileCount === 0;
+        return;
+    }
     const count = state.selectedNames.size;
     const hasSelection = count > 0;
     el.selectionBar.classList.toggle("has-selection", hasSelection);
@@ -2111,10 +2144,60 @@ el.fileTableBody.addEventListener("click", async (e) => {
             (en) => en.name === name && en.parentPath === parentPath,
         );
         if (!entry) return;
-        exitSearchMode();
-        await browseFolder(entry.parentPath);
-        state.selectedNames.add(entry.name);
-        renderFileTable();
+
+        const checkbox = e.target.closest("input[type=checkbox]");
+        if (checkbox) {
+            if (checkbox.checked) {
+                state.searchSelected.add(entry);
+            } else {
+                state.searchSelected.delete(entry);
+            }
+            row.classList.toggle("selected", checkbox.checked);
+            updateSelectionBar();
+            return;
+        }
+
+        const actionBtn = e.target.closest(".cell-actions button[data-action]");
+        if (actionBtn) {
+            if (actionBtn.dataset.action === "rename") {
+                openRenameModal(entry, entry.parentPath, (newName) => {
+                    entry.name = newName;
+                    renderFileTable();
+                });
+            } else if (actionBtn.dataset.action === "delete") {
+                const confirmed = await showConfirmModal({
+                    title: "Delete",
+                    badge: "danger",
+                    icon: "delete",
+                    heading: `Delete "${entry.name}"?`,
+                    message:
+                        "This removes it from device storage permanently. This action can't be undone.",
+                    okLabel: "Delete",
+                    okClass: "danger",
+                });
+                if (confirmed) await doDeleteSearchResults([entry]);
+            } else if (actionBtn.dataset.action === "download") {
+                await downloadEntries([
+                    {
+                        name: entry.name,
+                        path: joinChildPath(entry.parentPath, entry.name),
+                    },
+                ]);
+            }
+            return;
+        }
+
+        // Click anywhere on the row outside the checkbox/action buttons —
+        // navigate into folders (exiting search), open file details in
+        // place otherwise (per the design: only folder navigation leaves
+        // search; everything else stays).
+        if (entry.type === "DIR") {
+            exitSearchMode();
+            browseFolder(joinChildPath(entry.parentPath, entry.name));
+        } else {
+            setPanelState("file", entry);
+            if (isMobileViewport()) openDetailsSheet();
+        }
         return;
     }
 
@@ -2137,7 +2220,7 @@ el.fileTableBody.addEventListener("click", async (e) => {
     const actionBtn = e.target.closest(".cell-actions button[data-action]");
     if (actionBtn) {
         if (actionBtn.dataset.action === "rename") {
-            openRenameModal(entry.name);
+            openRenameModal(entry);
         } else if (actionBtn.dataset.action === "delete") {
             state.selectedNames.clear();
             state.selectedNames.add(entry.name);
@@ -2197,6 +2280,15 @@ el.fileTableBody.addEventListener("click", async (e) => {
 // Check-all header checkbox
 el.checkAll.addEventListener("change", () => {
     const checked = el.checkAll.checked;
+    if (state.searchActive) {
+        state.searchSelected.clear();
+        if (checked) {
+            for (const entry of state.searchResults) state.searchSelected.add(entry);
+        }
+        applySelectionToRows(checked);
+        updateSelectionBar();
+        return;
+    }
     state.selectedNames.clear();
     if (checked) {
         for (const entry of state.entries) state.selectedNames.add(entry.name);
@@ -2206,7 +2298,9 @@ el.checkAll.addEventListener("change", () => {
 });
 
 el.btnDeleteSelected.addEventListener("click", async () => {
-    const count = state.selectedNames.size;
+    const count = state.searchActive
+        ? state.searchSelected.size
+        : state.selectedNames.size;
     if (count === 0) return;
     const confirmed = await showConfirmModal({
         title: "Delete",
@@ -2218,39 +2312,48 @@ el.btnDeleteSelected.addEventListener("click", async () => {
         okLabel: "Delete",
         okClass: "danger",
     });
-    if (confirmed) await doDeleteSelected();
+    if (!confirmed) return;
+    if (state.searchActive) {
+        await doDeleteSearchResults([...state.searchSelected]);
+    } else {
+        await doDeleteSelected();
+    }
 });
 
 el.btnClearSelection.addEventListener("click", () => {
+    if (state.searchActive) {
+        state.searchSelected.clear();
+        applySelectionToRows(false);
+        updateSelectionBar();
+        return;
+    }
     state.selectedNames.clear();
     applySelectionToRows(false);
     updateSelectionBar();
 });
 
-el.btnDownloadSelected.addEventListener("click", async () => {
-    const files = state.entries.filter(
-        (e) => state.selectedNames.has(e.name) && e.type === "FILE",
-    );
-    if (files.length === 0) return;
+async function downloadEntries(items) {
+    if (items.length === 0) return;
     const toast = showSuccessToast(
-        `Preparing ${pluralize(files.length, "file")} for download…`,
+        `Preparing ${pluralize(items.length, "file")} for download…`,
     );
     let failed = 0;
-    for (const entry of files) {
-        if (!state.client) { failed++; continue; }
+    for (const item of items) {
+        if (!state.client) {
+            failed++;
+            continue;
+        }
         try {
-            const res = await state.client.readFileData(
-                joinChildPath(state.currentPath, entry.name),
-            );
+            const res = await state.client.readFileData(item.path);
             if (res.ok) {
-                triggerDownload(res.data, entry.name);
+                triggerDownload(res.data, item.name);
                 await new Promise((r) => setTimeout(r, 150));
             } else {
-                log(`Download failed: ${entry.name}: ${res.error}`, "err");
+                log(`Download failed: ${item.name}: ${res.error}`, "err");
                 failed++;
             }
         } catch (err) {
-            log(`Download failed: ${entry.name}: ${err.message}`, "err");
+            log(`Download failed: ${item.name}: ${err.message}`, "err");
             failed++;
         }
     }
@@ -2261,11 +2364,31 @@ el.btnDownloadSelected.addEventListener("click", async () => {
             `${pluralize(failed, "file")} failed. Check the protocol log for details.`,
         );
     } else {
-        showSuccessToast(`Downloaded ${pluralize(files.length, "file")}`);
+        showSuccessToast(`Downloaded ${pluralize(items.length, "file")}`);
     }
-    const downloaded = files.length - failed;
+    const downloaded = items.length - failed;
     if (downloaded > 0)
         trackAnalyticsEvent("file_download", { count: downloaded });
+}
+
+el.btnDownloadSelected.addEventListener("click", async () => {
+    if (state.searchActive) {
+        const items = [...state.searchSelected]
+            .filter((e) => e.type === "FILE")
+            .map((e) => ({
+                name: e.name,
+                path: joinChildPath(e.parentPath, e.name),
+            }));
+        await downloadEntries(items);
+        return;
+    }
+    const items = state.entries
+        .filter((e) => state.selectedNames.has(e.name) && e.type === "FILE")
+        .map((e) => ({
+            name: e.name,
+            path: joinChildPath(state.currentPath, e.name),
+        }));
+    await downloadEntries(items);
 });
 
 // Navigation bar — breadcrumb handles all navigation (including home crumb)
@@ -2423,6 +2546,7 @@ function enterSearchMode() {
     updateSelectionBar();
     state.searchActive = true;
     state.searchResults = [];
+    state.searchSelected.clear();
     state.searchScanning = false;
     state.searchQuery = "";
     state.searchFoldersScanned = 0;
@@ -2438,6 +2562,7 @@ function exitSearchMode() {
     state.searchActive = false;
     state.searchScanning = false;
     state.searchResults = [];
+    state.searchSelected.clear();
     el.selectionBar.classList.remove("is-searching");
     el.txtSearch.value = "";
     renderFileTable();
@@ -2466,6 +2591,7 @@ async function readFolderCached(path) {
 async function runSearchWalk(query) {
     const searchId = ++state.activeSearchId;
     state.searchResults = [];
+    state.searchSelected.clear();
     state.searchScanning = true;
     state.searchFoldersScanned = 0;
     renderFileTable();
@@ -2522,7 +2648,7 @@ function populateFileDetails(entry) {
     el.panelFileName.textContent = entry.name;
     el.panelFileSize.textContent = formatBytes(entry.size);
     el.detailsKind.textContent = entry.type === "FILE" ? "File" : "Folder";
-    const fullPath = joinChildPath(state.currentPath, entry.name);
+    const fullPath = joinChildPath(entry.parentPath ?? state.currentPath, entry.name);
     const fullPathUi = formatPathForUi(fullPath);
     el.detailsFilePath.textContent = fullPathUi;
     if (el.detailsPathInRow) el.detailsPathInRow.textContent = fullPathUi;
@@ -2549,7 +2675,7 @@ function populateFileDetails(entry) {
         } else if (state.client) {
             el.panelNfcTagContent.innerHTML = `<div class="details-nfc-row"><span class="details-nfc-label">Figure ID</span><span class="details-nfc-value" style="color:#9ca3af">Loading\u2026</span></div>`;
             el.detailsHeroImgArea.innerHTML = `<div class="details-hero-spinner"></div>`;
-            const filePath = joinChildPath(state.currentPath, entry.name);
+            const filePath = joinChildPath(entry.parentPath ?? state.currentPath, entry.name);
             state.client
                 .readFileData(filePath)
                 .then((res) => {
@@ -2618,7 +2744,8 @@ function setPanelState(mode, entry) {
         for (const row of el.fileTableBody.querySelectorAll("tr[data-name]")) {
             row.classList.toggle(
                 "panel-active",
-                row.dataset.name === entry.name,
+                row.dataset.name === entry.name &&
+                    (row.dataset.parentPath ?? "") === (entry.parentPath ?? ""),
             );
         }
         return;
@@ -2688,19 +2815,19 @@ el.detailsSheetBackdrop.addEventListener("click", () => {
     closeDetailsSheet();
 });
 
-async function openRenameModal(name) {
-    if (!state.client) return;
-    const entry = state.entries.find((e) => e.name === name);
-    const kind = entry && entry.type === "DIR" ? "folder" : "file";
+async function openRenameModal(entry, basePath = state.currentPath, onRenamed = null) {
+    if (!state.client || !entry) return;
+    const name = entry.name;
+    const kind = entry.type === "DIR" ? "folder" : "file";
     // Capture before the first await: an undo toast for a prior rename can fire
     // while the input modal is suspended, running browseFolder() and changing
     // state.currentPath before showInputModal() resolves.
-    const capturedPath = state.currentPath;
+    const capturedPath = basePath;
     _inputValidate = (raw) => {
         try {
             const v = validateSingleName(raw, "Name");
             if (v === name) throw new Error("Name is unchanged");
-            ensureSiblingNameAvailable(v, name);
+            if (capturedPath === state.currentPath) ensureSiblingNameAvailable(v, name);
             validateRemotePath(joinChildPath(capturedPath || "E:/", v), kind);
             return null;
         } catch (err) {
@@ -2725,6 +2852,7 @@ async function openRenameModal(name) {
                 undoRename(newPath, oldPath, newName, name, kind),
             );
             trackAnalyticsEvent("file_rename");
+            if (onRenamed) onRenamed(newName);
         } else {
             log(`Rename failed: ${res.error}`, "err");
             showErrorToast("Rename failed", res.error);
@@ -2734,7 +2862,9 @@ async function openRenameModal(name) {
         showErrorToast("Rename failed", err.message);
     } finally {
         invalidateCache();
-        await browseFolder(getParentPath(oldPath));
+        if (!onRenamed) {
+            await browseFolder(getParentPath(oldPath));
+        }
     }
 }
 
@@ -2952,6 +3082,48 @@ el.btnConnectCta.addEventListener("click", connectOrDisconnect);
 
 // --- Delete confirm ---
 
+async function deletePaths(paths) {
+    // Sort: files before folders so file handles are closed before rmdir
+    const sorted = [...paths].sort((a, b) => {
+        if (a.type !== b.type) return a.type === "FILE" ? -1 : 1;
+        return 0;
+    });
+
+    let deleted = 0;
+    const failedPaths = [];
+    const total = sorted.length;
+    for (const item of sorted) {
+        try {
+            const res = await state.client.removePath(item.path);
+            if (res.ok) {
+                deleted++;
+                log(`Deleted ${item.path}`, "ok");
+            } else {
+                failedPaths.push(item.path);
+                log(`Delete failed: ${item.path}: ${res.error}`, "err");
+            }
+        } catch (err) {
+            failedPaths.push(item.path);
+            log(`Delete failed: ${item.path}: ${err.message}`, "err");
+        }
+    }
+    if (deleted === total) {
+        showSuccessToast(`Deleted ${pluralize(deleted, "item")}`);
+    } else if (deleted > 0) {
+        showErrorToast(
+            `Deleted ${deleted} of ${total}`,
+            `Some items failed: ${firstPlusMore(failedPaths)}`,
+        );
+    } else {
+        showErrorToast(
+            "Couldn't delete items",
+            firstPlusMore(failedPaths) || "No items were deleted.",
+        );
+    }
+    if (deleted > 0) trackAnalyticsEvent("file_delete", { count: deleted });
+    return { deleted, failedPaths, total };
+}
+
 async function doDeleteSelected() {
     if (!state.client || state.selectedNames.size === 0) return;
 
@@ -2964,48 +3136,11 @@ async function doDeleteSelected() {
         name: e.name,
     }));
 
-    // Sort: files before folders so file handles are closed before rmdir
-    paths.sort((a, b) => {
-        if (a.type !== b.type) return a.type === "FILE" ? -1 : 1;
-        return 0;
-    });
-
     el.browserLockOverlay.classList.add("active");
     el.browserLockTitle.textContent = "Deleting…";
     updateControls();
-    let deleted = 0;
-    const failedPaths = [];
-    const total = paths.length;
     try {
-        for (const item of paths) {
-            try {
-                const res = await state.client.removePath(item.path);
-                if (res.ok) {
-                    deleted++;
-                    log(`Deleted ${item.path}`, "ok");
-                } else {
-                    failedPaths.push(item.path);
-                    log(`Delete failed: ${item.path}: ${res.error}`, "err");
-                }
-            } catch (err) {
-                failedPaths.push(item.path);
-                log(`Delete failed: ${item.path}: ${err.message}`, "err");
-            }
-        }
-        if (deleted === total) {
-            showSuccessToast(`Deleted ${pluralize(deleted, "item")}`);
-        } else if (deleted > 0) {
-            showErrorToast(
-                `Deleted ${deleted} of ${total}`,
-                `Some items failed: ${firstPlusMore(failedPaths)}`,
-            );
-        } else {
-            showErrorToast(
-                "Couldn't delete items",
-                firstPlusMore(failedPaths) || "No items were deleted.",
-            );
-        }
-        if (deleted > 0) trackAnalyticsEvent("file_delete", { count: deleted });
+        await deletePaths(paths);
     } finally {
         el.browserLockOverlay.classList.remove("active");
         updateControls();
@@ -3016,6 +3151,42 @@ async function doDeleteSelected() {
             /* stale connection */
         }
     }
+}
+
+async function doDeleteSearchResults(entries) {
+    if (!state.client || entries.length === 0) return;
+    const paths = entries.map((e) => ({
+        path: joinChildPath(e.parentPath, e.name),
+        type: e.type,
+        name: e.name,
+    }));
+
+    el.browserLockOverlay.classList.add("active");
+    el.browserLockTitle.textContent = "Deleting…";
+    updateControls();
+    let result;
+    try {
+        result = await deletePaths(paths);
+    } finally {
+        el.browserLockOverlay.classList.remove("active");
+        updateControls();
+        invalidateCache();
+    }
+
+    const failedSet = new Set(result.failedPaths);
+    state.searchResults = state.searchResults.filter((e) => {
+        const p = joinChildPath(e.parentPath, e.name);
+        const wasTargeted = entries.includes(e);
+        return !wasTargeted || failedSet.has(p);
+    });
+    for (const e of entries) {
+        const p = joinChildPath(e.parentPath, e.name);
+        if (!failedSet.has(p)) state.searchSelected.delete(e);
+    }
+    if (state.drawerEntry && !state.searchResults.includes(state.drawerEntry)) {
+        setPanelState("folder");
+    }
+    renderFileTable();
 }
 
 // --- Sanitize helpers ---
