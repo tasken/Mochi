@@ -1,10 +1,11 @@
 # File Search — Design
 
 Status: v1 (navigate-only) implemented and shipped 2026-07-19. Superseded
-2026-07-19 by an in-place-actions revision — see "Revision: in-place actions"
-at the end of this document. The "Navigate-only results" decision below is
-kept as historical record of why v1 was built that way; it no longer reflects
-current behavior.
+2026-07-19 by an in-place-actions revision — see "Revision: in-place actions".
+A further "Revision: tag identity search (phase 2)" is designed (not yet
+implemented) at the end of this document. The "Navigate-only results" and
+"Names only, v1" decisions below are kept as historical record of why v1 was
+built that way; they no longer fully reflect current/planned behavior.
 Date: 2026-07-19
 
 ## Problem
@@ -408,3 +409,210 @@ touch navigation. Rename updates the entry in place and stays in search,
 rather than jumping to the renamed file's folder the way normal-mode rename
 does — consistent with "actions stay in place," and avoiding the extra
 complexity `ensureSiblingNameAvailable`'s scoping already introduces.
+
+## Revision: tag identity search (phase 2)
+
+Designed 2026-07-19, not yet implemented. Extends search to match `.bin`
+files by their NFC tag identity (character/tag series/game series, via the
+existing AmiiboAPI integration) in addition to filename — the "phase 2"
+explicitly deferred in the original "Names only, v1" decision above.
+
+### Why this is opt-in, not automatic
+
+Filename matching is drive-local and free (directory listings only).
+Identity matching requires, for any `.bin` file whose UID isn't already
+known from directory-listing TLV metadata, reading the file's full content
+over BLE — the same cost as opening that file's details panel — multiplied
+by however many untagged/uncached files exist across the whole drive. Making
+this automatic on every keystroke would make even a plain filename search
+pay that cost. It's a session-scoped toggle instead: off by default when
+search opens, on by explicit choice.
+
+### Two-phase walk
+
+Phase 1 is the existing walk (`walkForSearchMatches`, `app/search.js:6`),
+almost unchanged, plus one addition: it currently only ever surfaces entries
+that already match the filename query, via `onMatch` — a non-matching
+`.bin` file is read from the folder listing and then discarded the moment
+`visit()` moves on. Phase 2 needs the *complete* list of `.bin` files across
+the whole tree, matched or not, so `walkForSearchMatches` gains one more
+optional callback in its `deps`: `onBinFile(entry, path)`, called for every
+`FILE`-type entry whose name ends in `.bin` (case-insensitive), independent
+of `onMatch` and independent of whether the query matched it. `app.js`'s
+wrapper (`runSearchWalk`) uses it to build `state.searchBinFiles` — every
+`.bin` file phase 1 saw, each carrying `{ name, parentPath, meta }`. `meta`
+is always a real object here, never `null`/`undefined` — `readFolder`
+(`client.js`) always constructs it as `{ flags, nfcTagHead, nfcTagTail }`;
+only the `nfcTagHead`/`nfcTagTail` *values* can individually be `null` when
+no TLV metadata was present. No optional-chaining needed on `entry.meta`
+itself, only on checking whether the head/tail values are non-null.
+
+Phase 2 only runs when the identity toggle is on, and only after phase 1
+finishes:
+
+- It processes every entry in `state.searchBinFiles` — the complete list
+  from *all* visited folders, not only ones that already matched by name,
+  since the point is to find files a filename search would miss entirely.
+- For each `.bin` file, if `entry.meta.nfcTagHead`/`nfcTagTail` are already
+  non-`null` (cached in the directory-listing TLV metadata phase 1 already
+  read), no extra BLE cost — go straight to the identity check. Otherwise,
+  read the file's content (`joinChildPath(entry.parentPath, entry.name)`,
+  same pattern `populateFileDetails` already uses at `app.js:2656`) to
+  extract the UID from bytes 84/88, same offsets `populateFileDetails`
+  already decodes. The extracted UID is written back into this
+  `state.searchBinFiles` entry's `meta` (mutated in place) once found, so
+  toggling identity search off and back on within the same query doesn't
+  re-read a file it already processed.
+- Call `lookupNfcTag(head, tail)` (`app.js:1645`, existing, memoized via
+  `_nfcTagCache`, `app.js:1643`) — a cache hit (common for duplicate/cloned
+  tags across files) costs nothing further; a miss fetches
+  `amiiboapi.org`.
+- Match if the query is a case-insensitive substring of the resolved
+  `name` (character), `tagSeries`, or `gameSeries` — the same three fields
+  already surfaced in the file details panel (Character/Series/Game).
+  Whichever of these actually matched becomes the result's displayed reason
+  (see UI below).
+- **If this file already has an entry in `state.searchResults`** (it also
+  matched by filename in phase 1), the identity match enriches that existing
+  entry in place — attaches `matchedField`/the resolved text so its subtitle
+  can upgrade to show the character name — rather than pushing a second,
+  duplicate row for the same file. De-duplication key is the same `name` +
+  `parentPath` pair used everywhere else in search for this purpose.
+- A file that fails to read, or doesn't decode as a valid tag, is silently
+  skipped — not an error toast — matching how `populateFileDetails` already
+  treats "Not a valid NFC file" as a neutral outcome, not a failure.
+
+Phase 2 lives in `app/search.js` as its own function (e.g.
+`enrichWithTagIdentity(files, query, deps)`), the same dependency-injected
+shape as `walkForSearchMatches` — `readFileData`, `isCancelled`,
+`lookupIdentity`, `onMatch` all injected, so it stays unit-testable with a
+fake device and a fake identity lookup, no real BLE or network involved in
+tests.
+
+### Cancellation
+
+Phase 2 shares the exact same `state.activeSearchId` token as phase 1 — a
+new query, closing search, or disconnecting cancels it identically,
+including mid-file-read (same pre-flight/post-await `isCancelled()` check
+pattern `walkForSearchMatches` already uses).
+
+Toggle-specific behavior:
+- Turning the toggle **on** mid-session immediately starts phase 2 against
+  whatever phase 1 already found — no need to retype the query. Folder
+  listings are already warm in `folderCache`, so nothing gets re-walked;
+  only the `.bin` files themselves (which were never cached, since directory
+  listings and file content are different reads) get processed.
+- Turning the toggle **off** mid-session cancels any in-flight phase 2 (same
+  `activeSearchId` bump as any other cancellation) and removes identity-only
+  matches from `state.searchResults` — filename matches are unaffected,
+  since they don't depend on the toggle at all.
+
+### UI
+
+- **Toggle**: an icon button (`nfc` Material Symbol — needs adding to the
+  `icon_names` subset, `index.html:1560` area, same mechanism as `search`
+  was added for v1) between the text input and the close button, styled like
+  `.btn-icon.ghost` (same 36px sizing as the close button), with a violet
+  tint (`var(--violet)`, `rgba(139, 92, 246, 0.12)` background) when active
+  via `[aria-pressed="true"]`. Chosen over a labeled chip after a live visual
+  comparison — the bare icon matches the bar's existing all-icon convention
+  and doesn't cost the limited horizontal space next to the query text.
+- **Result subtitle**: a filename match keeps showing just the folder path,
+  as today (`formatPathForUi(entry.parentPath)`). An identity-only match
+  shows the matched field leading, folder path secondary — e.g.
+  `Mario · /amiibo/data`.
+- **Progress**: phase 1 keeps its existing progress row and spinning search
+  icon unchanged. Phase 2 switches the progress row's text to "Checking tag
+  identities… (N of M checked)" (M known once phase 1 finishes and the
+  uncached-`.bin` list is final) and keeps the leading icon spinning
+  throughout — so it stays visually obvious that work is still happening
+  even after folder scanning visibly stops. `renderSearchResults()` needs an
+  explicit signal for which phase is active to pick the right text —
+  `state.searchIdentityChecked === 0` alone is ambiguous (also true before
+  phase 2 has started at all) — see `state.searchIdentityScanning` below.
+- **Known limitation, not addressed by this revision**: in-place actions
+  (rename/delete/download) already queue behind an in-flight search walk
+  today — the BLE queue is strictly serial, and only folder navigation exits
+  search — so clicking an action while phase 2 is still working through a
+  long list of uncached files means that action waits its turn, same as it
+  already would behind a long phase-1 walk. Phase 2 can make that wait
+  longer in the worst case, but doesn't introduce a new kind of problem;
+  pausing/resuming an in-progress scan to prioritize a user action would be
+  a real feature in its own right, out of scope here.
+
+### State
+
+New fields, alongside the existing search state:
+
+```js
+state.searchIdentityEnabled = false;   // toggle state, reset on enterSearchMode
+state.searchBinFiles = [];             // every .bin file phase 1 saw, matched or not: { name, parentPath, meta }
+state.searchIdentityScanning = false;  // true only while phase 2 is actively running
+state.searchIdentityChecked = 0;       // progress counter for phase 2's "N of M"
+```
+
+`state.searchIdentityScanning` is what `renderSearchResults()` actually
+branches on to choose the progress row's text (distinct from
+`state.searchScanning`, which covers phase 1) — `searchIdentityChecked`
+alone can't tell "phase 2 hasn't started" apart from "phase 2 just started
+and hasn't found anything yet," both of which are `0`.
+
+`state.searchBinFiles` is populated by `runSearchWalk`'s new `onBinFile`
+callback during phase 1 (see "Two-phase walk" above), reset to `[]` at the
+start of each new walk exactly like `state.searchResults` already is.
+
+Existing `state.searchResults` entries gain an optional field when matched
+by identity: `matchedField: "name" | "tagSeries" | "gameSeries"` (absent for
+filename matches), plus the resolved text value, so `renderSearchResults()`
+can build the `Mario · /amiibo/data`-style subtitle without a second
+`lookupNfcTag()` call at render time.
+
+### Out of scope
+
+- No persistence of the toggle's on/off state across search sessions — it
+  resets to off every time `enterSearchMode()` runs, consistent with how
+  `searchQuery`/`searchResults`/etc. already reset there. No localStorage or
+  other persistence layer exists in this app today; not introducing one for
+  this.
+- No cap on phase 2's scope — it processes every uncached `.bin` file found,
+  however long that takes, stoppable only by cancellation (same as the rest
+  of search already works). Explicitly decided over a bounded/capped
+  alternative.
+- No change to matching logic for non-`.bin` files — identity matching only
+  ever applies to `.bin` files, since only those can carry an NFC tag UID.
+
+### Review
+
+Reviewed read-only by agy (Gemini CLI) via the shared-brain delegation
+system (`del_63`), hand-verified against the actual code before acting on
+any of it:
+
+- All four file:line citations checked (`walkForSearchMatches`,
+  `lookupNfcTag`, `_nfcTagCache`, `icon_names`) — accurate except
+  `populateFileDetails`'s citation, which had drifted to `app.js:2656` since
+  this doc was first written (fixed above).
+- Confirmed missing `nfc` icon-subset entry (already known, noted in the UI
+  section above; not yet added since this is design, not implementation).
+- **Real gap, fixed**: phase 2 had no de-duplication against
+  `state.searchResults` — a file matching by both filename and identity
+  would have rendered as two rows. Now enriches the existing entry in place.
+- **Real gap, fixed**: no explicit state to distinguish "phase 2 hasn't
+  started" from "phase 2 just started" for progress-row rendering. Added
+  `state.searchIdentityScanning`.
+- **Real, worth doing, added**: UID backpropagation into
+  `state.searchBinFiles` entries so toggling identity search off/on within
+  one query doesn't re-read already-processed files.
+- **Claim checked and found incorrect**: agy asserted `entry.meta` could be
+  `null`/`undefined`, risking a `TypeError`. Verified against `client.js`'s
+  `readFolder` — `meta` is always constructed as a real object; only its
+  `nfcTagHead`/`nfcTagTail` fields can individually be `null`. No optional
+  chaining needed on `entry.meta` itself. Corrected the doc's phrasing to
+  make this guarantee explicit rather than adopt the incorrect premise.
+- **Noted but not adopted**: caching the new toggle button in the `el`
+  object — correct convention, but that's plan-level detail (the way
+  `el.btnSearch` binding was never enumerated in this doc's v1 UI section
+  either); not something a design doc needs to spell out.
+- **Noted but not adopted**: pausing phase 2 when a mutating action starts.
+  Documented instead as a known, pre-existing limitation (in-place actions
+  already queue behind any in-flight walk) rather than solved — true
+  pause/resume would be new scope, not implied by anything already decided.
