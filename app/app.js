@@ -9,6 +9,7 @@ import {
     MAX_FILE_NAME_BYTES,
     NUS_SERVICE,
 } from "./client.js";
+import { walkForSearchMatches } from "./search.js";
 
 // === Constants ===
 
@@ -279,6 +280,10 @@ const el = {
 
     // Navigation bar
     navBreadcrumb: document.getElementById("navBreadcrumb"),
+    btnSearch: document.getElementById("btnSearch"),
+    searchInputWrap: document.getElementById("searchInputWrap"),
+    txtSearch: document.getElementById("txtSearch"),
+    btnSearchClose: document.getElementById("btnSearchClose"),
 
     // File table
     tableWrap: document.getElementById("tableWrap"),
@@ -465,6 +470,12 @@ const state = {
     syncOrphans: [], // [{ remotePath, size, kind, deletable, status }]
     syncOrphanChecked: new Set(), // Set<remotePath>
     deviceVersion: null,
+    searchActive: false,
+    searchScanning: false,
+    searchResults: [], // [{ name, type, size, parentPath }]
+    searchQuery: "",
+    searchFoldersScanned: 0,
+    activeSearchId: 0, // cancellation token for the recursive search walk
 };
 
 function showInputError(inputEl, errorEl, message) {
@@ -657,6 +668,7 @@ function setConnState(newState) {
         el.btnLogToggle,
         el.btnSheetInfo,
         el.btnSheetUpload,
+        el.btnSearch,
     );
     if (!(connected || reconnecting)) el.btnMobileUp.hidden = true;
 
@@ -675,6 +687,13 @@ function setConnState(newState) {
         state.entries = [];
         state.selectedNames.clear();
         state.currentPath = "";
+        state.activeSearchId++;
+        state.searchActive = false;
+        state.searchScanning = false;
+        state.searchResults = [];
+        clearTimeout(_searchDebounceTimer);
+        el.selectionBar.classList.remove("is-searching");
+        el.txtSearch.value = "";
         setPanelState("folder");
         renderDrive(null);
         renderFileTable();
@@ -1399,7 +1418,13 @@ document.addEventListener("keydown", (e) => {
         setPanelState("folder");
         return;
     }
-    // 5. Upload panel (desktop — simulate close button if not disabled)
+    // 5. Search
+    if (state.searchActive) {
+        e.preventDefault();
+        exitSearchMode();
+        return;
+    }
+    // 6. Upload panel (desktop — simulate close button if not disabled)
     if (
         !isMobileViewport() &&
         state.panelMode === "upload" &&
@@ -1409,7 +1434,7 @@ document.addEventListener("keydown", (e) => {
         el.btnUploadClose.click();
         return;
     }
-    // 6. Context sheet (mobile)
+    // 7. Context sheet (mobile)
     if (el.sheetContainer.classList.contains("open")) {
         e.preventDefault();
         closeSheet();
@@ -1443,6 +1468,7 @@ function updateControls() {
     const dfuActive = dfuState.phase !== "idle";
     el.btnRefresh.disabled = !connected || uploading || dfuActive;
     el.btnNewFolder.disabled = !connected || uploading || dfuActive;
+    el.btnSearch.disabled = !connected || uploading || dfuActive;
     el.sidebarDropZone.setAttribute(
         "aria-disabled",
         String(!connected || uploading || syncing || dfuActive),
@@ -1869,6 +1895,10 @@ function renderFileTableLoading(targetPath) {
 }
 
 function renderFileTable() {
+    if (state.searchActive) {
+        renderSearchResults();
+        return;
+    }
     const showEmptyState =
         state.connState === "connected" &&
         !!state.currentPath &&
@@ -1939,6 +1969,62 @@ function renderFileTable() {
     }
     el.fileTableBody.innerHTML = rows.join("");
     updateSelectionBar();
+}
+
+function renderSearchResults() {
+    el.tableWrap.classList.remove("is-empty");
+    el.browserEmptyState.hidden = true;
+
+    if (!state.searchQuery) {
+        // Search is open but nothing has been typed yet — a blank table,
+        // not a "no matches" message (nothing has actually been searched).
+        el.fileTable.hidden = true;
+        el.fileTableBody.innerHTML = "";
+        return;
+    }
+
+    const hasResults = state.searchResults.length > 0;
+
+    if (!hasResults && !state.searchScanning) {
+        el.tableWrap.classList.add("is-empty");
+        el.fileTable.hidden = true;
+        el.browserEmptyState.hidden = false;
+        el.browserEmptyIcon.textContent = "search";
+        el.browserEmptyTitle.textContent = "No matches";
+        el.browserEmptySub.textContent = `No files match "${state.searchQuery}".`;
+        el.fileTableBody.innerHTML = "";
+        return;
+    }
+
+    el.fileTable.hidden = false;
+
+    const rows = state.searchResults.map((entry) => {
+        const isDir = entry.type === "DIR";
+        const size = isDir ? "—" : formatBytes(entry.size);
+        const iconHtml = isDir
+            ? `<span class="cell-name-icon folder"><span class="ms-sm">folder</span></span>`
+            : `<span class="cell-name-icon file"><span class="ms-sm">insert_drive_file</span></span>`;
+        return (
+            `<tr data-name="${escapeHtml(entry.name)}" data-parent-path="${escapeHtml(entry.parentPath)}">` +
+            `<td class="cell-check"></td>` +
+            `<td class="cell-name"><span class="cell-name-inner">${iconHtml}` +
+            `<div class="cell-name-text-container">` +
+            `<span class="cell-name-title">${escapeHtml(entry.name)}</span>` +
+            `<span class="cell-name-subtitle">${escapeHtml(formatPathForUi(entry.parentPath))}</span>` +
+            `</div></span></td>` +
+            `<td class="cell-size">${size}</td>` +
+            `<td class="cell-actions"></td>` +
+            `</tr>`
+        );
+    });
+
+    if (state.searchScanning) {
+        rows.push(
+            `<tr class="search-progress-row" aria-hidden="true"><td colspan="4">Scanning… (${pluralize(state.searchFoldersScanned, "folder")} scanned)</td></tr>`,
+        );
+    }
+
+    el.fileTableBody.innerHTML = rows.join("");
 }
 
 // === Navigation Breadcrumb ===
@@ -2018,6 +2104,20 @@ el.fileTableBody.addEventListener("click", async (e) => {
     const row = e.target.closest("tr");
     if (!row || !row.dataset.name) return;
     const name = row.dataset.name;
+
+    if (state.searchActive) {
+        const parentPath = row.dataset.parentPath;
+        const entry = state.searchResults.find(
+            (en) => en.name === name && en.parentPath === parentPath,
+        );
+        if (!entry) return;
+        exitSearchMode();
+        await browseFolder(entry.parentPath);
+        state.selectedNames.add(entry.name);
+        renderFileTable();
+        return;
+    }
+
     const entry = state.entries.find((en) => en.name === name);
     if (!entry) return;
 
@@ -2311,6 +2411,109 @@ el.btnNormalize.addEventListener("click", () => {
         state.currentPath || "E:/",
     );
     openModal(el.sanitizeModalNone);
+});
+
+// === Search ===
+
+let _searchDebounceTimer = null;
+
+function enterSearchMode() {
+    clearTimeout(_searchDebounceTimer);
+    state.selectedNames.clear();
+    updateSelectionBar();
+    state.searchActive = true;
+    state.searchResults = [];
+    state.searchScanning = false;
+    state.searchQuery = "";
+    state.searchFoldersScanned = 0;
+    el.selectionBar.classList.add("is-searching");
+    el.txtSearch.value = "";
+    renderFileTable();
+    el.txtSearch.focus();
+}
+
+function exitSearchMode() {
+    clearTimeout(_searchDebounceTimer);
+    state.activeSearchId++;
+    state.searchActive = false;
+    state.searchScanning = false;
+    state.searchResults = [];
+    el.selectionBar.classList.remove("is-searching");
+    el.txtSearch.value = "";
+    renderFileTable();
+}
+
+async function readFolderCached(path) {
+    if (!state.client) throw new Error("Device disconnected.");
+    const cached = state.client.folderCache.get(path);
+    if (cached) {
+        return { ok: true, error: null, data: cached.entries, truncated: cached.truncated };
+    }
+    const res = await state.client.readFolder(path);
+    if (res.ok) {
+        const entries = sortEntries(res.data);
+        if (!res.truncated) {
+            state.client.folderCache.set(path, {
+                entries,
+                truncated: false,
+            });
+        }
+        return { ok: true, error: null, data: entries, truncated: res.truncated || false };
+    }
+    return res;
+}
+
+async function runSearchWalk(query) {
+    const searchId = ++state.activeSearchId;
+    state.searchResults = [];
+    state.searchScanning = true;
+    state.searchFoldersScanned = 0;
+    renderFileTable();
+    trackAnalyticsEvent("file_search");
+
+    await walkForSearchMatches("E:/", query, {
+        readFolder: readFolderCached,
+        isCancelled: () => searchId !== state.activeSearchId,
+        joinChildPath,
+        onMatch: (match) => {
+            state.searchResults.push(match);
+            renderFileTable();
+        },
+        onFolderScanned: () => {
+            state.searchFoldersScanned++;
+            renderFileTable();
+        },
+        onFolderError: (path, error) => {
+            log(`Search: couldn't read ${path}: ${error}`, "err");
+            console.warn("[Search]", `Failed to read ${path}: ${error}`);
+        },
+    });
+
+    if (searchId !== state.activeSearchId) return;
+    state.searchScanning = false;
+    renderFileTable();
+    console.info(
+        "[Search]",
+        `"${query}" — ${pluralize(state.searchResults.length, "match")} across ${pluralize(state.searchFoldersScanned, "folder")}`,
+    );
+}
+
+el.btnSearch.addEventListener("click", enterSearchMode);
+el.btnSearchClose.addEventListener("click", () => exitSearchMode());
+
+el.txtSearch.addEventListener("input", () => {
+    clearTimeout(_searchDebounceTimer);
+    const query = el.txtSearch.value.trim();
+    if (!query) {
+        // Clearing the query exits search entirely, per spec — same as
+        // Escape or the close button, not merely a reset of the results.
+        exitSearchMode();
+        return;
+    }
+    state.searchQuery = query;
+    _searchDebounceTimer = setTimeout(() => {
+        runSearchWalk(query);
+    }, 400);
 });
 
 // === Context Panel ===
