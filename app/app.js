@@ -282,9 +282,11 @@ const el = {
     navBreadcrumb: document.getElementById("navBreadcrumb"),
     btnSearch: document.getElementById("btnSearch"),
     searchInputWrap: document.getElementById("searchInputWrap"),
+    searchInputIcon: document.getElementById("searchInputIcon"),
     txtSearch: document.getElementById("txtSearch"),
     btnSearchClose: document.getElementById("btnSearchClose"),
     btnSearchIdentity: document.getElementById("btnSearchIdentity"),
+    btnSearchIdentityIcon: document.getElementById("btnSearchIdentityIcon"),
 
     // File table
     tableWrap: document.getElementById("tableWrap"),
@@ -1982,6 +1984,14 @@ function renderFileTable() {
 }
 
 function renderSearchResults() {
+    // Leading icon doubles as a scan-in-progress indicator, visible for as
+    // long as the search input itself is — even if the user has scrolled
+    // away or opened a file's details panel while the walk keeps running.
+    el.searchInputIcon.textContent = state.searchScanning
+        ? "progress_activity"
+        : "search";
+    el.searchInputIcon.classList.toggle("spinning", state.searchScanning);
+
     el.tableWrap.classList.remove("is-empty");
     el.browserEmptyState.hidden = true;
 
@@ -2571,6 +2581,7 @@ function enterSearchMode() {
     state.searchIdentityChecked = 0;
     el.selectionBar.classList.add("is-searching");
     el.btnSearchIdentity.setAttribute("aria-pressed", "false");
+    el.btnSearchIdentityIcon.textContent = "toggle_off";
     el.txtSearch.value = "";
     renderFileTable();
     el.txtSearch.focus();
@@ -2707,6 +2718,9 @@ el.btnSearchIdentity.addEventListener("click", () => {
         "aria-pressed",
         String(state.searchIdentityEnabled),
     );
+    el.btnSearchIdentityIcon.textContent = state.searchIdentityEnabled
+        ? "toggle_on"
+        : "toggle_off";
 
     if (state.searchIdentityEnabled) {
         // If phase 1 is still running, runSearchWalk's own end-of-phase-1
