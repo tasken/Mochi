@@ -9,7 +9,7 @@ import {
     MAX_FILE_NAME_BYTES,
     NUS_SERVICE,
 } from "./client.js";
-import { walkForSearchMatches } from "./search.js";
+import { walkForSearchMatches, enrichWithTagIdentity, matchesSearchQuery } from "./search.js";
 
 // === Constants ===
 
@@ -284,6 +284,7 @@ const el = {
     searchInputWrap: document.getElementById("searchInputWrap"),
     txtSearch: document.getElementById("txtSearch"),
     btnSearchClose: document.getElementById("btnSearchClose"),
+    btnSearchIdentity: document.getElementById("btnSearchIdentity"),
 
     // File table
     tableWrap: document.getElementById("tableWrap"),
@@ -477,6 +478,10 @@ const state = {
     searchQuery: "",
     searchFoldersScanned: 0,
     activeSearchId: 0, // cancellation token for the recursive search walk
+    searchIdentityEnabled: false,  // toggle state, reset on enterSearchMode
+    searchBinFiles: [],            // every .bin file phase 1 saw, matched or not: { name, parentPath, size, meta }
+    searchIdentityScanning: false, // true only while phase 2 is actively running
+    searchIdentityChecked: 0,      // progress counter for phase 2's "N of M"
 };
 
 function showInputError(inputEl, errorEl, message) {
@@ -693,6 +698,9 @@ function setConnState(newState) {
         state.searchScanning = false;
         state.searchResults = [];
         state.searchSelected.clear();
+        state.searchIdentityEnabled = false;
+        state.searchBinFiles = [];
+        state.searchIdentityScanning = false;
         clearTimeout(_searchDebounceTimer);
         el.selectionBar.classList.remove("is-searching");
         el.txtSearch.value = "";
@@ -1987,7 +1995,7 @@ function renderSearchResults() {
 
     const hasResults = state.searchResults.length > 0;
 
-    if (!hasResults && !state.searchScanning) {
+    if (!hasResults && !state.searchScanning && !state.searchIdentityScanning) {
         el.tableWrap.classList.add("is-empty");
         el.fileTable.hidden = true;
         el.browserEmptyState.hidden = false;
@@ -2014,13 +2022,16 @@ function renderSearchResults() {
         ]
             .filter(Boolean)
             .join(" ");
+        const subtitle = entry.matchedValue
+            ? `${entry.matchedValue} · ${formatPathForUi(entry.parentPath)}`
+            : formatPathForUi(entry.parentPath);
         return (
             `<tr data-name="${escapeHtml(entry.name)}" data-parent-path="${escapeHtml(entry.parentPath)}"${classes ? ` class="${classes}"` : ""}>` +
             `<td class="cell-check"><input type="checkbox"${isSelected ? " checked" : ""}></td>` +
             `<td class="cell-name"><span class="cell-name-inner">${iconHtml}` +
             `<div class="cell-name-text-container">` +
             `<span class="cell-name-title">${escapeHtml(entry.name)}</span>` +
-            `<span class="cell-name-subtitle">${escapeHtml(formatPathForUi(entry.parentPath))}</span>` +
+            `<span class="cell-name-subtitle">${escapeHtml(subtitle)}</span>` +
             `</div></span></td>` +
             `<td class="cell-size">${size}</td>` +
             `<td class="cell-actions">` +
@@ -2037,6 +2048,10 @@ function renderSearchResults() {
     if (state.searchScanning) {
         rows.push(
             `<tr class="search-progress-row" aria-hidden="true"><td colspan="4">Scanning… (${pluralize(state.searchFoldersScanned, "folder")} scanned)</td></tr>`,
+        );
+    } else if (state.searchIdentityScanning) {
+        rows.push(
+            `<tr class="search-progress-row" aria-hidden="true"><td colspan="4">Checking tag identities… (${state.searchIdentityChecked} of ${pluralize(state.searchBinFiles.length, "file")} checked)</td></tr>`,
         );
     }
 
@@ -2550,7 +2565,12 @@ function enterSearchMode() {
     state.searchScanning = false;
     state.searchQuery = "";
     state.searchFoldersScanned = 0;
+    state.searchIdentityEnabled = false;
+    state.searchBinFiles = [];
+    state.searchIdentityScanning = false;
+    state.searchIdentityChecked = 0;
     el.selectionBar.classList.add("is-searching");
+    el.btnSearchIdentity.setAttribute("aria-pressed", "false");
     el.txtSearch.value = "";
     renderFileTable();
     el.txtSearch.focus();
@@ -2563,6 +2583,8 @@ function exitSearchMode() {
     state.searchScanning = false;
     state.searchResults = [];
     state.searchSelected.clear();
+    state.searchIdentityScanning = false;
+    state.searchBinFiles = [];
     el.selectionBar.classList.remove("is-searching");
     el.txtSearch.value = "";
     renderFileTable();
@@ -2594,6 +2616,9 @@ async function runSearchWalk(query) {
     state.searchSelected.clear();
     state.searchScanning = true;
     state.searchFoldersScanned = 0;
+    state.searchBinFiles = [];
+    state.searchIdentityChecked = 0;
+    state.searchIdentityScanning = false;
     renderFileTable();
     trackAnalyticsEvent("file_search");
 
@@ -2613,6 +2638,14 @@ async function runSearchWalk(query) {
             log(`Search: couldn't read ${path}: ${error}`, "err");
             console.warn("[Search]", `Failed to read ${path}: ${error}`);
         },
+        onBinFile: (entry, path) => {
+            state.searchBinFiles.push({
+                name: entry.name,
+                parentPath: path,
+                size: entry.size,
+                meta: entry.meta,
+            });
+        },
     });
 
     if (searchId !== state.activeSearchId) return;
@@ -2622,10 +2655,98 @@ async function runSearchWalk(query) {
         "[Search]",
         `"${query}" — ${pluralize(state.searchResults.length, "match")} across ${pluralize(state.searchFoldersScanned, "folder")}`,
     );
+
+    if (state.searchIdentityEnabled) {
+        await runIdentityEnrichment(query);
+    }
+}
+
+async function runIdentityEnrichment(query) {
+    const enrichId = state.activeSearchId;
+    state.searchIdentityScanning = true;
+    state.searchIdentityChecked = 0;
+    renderFileTable();
+
+    await enrichWithTagIdentity(state.searchBinFiles, query, {
+        readFileData: (path) => {
+            if (!state.client) throw new Error("Device disconnected.");
+            return state.client.readFileData(path);
+        },
+        isCancelled: () => enrichId !== state.activeSearchId,
+        lookupIdentity: lookupNfcTag,
+        joinChildPath,
+        onMatch: (match) => {
+            const existing = state.searchResults.find(
+                (r) => r.name === match.name && r.parentPath === match.parentPath,
+            );
+            if (existing) {
+                existing.matchedField = match.matchedField;
+                existing.matchedValue = match.matchedValue;
+            } else {
+                state.searchResults.push(match);
+            }
+            renderFileTable();
+        },
+        onFileChecked: () => {
+            state.searchIdentityChecked++;
+            renderFileTable();
+        },
+    });
+
+    if (enrichId !== state.activeSearchId) return;
+    state.searchIdentityScanning = false;
+    renderFileTable();
 }
 
 el.btnSearch.addEventListener("click", enterSearchMode);
 el.btnSearchClose.addEventListener("click", () => exitSearchMode());
+
+el.btnSearchIdentity.addEventListener("click", () => {
+    state.searchIdentityEnabled = !state.searchIdentityEnabled;
+    el.btnSearchIdentity.setAttribute(
+        "aria-pressed",
+        String(state.searchIdentityEnabled),
+    );
+
+    if (state.searchIdentityEnabled) {
+        // If phase 1 is still running, runSearchWalk's own end-of-phase-1
+        // check picks this up automatically once it finishes. Only start
+        // phase 2 immediately here if phase 1 has already settled.
+        if (state.searchQuery && !state.searchScanning) {
+            runIdentityEnrichment(state.searchQuery);
+        }
+        return;
+    }
+
+    // Turning off cancels any in-flight phase 2 (same activeSearchId bump
+    // as any other cancellation) — but only if phase 2 could actually be
+    // running. If phase 1 (the filename walk) is still scanning, phase 2
+    // hasn't started yet, and bumping activeSearchId here would incorrectly
+    // cancel phase 1 itself instead, leaving it permanently stuck mid-scan.
+    state.searchIdentityScanning = false;
+    if (!state.searchScanning) {
+        state.activeSearchId++;
+    }
+    state.searchResults = state.searchResults.filter((entry) =>
+        matchesSearchQuery(entry.name, state.searchQuery),
+    );
+    for (const entry of state.searchResults) {
+        delete entry.matchedField;
+        delete entry.matchedValue;
+    }
+    // Entries removed above can still be referenced by state.searchSelected
+    // (a Set of object refs) or state.drawerEntry (the open details panel)
+    // — same staleness hazard already fixed once for delete in the
+    // in-place-actions plan. Prune both against the filtered list.
+    const kept = new Set(state.searchResults);
+    for (const selected of state.searchSelected) {
+        if (!kept.has(selected)) state.searchSelected.delete(selected);
+    }
+    if (state.drawerEntry && !kept.has(state.drawerEntry)) {
+        setPanelState("folder");
+    }
+    renderFileTable();
+});
 
 el.txtSearch.addEventListener("input", () => {
     clearTimeout(_searchDebounceTimer);

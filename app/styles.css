@@ -1740,6 +1740,11 @@ tr:focus-within .cell-actions button {
     color: var(--subtle);
 }
 
+.search-scope-toggle[aria-pressed="true"] {
+    color: var(--violet);
+    background: rgba(139, 92, 234, 0.12);
+}
+
 .selection-bar.is-searching .sb-nav > *:not(.search-input-wrap) {
     display: none !important;
 }
