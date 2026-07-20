@@ -352,6 +352,65 @@ button.dev:hover:not(:disabled) {
     display: none;
 }
 
+/* "More actions" dropdown (Firmware, Format, Lowercase) */
+.more-actions-wrap {
+    position: relative;
+}
+.more-actions-menu[hidden] {
+    display: none;
+}
+.more-actions-menu {
+    position: absolute;
+    top: calc(100% + 4px);
+    right: 0;
+    z-index: 60;
+    min-width: 200px;
+    background: #fff;
+    border: 1px solid var(--border);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+}
+.more-actions-wrap .more-actions-menu .more-actions-item {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 10px;
+    width: 100%;
+    height: auto;
+    padding: 7px 10px;
+    border: none;
+    border-radius: 0;
+    background: transparent;
+    color: var(--foreground);
+    font-family: inherit;
+    font-size: var(--fs-s);
+    font-weight: 500;
+    text-align: left;
+    cursor: pointer;
+}
+.more-actions-item .ms-sm {
+    flex-shrink: 0;
+    width: 20px;
+    text-align: center;
+}
+.more-actions-wrap .more-actions-menu .more-actions-item:hover:not(:disabled) {
+    background: #f3f4f6;
+}
+.more-actions-wrap .more-actions-menu .more-actions-item:disabled {
+    opacity: 0.45;
+    cursor: default;
+}
+.more-actions-item.danger {
+    color: var(--destructive);
+}
+.more-actions-wrap .more-actions-menu .more-actions-item.danger:hover:not(:disabled) {
+    background: #fff1f2;
+}
+.more-actions-divider {
+    height: 1px;
+    margin: 4px 6px;
+    background: var(--border);
+}
+
 /* Notification dot on the Firmware chip */
 .topbar-update-dot {
     position: absolute;
@@ -2378,19 +2437,22 @@ button .ms,
         font-size: 16px;
     }
 
-    #btnUpdateFirmware .topbar-chip-label,
-    #btnFormat .topbar-chip-label,
-    #btnNormalize .topbar-chip-label {
+    #btnMoreActions .topbar-chip-label {
         display: none;
     }
 
-    #btnUpdateFirmware {
+    #btnMoreActions {
         position: relative;
     }
 
-    #btnUpdateFirmware .topbar-update-dot {
+    #btnMoreActions .topbar-update-dot {
         top: 6px;
         right: 6px;
+    }
+
+    .more-actions-menu {
+        right: 0;
+        left: auto;
     }
 
     .main-overlay {
