@@ -1,18 +1,38 @@
+#!/usr/bin/env python3
 """Dev HTTPS server for Mochi local development.
 
 Usage (via invoke):
     inv serve
 
 Direct usage:
-    python3 server.py [--bind 0.0.0.0] [--port 8443] [--cert F] [--key F] [--host DISPLAY] [--directory DIR]
+    ./server.py [--bind 0.0.0.0] [--port 8443] [--cert F] [--key F] [--host DISPLAY] [--directory DIR]
+
+Flag defaults come from a gitignored `.env` file when present (see
+`.env.example`), so a bare `./server.py` serves the same address as
+`inv serve`.
 """
 
 import argparse
 import errno
 import functools
 import http.server
+import os
 import ssl
 import subprocess
+
+
+def _load_env(path=".env"):
+    """Read KEY=VALUE lines into os.environ without overriding real env vars."""
+    try:
+        with open(path) as fh:
+            for line in fh:
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                key, _, value = line.partition("=")
+                os.environ.setdefault(key.strip(), value.strip())
+    except FileNotFoundError:
+        pass
 
 
 class _NoCacheHandler(http.server.SimpleHTTPRequestHandler):
@@ -89,12 +109,17 @@ def run(bind, port, certfile=None, keyfile=None, display_host=None, directory="a
 
 
 if __name__ == "__main__":
+    _load_env()
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--bind", default="127.0.0.1")
-    ap.add_argument("--port", type=int, default=8443)
-    ap.add_argument("--cert", default=None)
-    ap.add_argument("--key", default=None)
-    ap.add_argument("--host", default=None, help="Display hostname in the startup URL")
+    ap.add_argument("--bind", default=os.environ.get("MOCHI_BIND", "127.0.0.1"))
+    ap.add_argument("--port", type=int, default=int(os.environ.get("MOCHI_PORT", "8443")))
+    ap.add_argument("--cert", default=os.environ.get("MOCHI_CERT"))
+    ap.add_argument("--key", default=os.environ.get("MOCHI_KEY"))
+    ap.add_argument(
+        "--host",
+        default=os.environ.get("MOCHI_HOST"),
+        help="Display hostname in the startup URL",
+    )
     ap.add_argument(
         "--directory", default="app", help="Directory to serve (default: app)"
     )
