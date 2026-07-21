@@ -1357,11 +1357,27 @@ function closeMoreActionsMenu() {
     el.btnMoreActions.setAttribute("aria-expanded", "false");
 }
 
+// The menu lives outside .topbar (so mobile's topbar scroll clipping can't
+// hide it), so its position isn't inherited from a relatively-positioned
+// wrapper -- compute it from the trigger button's rect instead.
+function positionMoreActionsMenu() {
+    const btnRect = el.btnMoreActions.getBoundingClientRect();
+    const menu = el.moreActionsMenu;
+    menu.style.top = `${btnRect.bottom + 4}px`;
+    const menuWidth = menu.offsetWidth;
+    const left = Math.max(
+        8,
+        Math.min(btnRect.right - menuWidth, window.innerWidth - menuWidth - 8),
+    );
+    menu.style.left = `${left}px`;
+}
+
 el.btnMoreActions.addEventListener("click", (e) => {
     e.stopPropagation();
     const opening = el.moreActionsMenu.hidden;
     el.moreActionsMenu.hidden = !opening;
     el.btnMoreActions.setAttribute("aria-expanded", String(opening));
+    if (opening) positionMoreActionsMenu();
 });
 
 el.moreActionsMenu.addEventListener("click", (e) => {
@@ -1369,7 +1385,11 @@ el.moreActionsMenu.addEventListener("click", (e) => {
 });
 
 document.addEventListener("click", (e) => {
-    if (!el.moreActionsMenu.hidden && !el.moreActionsWrap.contains(e.target)) {
+    if (
+        !el.moreActionsMenu.hidden &&
+        !el.moreActionsWrap.contains(e.target) &&
+        !el.moreActionsMenu.contains(e.target)
+    ) {
         closeMoreActionsMenu();
     }
 });

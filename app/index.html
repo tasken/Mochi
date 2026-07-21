@@ -131,7 +131,7 @@
                         aria-expanded="false"
                         hidden
                     >
-                        <span class="ms-sm">build</span
+                        <span class="ms-sm">apps</span
                         ><span class="topbar-chip-label">Tools</span
                         ><span
                             class="topbar-update-dot"
@@ -139,26 +139,6 @@
                             hidden
                         ></span>
                     </button>
-                    <div class="more-actions-menu" id="moreActionsMenu" role="menu" hidden>
-                        <button
-                            class="more-actions-item"
-                            id="btnNormalize"
-                            role="menuitem"
-                            title="Convert names to lowercase"
-                        >
-                            <span class="ms-sm">match_case</span>
-                            <span>Lowercase filenames</span>
-                        </button>
-                        <button class="more-actions-item" id="btnUpdateFirmware" role="menuitem">
-                            <span class="ms-sm">memory</span>
-                            <span>Update firmware</span>
-                        </button>
-                        <div class="more-actions-divider"></div>
-                        <button class="more-actions-item danger" id="btnFormat" role="menuitem">
-                            <span class="ms-sm">mop</span>
-                            <span>Format drive</span>
-                        </button>
-                    </div>
                 </div>
                 <button
                     class="btn-icon ghost"
@@ -177,6 +157,30 @@
                     hidden
                 ></span>
             </header>
+
+            <!-- Tools dropdown menu -- lives outside .topbar so it isn't
+                 clipped by the topbar's mobile horizontal-scroll overflow;
+                 positioned under #btnMoreActions via JS on open. -->
+            <div class="more-actions-menu" id="moreActionsMenu" role="menu" hidden>
+                <button
+                    class="more-actions-item"
+                    id="btnNormalize"
+                    role="menuitem"
+                    title="Convert names to lowercase"
+                >
+                    <span class="ms-sm">match_case</span>
+                    <span>Lowercase filenames</span>
+                </button>
+                <button class="more-actions-item" id="btnUpdateFirmware" role="menuitem">
+                    <span class="ms-sm">memory</span>
+                    <span>Update firmware</span>
+                </button>
+                <div class="more-actions-divider"></div>
+                <button class="more-actions-item danger" id="btnFormat" role="menuitem">
+                    <span class="ms-sm">mop</span>
+                    <span>Format drive</span>
+                </button>
+            </div>
 
             <!-- iOS Bluetooth banner -->
             <div class="ios-ble-banner" id="iosBanner" hidden>
@@ -1572,7 +1576,7 @@
                         // name to the alphabetically-sorted list below or it
                         // will render as the literal ligature text.
                         await loadStyle(
-                            "https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400&family=IBM+Plex+Sans:wght@400;700&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,1,0&icon_names=ar_stickers,arrow_back,arrow_forward,block,bluetooth,bluetooth_disabled,bluetooth_searching,build,check,check_circle,close,cloud_upload,create_new_folder,delete,download,edit,error,favorite,folder,folder_open,folder_zip,hard_drive,home,inbox,info,insert_drive_file,keyboard_arrow_down,lock,match_case,memory,mop,open_in_new,phone_android,phone_iphone,play_arrow,progress_activity,refresh,replay,restart_alt,schedule,screen_lock_portrait,search,settings,stop,sync,system_update,task_alt,terminal,toggle_off,toggle_on,upload,upload_file,warning,zoom_out_map&display=swap",
+                            "https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400&family=IBM+Plex+Sans:wght@400;700&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20,400,1,0&icon_names=apps,ar_stickers,arrow_back,arrow_forward,block,bluetooth,bluetooth_disabled,bluetooth_searching,check,check_circle,close,cloud_upload,create_new_folder,delete,download,edit,error,favorite,folder,folder_open,folder_zip,hard_drive,home,inbox,info,insert_drive_file,keyboard_arrow_down,lock,match_case,memory,mop,open_in_new,phone_android,phone_iphone,play_arrow,progress_activity,refresh,replay,restart_alt,schedule,screen_lock_portrait,search,settings,stop,sync,system_update,task_alt,terminal,toggle_off,toggle_on,upload,upload_file,warning,zoom_out_map&display=swap",
                         ).catch(function (err) {
                             console.warn(
                                 "[boot] Optional font stylesheet failed:",
