@@ -24,6 +24,5 @@ tasks.py
 app/bench.html
 app/bench.js
 
-# AI tooling (local only)
-.github/copilot-instructions.md
-CLAUDE.md
+# Environment config (server-specific values)
+.env
