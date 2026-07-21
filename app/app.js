@@ -253,8 +253,6 @@ const el = {
 
     // Context panel — upload state
     panelUpload: document.getElementById("panelUpload"),
-    btnPickFolder: document.getElementById("btnPickFolder"),
-    btnPickFiles: document.getElementById("btnPickFiles"),
     uploadProgressTotal: document.getElementById("uploadProgressTotal"),
     uploadWarningBanner: document.getElementById("uploadWarningBanner"),
     uploadQueue: document.getElementById("uploadQueue"),
@@ -262,7 +260,6 @@ const el = {
     btnUploadAbort: document.getElementById("btnUploadAbort"),
     btnUploadClear: document.getElementById("btnUploadClear"),
     uploadExecuteZone: document.getElementById("uploadExecuteZone"),
-    folderInput: document.getElementById("folderInput"),
     filesInput: document.getElementById("filesInput"),
     btnUploadClose: document.getElementById("btnUploadClose"),
     btnSync: document.getElementById("btnSync"),
@@ -607,10 +604,14 @@ el.btnSheetInfo.addEventListener("click", () => {
     el.sheetContainer.classList.remove("is-upload");
     openSheet();
 });
+// Opens the native file picker directly; the panel only switches to the
+// upload state (and the mobile sheet only opens) once files actually come
+// back from filesInput's "change" handler -- cancelling the dialog leaves
+// whatever's currently shown untouched.
+let _sheetUploadPending = false;
 el.btnSheetUpload.addEventListener("click", () => {
-    setPanelState("upload");
-    el.sheetContainer.classList.add("is-upload");
-    openSheet();
+    _sheetUploadPending = true;
+    el.filesInput.click();
 });
 
 // Swipe-down on panel handle dismisses the sheet
@@ -1540,8 +1541,6 @@ function updateControls() {
     el.btnNormalize.disabled = !connected || uploading || dfuActive;
     el.btnFormat.disabled = !connected || uploading || dfuActive;
     el.btnUpdateFirmware.disabled = !connected || uploading || dfuActive;
-    el.btnPickFolder.disabled = !connected || uploading || syncing;
-    el.btnPickFiles.disabled = !connected || uploading || syncing;
     el.btnSync.disabled = !connected || uploading || syncing || !queueHasItems;
     el.btnSync.innerHTML =
         state.syncState === "done"
@@ -2634,6 +2633,8 @@ function enterSearchMode() {
     el.selectionBar.classList.add("is-searching");
     el.btnSearchIdentity.setAttribute("aria-pressed", "false");
     el.btnSearchIdentityIcon.textContent = "toggle_off";
+    el.btnSearchIdentity.hidden = true;
+    el.btnSearchClose.hidden = true;
     el.txtSearch.value = "";
     renderFileTable();
     el.txtSearch.focus();
@@ -2682,6 +2683,8 @@ async function runSearchWalk(query) {
     state.searchBinFiles = [];
     state.searchIdentityChecked = 0;
     state.searchIdentityScanning = false;
+    el.btnSearchIdentity.hidden = false;
+    el.btnSearchClose.hidden = false;
     renderFileTable();
     trackAnalyticsEvent("file_search");
 
@@ -3240,8 +3243,7 @@ el.sidebarDropZone.addEventListener("drop", async (e) => {
     }
 });
 
-el.btnUploadClose.addEventListener("click", () => {
-    if (isAriaDisabled(el.btnUploadClose)) return;
+function closeUploadPanelToFolder() {
     resetUploadSessionState();
     renderUploadQueue();
     updateControls();
@@ -3260,6 +3262,11 @@ el.btnUploadClose.addEventListener("click", () => {
         el.panelFolder.hidden = false;
         el.panelUpload.hidden = true;
     }
+}
+
+el.btnUploadClose.addEventListener("click", () => {
+    if (isAriaDisabled(el.btnUploadClose)) return;
+    closeUploadPanelToFolder();
 });
 
 // === Connect button ===
@@ -3564,37 +3571,6 @@ el.btnSanitizeNoneConfirm.addEventListener("click", async () => {
 function collectFoldersFromPath(relPath, set) {
     const parts = relPath.split("/").filter(Boolean);
     for (let i = 1; i < parts.length; i++) set.add(parts.slice(0, i).join("/"));
-}
-
-async function collectFromDirHandle(handle) {
-    const folders = new Set();
-    const files = [];
-    async function walk(dir, pfx) {
-        if (pfx) folders.add(pfx);
-        for await (const [name, child] of dir.entries()) {
-            const rel = pfx ? `${pfx}/${name}` : name;
-            if (child.kind === "directory") {
-                await walk(child, rel);
-            } else {
-                const f = await child.getFile();
-                files.push({ relativePath: rel, file: f });
-                collectFoldersFromPath(rel, folders);
-            }
-        }
-    }
-    await walk(handle, handle.name);
-    return { folders, files };
-}
-
-async function collectFromWebkitDir(fileList) {
-    const folders = new Set();
-    const files = [];
-    for (const f of Array.from(fileList)) {
-        const rel = f.webkitRelativePath || f.name;
-        files.push({ relativePath: rel, file: f });
-        collectFoldersFromPath(rel, folders);
-    }
-    return { folders, files };
 }
 
 function collectFromFiles(fileList) {
@@ -4614,40 +4590,9 @@ async function runUpload() {
 
 // --- Upload event handlers ---
 
-el.btnPickFolder.addEventListener("click", async () => {
-    try {
-        if (typeof window.showDirectoryPicker === "function") {
-            const handle = await window.showDirectoryPicker({ mode: "read" });
-            const collected = await collectFromDirHandle(handle);
-            if (!(await checkSystemFolderWarning(collected))) return;
-            buildUploadPlan(collected.folders, collected.files);
-            setPanelState("upload");
-        } else {
-            el.folderInput.click();
-        }
-    } catch (err) {
-        if (err.name !== "AbortError")
-            log(`Picker error: ${err.message}`, "err");
-    }
-});
-
-el.folderInput.addEventListener("change", async (e) => {
-    if (!e.target.files || e.target.files.length === 0) return;
-    const snapshot = Array.from(e.target.files);
-    e.target.value = "";
-    try {
-        const collected = await collectFromWebkitDir(snapshot);
-        if (!(await checkSystemFolderWarning(collected))) return;
-        buildUploadPlan(collected.folders, collected.files);
-        setPanelState("upload");
-    } catch (err) {
-        showErrorToast("Couldn't add folder", err.message);
-    }
-});
-
-el.btnPickFiles.addEventListener("click", () => el.filesInput.click());
-
 el.filesInput.addEventListener("change", async (e) => {
+    const viaSheetButton = _sheetUploadPending;
+    _sheetUploadPending = false;
     if (!e.target.files || e.target.files.length === 0) return;
     const snapshot = Array.from(e.target.files);
     e.target.value = "";
@@ -4656,6 +4601,10 @@ el.filesInput.addEventListener("change", async (e) => {
         if (!(await checkSystemFolderWarning(collected))) return;
         buildUploadPlan(collected.folders, collected.files);
         setPanelState("upload");
+        if (viaSheetButton) {
+            el.sheetContainer.classList.add("is-upload");
+            openSheet();
+        }
     } catch (err) {
         showErrorToast("Couldn't add files", err.message);
     }
@@ -4701,9 +4650,7 @@ el.btnUploadAbort.addEventListener("click", () => {
 
 el.btnUploadClear.addEventListener("click", () => {
     if (isAriaDisabled(el.btnUploadClear)) return;
-    resetUploadSessionState();
-    renderUploadQueue();
-    updateControls();
+    closeUploadPanelToFolder();
 });
 
 // === DFU ===
