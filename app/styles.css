@@ -352,7 +352,9 @@ button.dev:hover:not(:disabled) {
     display: none;
 }
 
-/* "More actions" dropdown (Firmware, Format, Lowercase) */
+/* "More actions" dropdown (Firmware, Format, Lowercase) -- lives outside
+   .topbar in the DOM (see index.html) so mobile's topbar overflow-y:hidden
+   can't clip it; position: fixed with top/left set by JS on open. */
 .more-actions-wrap {
     position: relative;
 }
@@ -360,16 +362,14 @@ button.dev:hover:not(:disabled) {
     display: none;
 }
 .more-actions-menu {
-    position: absolute;
-    top: calc(100% + 4px);
-    right: 0;
+    position: fixed;
     z-index: 60;
     min-width: 200px;
     background: #fff;
     border: 1px solid var(--border);
     box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
 }
-.more-actions-wrap .more-actions-menu .more-actions-item {
+.more-actions-menu .more-actions-item {
     display: flex;
     align-items: center;
     justify-content: flex-start;
@@ -392,17 +392,17 @@ button.dev:hover:not(:disabled) {
     width: 20px;
     text-align: center;
 }
-.more-actions-wrap .more-actions-menu .more-actions-item:hover:not(:disabled) {
+.more-actions-menu .more-actions-item:hover:not(:disabled) {
     background: #f3f4f6;
 }
-.more-actions-wrap .more-actions-menu .more-actions-item:disabled {
+.more-actions-menu .more-actions-item:disabled {
     opacity: 0.45;
     cursor: default;
 }
 .more-actions-item.danger {
     color: var(--destructive);
 }
-.more-actions-wrap .more-actions-menu .more-actions-item.danger:hover:not(:disabled) {
+.more-actions-menu .more-actions-item.danger:hover:not(:disabled) {
     background: #fff1f2;
 }
 .more-actions-divider {
@@ -2412,17 +2412,13 @@ button .ms,
         display: none !important;
     }
 
-    .topbar-spacer {
-        display: none;
-    }
-
     .topbar button:not(.btn-icon) {
-        width: 40px;
-        height: 40px;
+        width: 44px;
+        height: 44px;
         padding: 0;
         border-radius: 999px;
         justify-content: center;
-        min-width: 40px;
+        min-width: 44px;
     }
 
     .topbar-brand-icon {
@@ -2437,22 +2433,23 @@ button .ms,
         font-size: 16px;
     }
 
-    #btnMoreActions .topbar-chip-label {
-        display: none;
-    }
-
+    /* Tools stays a labeled pill on mobile (like desktop) instead of
+       collapsing to an icon-only circle -- #btnMoreActions's ID specificity
+       overrides the ".topbar button:not(.btn-icon)" circle rule above. */
     #btnMoreActions {
         position: relative;
+        width: auto;
+        height: 40px;
+        min-width: auto;
+        min-height: 44px;
+        padding: 0 12px;
+        border-radius: 8px;
+        justify-content: center;
     }
 
     #btnMoreActions .topbar-update-dot {
         top: 6px;
         right: 6px;
-    }
-
-    .more-actions-menu {
-        right: 0;
-        left: auto;
     }
 
     .main-overlay {
