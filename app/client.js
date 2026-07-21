@@ -176,7 +176,9 @@ export class PixlToolsClient {
         this.chunking = false;
         this.rxParts = [];
         this.rxBytes = 0;
+        this.rxSeq = -1;
         this.maxChunkSize = CHUNK_SIZE_LADDER[0];
+        this._expectErrorResponses = false;
         this.createdFolders = new Set();
         this.folderCache = new Map();
         this._pendingTimer = null;
@@ -245,18 +247,30 @@ export class PixlToolsClient {
         }
         this.createdFolders.clear();
         this._log(`Connected to ${device.name || "BLE device"}.`);
+        const txProps = this.txChar.properties;
+        console.info(
+            "[BLE]",
+            `TX mode: ${
+                txProps && txProps.writeWithoutResponse
+                    ? "write-without-response"
+                    : "write-with-response"
+            }`,
+        );
 
-        // Connection housekeeping, with protocol-log noise suppressed: the
-        // stale-handle close errors when no file was open, and the MTU probe
-        // intentionally elicits an unknown-command error response.
+        // Connection housekeeping, with protocol-log and console noise
+        // suppressed: the stale-handle close errors when no file was open,
+        // and the MTU probe intentionally elicits an unknown-command error
+        // response.
         const savedLog = this._log;
         this._log = () => {};
+        this._expectErrorResponses = true;
         try {
             // Close any dangling file handle from a prior session.
             await this._sendCommand(0x13, Uint8Array.of(0));
             await this._negotiateChunkSize();
         } finally {
             this._log = savedLog;
+            this._expectErrorResponses = false;
         }
         this._log(`Max write chunk: ${this.maxChunkSize}B`);
     }
@@ -264,6 +278,7 @@ export class PixlToolsClient {
     async _negotiateChunkSize() {
         for (const chunk of CHUNK_SIZE_LADDER) {
             try {
+                console.info("[BLE]", `MTU probe: trying ${chunk}B chunk`);
                 // +1 mirrors the fileId byte of FILE_WRITE, so the probed
                 // frame is exactly as large as a real upload frame.
                 await this._sendCommand(
@@ -271,13 +286,31 @@ export class PixlToolsClient {
                     new Uint8Array(chunk + 1),
                     PROBE_TIMEOUT_MS,
                 );
+                console.info("[BLE]", `MTU probe: ${chunk}B chunk fits`);
                 this.maxChunkSize = chunk;
                 return;
-            } catch (_) {
+            } catch (err) {
+                if (!this.txChar) {
+                    // The link died mid-probe; surface it to connect() instead
+                    // of resolving as a successfully connected 15-byte link.
+                    console.warn(
+                        "[BLE]",
+                        "MTU probe: link lost mid-negotiation",
+                    );
+                    throw err;
+                }
                 // Frame too large for this link's MTU — try the next size down.
+                console.info(
+                    "[BLE]",
+                    `MTU probe: ${chunk}B chunk failed (${err.message})`,
+                );
             }
         }
         this.maxChunkSize = CHUNK_SIZE_LADDER[CHUNK_SIZE_LADDER.length - 1];
+        console.warn(
+            "[BLE]",
+            `MTU probe: no rung fit, falling back to ${this.maxChunkSize}B`,
+        );
     }
 
     disconnect() {
@@ -317,6 +350,7 @@ export class PixlToolsClient {
         this.chunking = false;
         this.rxParts = [];
         this.rxBytes = 0;
+        this.rxSeq = -1;
         this.createdFolders.clear();
         this.folderCache.clear();
     }
@@ -609,6 +643,10 @@ export class PixlToolsClient {
         chunkSize = null,
     ) {
         const effectiveChunkSize = chunkSize ?? this.maxChunkSize;
+        console.info(
+            "[BLE]",
+            `Upload ${remotePath}: ${file.size}B in ${effectiveChunkSize}B chunks`,
+        );
         validateRemotePath(remotePath, "file");
         const openRes = await this.openFile(remotePath, "w");
         if (!openRes.ok) throw new Error(openRes.error);
@@ -646,13 +684,11 @@ export class PixlToolsClient {
     _sendCommand(cmd, payload = new Uint8Array(), timeoutMs = COMMAND_TIMEOUT_MS) {
         const cmdName = CMD_NAMES[cmd] || `0x${cmd.toString(16)}`;
         const run = () => this._performCommand(cmd, payload, cmdName, timeoutMs);
-        this.queue = this.queue
-            .catch((err) => {
-                if (!this.txChar) return;
-                throw err;
-            })
-            .then(run);
-        return this.queue;
+        const result = this.queue.then(run);
+        // The chain must never hold a rejection: one failed command would
+        // otherwise poison every command queued after it.
+        this.queue = result.catch(() => {});
+        return result;
     }
 
     _writeFrame(frame) {
@@ -685,14 +721,13 @@ export class PixlToolsClient {
                 this.pending = null;
                 this._pendingTimer = null;
                 // Drop any half-assembled chunked response so the next command
-                // does not inherit stale reassembly state.
+                // does not inherit stale reassembly state. We intentionally do
+                // NOT call _resetTransport here — the GATT connection may
+                // still be live.
                 this.chunking = false;
                 this.rxParts = [];
                 this.rxBytes = 0;
-                // Reset the queue so subsequent commands are not poisoned by this
-                // rejection propagating through the chain. We intentionally do NOT
-                // call _resetTransport here — the GATT connection may still be live.
-                this.queue = Promise.resolve();
+                this.rxSeq = -1;
                 const err = new Error(`Command timed out: ${cmdName}`);
                 console.error("[BLE]", err.message);
                 reject(err);
@@ -736,46 +771,63 @@ export class PixlToolsClient {
             );
             const chunk = incoming[2] | (incoming[3] << 8);
             const hasMore = (chunk & 0x8000) !== 0;
+            // Firmware numbers the frames of a chunked response 0, 1, 2, ...
+            // in the low 15 bits; the final frame carries the counter without
+            // the has-more flag.
+            const seq = chunk & 0x7fff;
             if (hasMore) {
                 if (!this.chunking) {
+                    if (seq !== 0) {
+                        // Mid-stream chunk with no reassembly in progress: the
+                        // tail of a dead response (e.g. after a timeout), not
+                        // the start of this one. Drop it.
+                        console.warn(
+                            "[BLE]",
+                            `Dropped stale chunk ${seq} (no reassembly in progress)`,
+                        );
+                        return;
+                    }
                     this.rxParts = [incoming];
                     this.rxBytes = incoming.length;
+                    this.rxSeq = 0;
                     this.chunking = true;
                 } else {
+                    if (seq !== this.rxSeq + 1) {
+                        // Duplicate or out-of-order packet: fail fast instead
+                        // of buffering garbage until the byte cap.
+                        this._failReassembly(
+                            `RX sequence error: got chunk ${seq}, expected ${this.rxSeq + 1}`,
+                        );
+                        return;
+                    }
                     if (this.rxBytes + incoming.length > MAX_RESPONSE_BYTES) {
-                        // Guard against runaway reassembly from duplicate/out-of-order packets.
-                        this.chunking = false;
-                        this.rxParts = [];
-                        this.rxBytes = 0;
-                        clearTimeout(this._pendingTimer);
-                        this._pendingTimer = null;
-                        if (this.pending) {
-                            const err = new Error(
-                                `RX overflow: response exceeds ${MAX_RESPONSE_BYTES} bytes`,
-                            );
-                            console.error("[BLE]", err.message);
-                            // Reset the queue chain before rejecting, for the same reason
-                            // as the timeout handler: without this, the rejection cascades
-                            // through every subsequently queued command.
-                            this.queue = Promise.resolve();
-                            this.pending.reject(err);
-                            this.pending = null;
-                        }
+                        // Guard against runaway reassembly.
+                        this._failReassembly(
+                            `RX overflow: response exceeds ${MAX_RESPONSE_BYTES} bytes`,
+                        );
                         return;
                     }
                     this.rxParts.push(incoming.slice(FRAME_HEADER_SIZE));
                     this.rxBytes += incoming.length - FRAME_HEADER_SIZE;
+                    this.rxSeq = seq;
                 }
                 if (this.pending && this.pending.armTimer) this.pending.armTimer();
                 return;
             }
             let frame = incoming;
             if (this.chunking) {
+                if (seq !== this.rxSeq + 1) {
+                    this._failReassembly(
+                        `RX sequence error: got final chunk ${seq}, expected ${this.rxSeq + 1}`,
+                    );
+                    return;
+                }
                 this.rxParts.push(incoming.slice(FRAME_HEADER_SIZE));
                 frame = concatBytes(...this.rxParts);
                 this.rxParts = [];
                 this.chunking = false;
                 this.rxBytes = 0;
+                this.rxSeq = -1;
             }
             const response = {
                 cmd: frame[0],
@@ -783,6 +835,17 @@ export class PixlToolsClient {
                 payload: frame.slice(FRAME_HEADER_SIZE),
             };
             const p = this.pending;
+            if (response.cmd === PROBE_CMD && p.cmd !== PROBE_CMD) {
+                // Late echo of a timed-out MTU probe answering after its rung
+                // already moved on. Not this command's response; keep waiting.
+                this._log("← stale 0x70 probe echo (ignored)");
+                console.warn(
+                    "[BLE]",
+                    "Dropped stale 0x70 probe echo; still waiting for",
+                    CMD_NAMES[p.cmd] || `0x${p.cmd.toString(16)}`,
+                );
+                return;
+            }
             clearTimeout(this._pendingTimer);
             this._pendingTimer = null;
             this.pending = null;
@@ -792,7 +855,11 @@ export class PixlToolsClient {
                 this._log(
                     `← ${cmdName} OK${response.payload.length > 0 ? ` (${response.payload.length}B)` : ""}`,
                 );
-            } else {
+            } else if (response.cmd !== PROBE_CMD && !this._expectErrorResponses) {
+                // Probe echoes are excluded: their error status is the
+                // expected success signal of the MTU probe, not a fault.
+                // Connect-time housekeeping is excluded the same way (the
+                // stale-handle FILE_CLOSE errors when no file was open).
                 const errMsg = this._vfsError(response.status);
                 this._log(`← ${cmdName} ERR: ${errMsg}`);
                 console.error(
@@ -811,15 +878,22 @@ export class PixlToolsClient {
             p.resolve(response);
         } catch (err) {
             console.error("[BLE]", "Notification parse error:", err.message);
-            clearTimeout(this._pendingTimer);
-            this._pendingTimer = null;
-            if (this.pending) {
-                this.pending.reject(err);
-                this.pending = null;
-            }
-            this.chunking = false;
-            this.rxParts = [];
-            this.rxBytes = 0;
+            this._failReassembly(err.message);
+        }
+    }
+
+    _failReassembly(message) {
+        this.chunking = false;
+        this.rxParts = [];
+        this.rxBytes = 0;
+        this.rxSeq = -1;
+        clearTimeout(this._pendingTimer);
+        this._pendingTimer = null;
+        if (this.pending) {
+            const err = new Error(message);
+            console.error("[BLE]", err.message);
+            this.pending.reject(err);
+            this.pending = null;
         }
     }
 }
