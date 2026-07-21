@@ -1,0 +1,8 @@
+[build]
+  command = "bash fetch-firmware.sh"
+  publish = "app"
+
+# Skip production deploys entirely (production branch is "main" per
+# Netlify's default site setting) — only branch deploys run.
+[context.production]
+  ignore = "exit 0"
