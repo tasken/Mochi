@@ -1,6 +1,8 @@
 [build]
   # COMMIT_REF is a built-in Netlify build variable (full commit SHA).
-  command = "bash fetch-firmware.sh && bash bust-cache.sh app \"${COMMIT_REF:0:7}\""
+  # bench.html/bench.js are gitignored inside app/ (dev-only, kept off GitHub
+  # Pages) but tracked under netlify/bench/ so Netlify previews can ship them.
+  command = "bash fetch-firmware.sh && cp netlify/bench/bench.html netlify/bench/bench.js app/ && bash bust-cache.sh app \"${COMMIT_REF:0:7}\""
   publish = "app"
 
 # Skip production deploys entirely (production branch is "main" per

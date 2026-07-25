@@ -20,7 +20,8 @@ app/firmware/
 # Personal dev task config (contains local IP, ports, etc.)
 tasks.py
 
-# Benchmark tool (dev only, not deployed)
+# Benchmark tool working copy (not deployed to GitHub Pages; tracked source
+# lives in netlify/bench/ and is copied in by the Netlify build)
 app/bench.html
 app/bench.js
 

@@ -1,0 +1,486 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width,initial-scale=1" />
+        <title>mochi bench</title>
+        <style>
+            :root {
+                color-scheme: light dark;
+                font-family:
+                    ui-monospace, SFMono-Regular, Menlo, Consolas,
+                    "Courier New", monospace;
+                --border: #333;
+                --bg-panel: #0a0a0a;
+                --bg-input: #1a1a1a;
+                --fg-text: #e8e8e8;
+                --fg-dim: #888;
+
+                /* Spacing scale: 4px base unit */
+                --sp-1: 4px;
+                --sp-2: 8px;
+                --sp-3: 12px;
+                --sp-4: 16px;
+                --sp-5: 20px;
+
+                /* Font sizes */
+                --fs-xs: 0.75rem;
+                --fs-sm: 0.8rem;
+                --fs-md: 0.85rem;
+                --fs-lg: 0.95rem;
+                --fs-xl: 1rem;
+
+                /* Line height */
+                --lh-tight: 1.2;
+                --lh-normal: 1.4;
+                --lh-relaxed: 1.6;
+            }
+            * {
+                box-sizing: border-box;
+            }
+            body {
+                margin: 0;
+                padding: 0;
+                display: flex;
+                height: 100vh;
+                background: #000;
+                color: var(--fg-text);
+                font-size: var(--fs-md);
+                line-height: var(--lh-normal);
+            }
+            ::-webkit-scrollbar {
+                width: 8px;
+                height: 8px;
+            }
+            ::-webkit-scrollbar-track {
+                background: #0a0a0a;
+            }
+            ::-webkit-scrollbar-thumb {
+                background: #333;
+                border-radius: 2px;
+            }
+            ::-webkit-scrollbar-thumb:hover {
+                background: #555;
+            }
+            #sidebar {
+                width: 480px;
+                overflow-y: auto;
+                border-right: 1px solid var(--border);
+                padding: var(--sp-4);
+                background: var(--bg-panel);
+                flex-shrink: 0;
+            }
+            #main {
+                flex: 1;
+                display: flex;
+                flex-direction: column;
+                background: #000;
+            }
+            #header {
+                padding: var(--sp-3) var(--sp-4);
+                border-bottom: 1px solid var(--border);
+                text-transform: lowercase;
+                font-weight: bold;
+                letter-spacing: 0.5px;
+                font-size: var(--fs-sm);
+                line-height: var(--lh-tight);
+            }
+            #log {
+                flex: 1;
+                overflow-y: auto;
+                white-space: pre-wrap;
+                word-wrap: break-word;
+                border: none;
+                padding: var(--sp-3) var(--sp-4);
+                font-size: var(--fs-xs);
+                line-height: var(--lh-tight);
+            }
+            h1 {
+                margin: 0 0 var(--sp-2) 0;
+                font-size: var(--fs-xl);
+                text-transform: lowercase;
+                letter-spacing: 0.5px;
+                font-weight: bold;
+                line-height: var(--lh-tight);
+            }
+            h2 {
+                margin: var(--sp-2) 0 var(--sp-1) 0;
+                font-size: var(--fs-sm);
+                text-transform: uppercase;
+                letter-spacing: 0.4px;
+                border-bottom: 1px solid var(--border);
+                padding-bottom: var(--sp-1);
+                font-weight: bold;
+                line-height: var(--lh-tight);
+            }
+            .card {
+                border: 1px solid var(--border);
+                border-radius: 0;
+                padding: var(--sp-3);
+                margin: 0 0 var(--sp-3) 0;
+                background: var(--bg-input);
+            }
+            .section {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+                gap: var(--sp-2);
+                margin: var(--sp-2) 0;
+            }
+            .row {
+                display: flex;
+                gap: var(--sp-2);
+                flex-wrap: wrap;
+                align-items: flex-start;
+                margin: var(--sp-1) 0;
+            }
+            label {
+                display: flex;
+                flex-direction: column;
+                gap: var(--sp-1);
+                font-size: var(--fs-xs);
+                text-transform: uppercase;
+                letter-spacing: 0.4px;
+                line-height: var(--lh-tight);
+            }
+            label > input[type="text"],
+            label > input[type="number"],
+            label > input[type="file"],
+            label > select {
+                padding: var(--sp-1) var(--sp-2);
+                border: 1px solid var(--border);
+                border-radius: 0;
+                font-size: var(--fs-xs);
+                background: #0a0a0a;
+                color: var(--fg-text);
+                font-family: inherit;
+                line-height: var(--lh-tight);
+            }
+            button {
+                padding: var(--sp-1) var(--sp-2);
+                border-radius: 0;
+                border: 1px solid var(--border);
+                cursor: pointer;
+                font-size: var(--fs-xs);
+                text-transform: uppercase;
+                letter-spacing: 0.4px;
+                background: #1a1a1a;
+                color: var(--fg-text);
+                font-family: inherit;
+                font-weight: bold;
+                line-height: var(--lh-tight);
+            }
+            button:hover:not(:disabled) {
+                background: #2a2a2a;
+                border-color: #555;
+            }
+            button:disabled {
+                opacity: 0.4;
+                cursor: not-allowed;
+            }
+            table {
+                width: 100%;
+                border-collapse: collapse;
+                margin-top: var(--sp-2);
+                font-size: var(--fs-xs);
+                line-height: var(--lh-tight);
+            }
+            th,
+            td {
+                border-bottom: 1px solid var(--border);
+                text-align: left;
+                padding: var(--sp-1) var(--sp-2);
+            }
+            th {
+                text-transform: uppercase;
+                letter-spacing: 0.4px;
+                font-weight: bold;
+            }
+            .ok {
+                color: #4ade80;
+            }
+            .err {
+                color: #f87171;
+            }
+            .warn {
+                color: #facc15;
+            }
+            #connState {
+                font-size: var(--fs-xs);
+                padding: var(--sp-1) var(--sp-2);
+                background: #0a0a0a;
+                border: 1px solid var(--border);
+                border-radius: 0;
+                margin-top: var(--sp-1);
+                line-height: var(--lh-tight);
+            }
+            #regularSummary,
+            #dfuLiveStats,
+            #dfuSummary {
+                font-size: var(--fs-xs);
+                line-height: var(--lh-tight);
+                margin-top: var(--sp-1);
+            }
+            @media (max-width: 768px) {
+                body {
+                    flex-direction: column;
+                }
+                #sidebar {
+                    width: 100%;
+                    border-right: none;
+                    border-bottom: 1px solid var(--border);
+                    max-height: 35vh;
+                }
+                #main {
+                    height: 65vh;
+                }
+            }
+        </style>
+    </head>
+    <body>
+        <div id="sidebar">
+            <h1>mochi bench</h1>
+
+            <div class="card">
+                <h2>■ Connection</h2>
+                <div class="row">
+                    <button id="btnConnect">Connect</button>
+                    <button id="btnDisconnect">Disconnect</button>
+                </div>
+                <div id="connState">⊘ disconnected</div>
+            </div>
+
+            <div class="card">
+                <h2>■ Regular Mode</h2>
+                <div class="section">
+                    <label
+                        >FILE SIZE (B)<br /><input
+                            id="regularFileSize"
+                            type="number"
+                            min="1"
+                            value="512"
+                    /></label>
+                    <label
+                        >TOTAL FILES<br /><input
+                            id="regularFilesCount"
+                            type="number"
+                            min="1"
+                            value="80"
+                    /></label>
+                    <label
+                        >PER FOLDER<br /><input
+                            id="regularFilesPerFolder"
+                            type="number"
+                            min="1"
+                            value="80"
+                    /></label>
+                </div>
+                <div class="section">
+                    <label
+                        >CHUNKS (B)<br /><input
+                            id="regularChunks"
+                            type="text"
+                            value="200,216,232,242"
+                    /></label>
+                    <label
+                        >REPEATS<br /><input
+                            id="regularRepeats"
+                            type="number"
+                            min="1"
+                            max="20"
+                            value="1"
+                    /></label>
+                </div>
+                <div class="row">
+                    <button id="btnRunRegular">RUN</button>
+                    <button id="btnStopRegular" disabled>STOP</button>
+                </div>
+                <div id="regularSummary"></div>
+                <table id="regularTable" hidden>
+                    <thead>
+                        <tr>
+                            <th>CHUNK</th>
+                            <th>RUNS</th>
+                            <th>AVG SEC</th>
+                            <th>KB/S</th>
+                            <th>MS/FILE</th>
+                            <th>RESULT</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+
+            <div class="card">
+                <h2>■ DFU Single Run</h2>
+                <div
+                    style="
+                        font-size: var(--fs-xs);
+                        color: var(--fg-dim);
+                        line-height: var(--lh-relaxed);
+                        margin-bottom: var(--sp-2);
+                    "
+                >
+                    One run at a time — device reboots after each flash. Tweak
+                    params and run again. Results accumulate.
+                </div>
+                <div class="section">
+                    <label
+                        >DFU PACKAGE<br /><input
+                            id="dfuFile"
+                            type="file"
+                            accept=".zip"
+                    /></label>
+                </div>
+                <div class="section">
+                    <label
+                        >PACKET SIZE (B)<br /><input
+                            id="dfuPacketSize"
+                            type="number"
+                            min="1"
+                            value="20"
+                    /></label>
+                    <label
+                        >DELAY (MS)<br /><input
+                            id="dfuDelay"
+                            type="number"
+                            min="0"
+                            value="0"
+                    /></label>
+                </div>
+                <div class="section">
+                    <label
+                        >PRN<br /><input
+                            id="dfuPrn"
+                            type="number"
+                            min="0"
+                            value="12"
+                    /></label>
+                    <label
+                        >OBJ DELAY (MS)<br /><input
+                            id="dfuObjectDelay"
+                            type="number"
+                            min="0"
+                            value="0"
+                    /></label>
+                </div>
+                <div class="section">
+                    <label
+                        ><input id="dfuAlreadyInMode" type="checkbox" /> Already
+                        in DFU mode</label
+                    >
+                </div>
+                <div class="row">
+                    <button id="btnRunDfu">RUN DFU</button>
+                    <button id="btnStopDfu" disabled>STOP</button>
+                    <button id="btnClearDfu">CLEAR</button>
+                </div>
+                <div id="dfuLiveStats"></div>
+                <div id="dfuSummary"></div>
+                <table id="dfuTable" hidden>
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>PKT</th>
+                            <th>DELAY</th>
+                            <th>PRN</th>
+                            <th>OBJ DLY</th>
+                            <th>STATUS</th>
+                            <th>SEC</th>
+                            <th>KB/S</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+
+            <div class="card">
+                <h2>■ Experiments</h2>
+
+                <div
+                    style="
+                        font-size: var(--fs-xs);
+                        color: var(--fg-dim);
+                        line-height: var(--lh-relaxed);
+                        margin-bottom: var(--sp-2);
+                    "
+                >
+                    Batch: one large file (isolates open/close overhead).<br />
+                    Pipeline: fire multiple BLE writes before waiting for
+                    responses.<br />
+                    Multi-file pipeline: real workload — N small files with
+                    pipelined writes per file.
+                </div>
+
+                <div class="section">
+                    <label
+                        >TOTAL BYTES<br /><input
+                            id="expTotalBytes"
+                            type="number"
+                            min="1"
+                            value="40960"
+                    /></label>
+                    <label
+                        >CHUNK SIZE (B)<br /><input
+                            id="expChunkSize"
+                            type="number"
+                            min="1"
+                            value="242"
+                    /></label>
+                    <label
+                        >PIPELINE DEPTH<br /><input
+                            id="expPipelineDepth"
+                            type="number"
+                            min="1"
+                            value="4"
+                    /></label>
+                </div>
+                <div class="section">
+                    <label
+                        >FILE SIZE (B)<br /><input
+                            id="expFileSize"
+                            type="number"
+                            min="1"
+                            value="512"
+                    /></label>
+                    <label
+                        >FILE COUNT<br /><input
+                            id="expFileCount"
+                            type="number"
+                            min="1"
+                            value="20"
+                    /></label>
+                </div>
+                <div class="row">
+                    <button id="btnRunBatch">RUN BATCH</button>
+                    <button id="btnRunPipeline">RUN PIPELINE</button>
+                    <button id="btnRunMultiPipe">RUN MULTI-FILE</button>
+                    <button id="btnStopExp" disabled>STOP</button>
+                </div>
+                <div id="expSummary"></div>
+                <table id="expTable" hidden>
+                    <thead>
+                        <tr>
+                            <th>MODE</th>
+                            <th>BYTES</th>
+                            <th>CHUNK</th>
+                            <th>SEC</th>
+                            <th>KB/S</th>
+                            <th>MS/CHUNK</th>
+                            <th>RESULT</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div id="main">
+            <div id="header">mochi bench log</div>
+            <div id="log"></div>
+        </div>
+
+        <script src="./vendor/secure-dfu.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/jszip@3/dist/jszip.min.js"></script>
+        <script type="module" src="./bench.js"></script>
+    </body>
+</html>
