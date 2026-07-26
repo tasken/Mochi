@@ -4,8 +4,10 @@
   # Pages) but tracked under netlify/bench/ so Netlify previews can ship them.
   command = "bash fetch-firmware.sh && cp netlify/bench/bench.html netlify/bench/bench.js app/ && bash bust-cache.sh app \"${COMMIT_REF:0:7}\""
   publish = "app"
-
-# Skip production deploys entirely (production branch is "main" per
-# Netlify's default site setting) — only branch deploys run.
-[context.production]
-  ignore = "exit 0"
+  # Only build test/preview branches — main ships via GitHub Pages instead.
+  # Checked against $BRANCH directly (not a [context.production] ignore
+  # block) because this site's Production-branch dashboard setting doesn't
+  # reliably match "main", which previously caused every push to netlify-
+  # preview to be misclassified as production and skipped before the build
+  # command ever ran.
+  ignore = "test \"$BRANCH\" = \"main\""
