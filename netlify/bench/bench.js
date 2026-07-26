@@ -161,22 +161,52 @@ function setButtons() {
 
 // ── Connection ────────────────────────────────────────────────────
 
+// Polls while client.js's own backoff reconnect (_attemptReconnect, started
+// from onReconnecting) is in flight, instead of racing it with a second
+// gatt.connect() call — concurrent connect() calls on the same device throw
+// "GATT operation already in progress".
+function waitWhileReconnecting(timeoutMs = 16000) {
+    return new Promise((resolve) => {
+        const start = performance.now();
+        const check = () => {
+            if (!state.client?._reconnecting) return resolve(state.connected);
+            if (performance.now() - start > timeoutMs) return resolve(false);
+            setTimeout(check, 250);
+        };
+        check();
+    });
+}
+
 async function ensureRegularClientConnected() {
     if (state.client && state.connected) return state.client;
     if (!state.client) {
         state.client = new PixlToolsClient((msg) => log(`[regular] ${msg}`));
         state.client.onDisconnect = () => setConnectionState(false);
+        state.client.onReconnecting = () => {
+            setConnectionState(false);
+            log("[regular] Connection lost, reconnecting...", "warn");
+        };
+        state.client.onReconnect = () => {
+            setConnectionState(true, state.client.device?.name || "");
+            log("[regular] GATT reconnected (no picker needed).", "ok");
+        };
     }
     if (state.client.device) {
-        try {
-            await state.client._setupGatt(state.client.device);
-            setConnectionState(true, state.client.device.name || "");
-            return state.client;
-        } catch (err) {
-            log(
-                `[regular] Reconnect failed (${err.message}), opening picker...`,
+        if (state.client._reconnecting) {
+            const recovered = await waitWhileReconnecting();
+            if (recovered) return state.client;
+            throw new Error(
+                "Automatic reconnect failed. Click Connect to re-select the device.",
             );
         }
+        // A known device exists — reconnect via gatt.connect(), never via
+        // requestDevice(). requestDevice() needs a live user gesture, which
+        // callers deep inside an automated sweep don't have; let the caller
+        // decide how to handle the failure instead of silently opening a
+        // picker that Chrome will reject with a SecurityError.
+        await state.client._setupGatt(state.client.device);
+        setConnectionState(true, state.client.device.name || "");
+        return state.client;
     }
     await state.client.connect();
     setConnectionState(true, state.client.device?.name || "");
@@ -377,16 +407,14 @@ async function runRegularSweep() {
                     "warn",
                 );
                 try {
-                    if (state.client?.device?.gatt?.connected) {
-                        try {
-                            state.client.device.gatt.disconnect();
-                        } catch {}
-                    }
-                    setConnectionState(false);
-                    await sleep(1500);
+                    // ensureRegularClientConnected() now waits for client.js's
+                    // own backoff reconnect if one is already in flight (started
+                    // by the earlier failure's disconnect event), or does a
+                    // single gatt.connect() itself otherwise. Either way it
+                    // never opens the requestDevice() picker for a known device.
                     client = await ensureRegularClientConnected();
                     needsReconnect = false;
-                    log("[regular] GATT reconnected (no picker needed).", "ok");
+                    log("[regular] GATT reconnected.", "ok");
                 } catch (reconErr) {
                     log(
                         `[regular] GATT reconnect failed: ${reconErr.message}`,
