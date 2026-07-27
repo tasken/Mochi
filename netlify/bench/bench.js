@@ -57,6 +57,7 @@ const state = {
     lastDfuDeviceId: "",
     dfuDevice: null,
     dfuRows: [],
+    connectUnfiltered: false, // one-shot: next connect() skips the NUS UUID filter
 };
 
 const DFU_FIXED_OPTIONS = Object.freeze({
@@ -208,7 +209,20 @@ async function ensureRegularClientConnected() {
         setConnectionState(true, state.client.device.name || "");
         return state.client;
     }
-    await state.client.connect();
+    const acceptAllDevices = state.connectUnfiltered;
+    state.connectUnfiltered = false;
+    try {
+        await state.client.connect({ acceptAllDevices });
+    } catch (err) {
+        if (err.name === "NotFoundError" && !acceptAllDevices) {
+            state.connectUnfiltered = true;
+            log(
+                "[regular] No matching device selected. Click Connect again to show ALL Bluetooth devices.",
+                "warn",
+            );
+        }
+        throw err;
+    }
     setConnectionState(true, state.client.device?.name || "");
     return state.client;
 }

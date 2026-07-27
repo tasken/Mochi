@@ -192,14 +192,22 @@ export class PixlToolsClient {
         this.onReconnect = null;
     }
 
-    async connect() {
+    async connect({ acceptAllDevices = false } = {}) {
         if (!navigator.bluetooth)
             throw new Error("Web Bluetooth is not available.");
-        this._log("Requesting BLE device...");
-        const device = await navigator.bluetooth.requestDevice({
-            filters: [{ services: [NUS_SERVICE_UUID] }],
-            optionalServices: [NUS_SERVICE_UUID],
-        });
+        this._log(
+            acceptAllDevices
+                ? "Requesting BLE device (all devices)..."
+                : "Requesting BLE device...",
+        );
+        const device = await navigator.bluetooth.requestDevice(
+            acceptAllDevices
+                ? { acceptAllDevices: true, optionalServices: [NUS_SERVICE_UUID] }
+                : {
+                      filters: [{ services: [NUS_SERVICE_UUID] }],
+                      optionalServices: [NUS_SERVICE_UUID],
+                  },
+        );
         await this._setupGatt(device);
     }
 

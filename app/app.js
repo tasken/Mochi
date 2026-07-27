@@ -4677,6 +4677,7 @@ const dfuState = {
     dfuDevice: null, // BluetoothDevice once connected to the DFU bootloader; used for forced reboot
     cachedImages: null, // { baseImage, appImage } once prepared; reused on picker-retry without re-download
     pickerDismissed: false, // true when user closed the BT picker; retry jumps straight to scan
+    forceUnfiltered: false, // one-shot: next requestDevice() call skips the UUID filter (user hit "show all devices")
     skippedStages: new Set(),
     release: null,
     releaseLoading: false,
@@ -5331,6 +5332,7 @@ function resetDfuUi() {
     dfuState.dfuDevice = null;
     dfuState.cachedImages = null;
     dfuState.pickerDismissed = false;
+    dfuState.forceUnfiltered = false;
     dfuState.skippedStages = new Set();
 
     setDfuFirmwareType("native");
@@ -5501,9 +5503,17 @@ async function runDfuTransfer() {
                         )
                             return;
                         cleanup();
-                        dfu.requestDevice(false, [
-                            { services: [DFU_UUID] },
-                        ]).then(resolve, reject);
+                        const useUnfiltered = dfuState.forceUnfiltered;
+                        dfuState.forceUnfiltered = false;
+                        (useUnfiltered
+                            ? navigator.bluetooth.requestDevice({
+                                  acceptAllDevices: true,
+                                  optionalServices: [DFU_UUID],
+                              })
+                            : dfu.requestDevice(false, [
+                                  { services: [DFU_UUID] },
+                              ])
+                        ).then(resolve, reject);
                     }
                     // During reconnect, "Cancel" first opens inline confirmation.
                     // Abort only after the user confirms with "Cancel update".
@@ -5557,14 +5567,28 @@ async function runDfuTransfer() {
             } else {
                 // Disconnected — unified picker accepts both regular and DFU mode
                 dfuSetStage("selecting");
-                log("[DFU] Select your device...", "cmd");
-                const picked = await navigator.bluetooth.requestDevice({
-                    filters: [
-                        { services: [NUS_SERVICE] },
-                        { services: [DFU_UUID] },
-                    ],
-                    optionalServices: [NUS_SERVICE, DFU_UUID],
-                });
+                const useUnfiltered = dfuState.forceUnfiltered;
+                dfuState.forceUnfiltered = false;
+                log(
+                    useUnfiltered
+                        ? "[DFU] Select your device (showing all nearby Bluetooth devices)..."
+                        : "[DFU] Select your device...",
+                    "cmd",
+                );
+                const picked = await navigator.bluetooth.requestDevice(
+                    useUnfiltered
+                        ? {
+                              acceptAllDevices: true,
+                              optionalServices: [NUS_SERVICE, DFU_UUID],
+                          }
+                        : {
+                              filters: [
+                                  { services: [NUS_SERVICE] },
+                                  { services: [DFU_UUID] },
+                              ],
+                              optionalServices: [NUS_SERVICE, DFU_UUID],
+                          },
+                );
                 const server = await picked.gatt.connect();
 
                 let isDfuMode = false;
@@ -5699,14 +5723,15 @@ async function runDfuTransfer() {
             dfuState.phase = "failed";
             dfuState.pickerDismissed = true;
             const retryLink = '<a href="#" class="dfu-error-action" data-dfu-retry>try again</a>';
+            const unfilteredLink = '<a href="#" class="dfu-error-action" data-dfu-retry-unfiltered>show all Bluetooth devices</a>';
             if (dfuState.enterDfuDone) {
                 dfuShowFailedView(
-                    "The Bluetooth picker was closed before a device was selected. Your device is still in update mode and waiting for a connection. Pick it from the list to " + retryLink + ".",
+                    "The Bluetooth picker was closed before a device was selected. Your device is still in update mode and waiting for a connection. Pick it from the list to " + retryLink + ", or " + unfilteredLink + " if it isn't in the list.",
                     { title: "No device selected", subhead: "NOT CONNECTED" },
                 );
             } else {
                 dfuShowFailedView(
-                    "The Bluetooth picker was closed before a device was selected. Make sure your device is powered on and nearby, then " + retryLink + ".",
+                    "The Bluetooth picker was closed before a device was selected. Make sure your device is powered on and nearby, then " + retryLink + ", or " + unfilteredLink + " if it isn't in the list.",
                     { title: "No device selected", subhead: "NOT CONNECTED" },
                 );
             }
@@ -5911,7 +5936,8 @@ el.btnDfuReboot.addEventListener("click", () => {
 });
 
 el.dfuErrorBox.addEventListener("click", async (e) => {
-    const link = e.target.closest("[data-dfu-retry]");
+    const unfilteredLink = e.target.closest("[data-dfu-retry-unfiltered]");
+    const link = unfilteredLink || e.target.closest("[data-dfu-retry]");
     if (!link) return;
     e.preventDefault();
     if (dfuInProgress()) return;
@@ -5919,6 +5945,7 @@ el.dfuErrorBox.addEventListener("click", async (e) => {
         closeDfuModal();
         return;
     }
+    if (unfilteredLink) dfuState.forceUnfiltered = true;
     await runDfuTransfer();
 });
 
