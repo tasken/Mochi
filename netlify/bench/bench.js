@@ -349,7 +349,7 @@ async function runRegularSweep() {
         if (!Number.isFinite(filesPerFolder) || filesPerFolder < 1)
             throw new Error("Files per folder must be >= 1.");
 
-        const chunkSizes = parseNumberList(
+        const requestedChunkSizes = parseNumberList(
             el.regularChunks.value,
             "chunk size",
         );
@@ -358,6 +358,30 @@ async function runRegularSweep() {
             throw new Error("Repeats must be 1-100.");
 
         let client = await ensureRegularClientConnected();
+
+        // Writing above the negotiated MTU is what wedges the GATT connection
+        // in the first place (Chrome throws "GATT operation already in
+        // progress" on every subsequent call, and reconnecting can't clear it
+        // since the device never actually disconnects) — so sizes above
+        // client.maxChunkSize never get tried.
+        const oversizedChunks = requestedChunkSizes.filter(
+            (cs) => cs > client.maxChunkSize,
+        );
+        const chunkSizes = requestedChunkSizes.filter(
+            (cs) => cs <= client.maxChunkSize,
+        );
+        if (oversizedChunks.length) {
+            log(
+                `[regular] Skipping chunk size(s) above negotiated MTU (${client.maxChunkSize}B): [${oversizedChunks}]`,
+                "warn",
+            );
+        }
+        if (!chunkSizes.length) {
+            throw new Error(
+                `All requested chunk sizes exceed the negotiated MTU (${client.maxChunkSize}B).`,
+            );
+        }
+
         const drivesRes = await client.listDrives();
         if (!drivesRes.ok || !drivesRes.data.length)
             throw new Error(drivesRes.error || "No drive available.");
