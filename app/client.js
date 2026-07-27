@@ -15,7 +15,9 @@ const MAX_RESPONSE_BYTES = 1024 * 1024;
 
 // MTU probe: 0x70 is not handled by any firmware; the default handler echoes
 // it back with status 255 immediately. A response proves a frame of that size
-// fits the negotiated ATT MTU. Ladder: 242 needs MTU >= 250 (firmware max),
+// fits the negotiated ATT MTU. Ladder: 242 needs MTU >= 250 (firmware max —
+// confirmed on real hardware: 250B chunks are rejected at the GATT level,
+// 242B are not, and the boundary matches the ATT MTU=250 frame math exactly),
 // 177 needs MTU >= 185 (common macOS value), 15 fits the BLE minimum (23).
 const PROBE_CMD = 0x70;
 const PROBE_TIMEOUT_MS = 3000;
@@ -281,9 +283,16 @@ export class PixlToolsClient {
             this._expectErrorResponses = false;
         }
         this._log(`Max write chunk: ${this.maxChunkSize}B`);
+        if (this._lastProbeRejections?.length) {
+            this._log(
+                `MTU probe rejected: ${this._lastProbeRejections.join("; ")}`,
+            );
+        }
     }
 
     async _negotiateChunkSize() {
+        const rejections = [];
+        this._lastProbeRejections = rejections;
         for (const chunk of CHUNK_SIZE_LADDER) {
             try {
                 console.info("[BLE]", `MTU probe: trying ${chunk}B chunk`);
@@ -312,6 +321,7 @@ export class PixlToolsClient {
                     "[BLE]",
                     `MTU probe: ${chunk}B chunk failed (${err.message})`,
                 );
+                rejections.push(`${chunk}B (${err.message})`);
             }
         }
         this.maxChunkSize = CHUNK_SIZE_LADDER[CHUNK_SIZE_LADDER.length - 1];
