@@ -206,6 +206,7 @@ const el = {
     ptrIndicator: document.getElementById("ptrIndicator"),
     footers: document.querySelectorAll(".panel-footer"),
     btnNormalize: document.getElementById("btnNormalize"),
+    btnLowercaseOnUpload: document.getElementById("btnLowercaseOnUpload"),
     btnLogToggle: document.getElementById("btnLogToggle"),
     connError: document.getElementById("connError"),
 
@@ -420,6 +421,7 @@ function validateElementBindings(bindings) {
 }
 
 validateElementBindings(el);
+renderLowercaseOnUploadToggle();
 
 function setButtonDisabledState(button, options) {
     const { disabled = false, pseudoDisabled = false, reason = "" } = options;
@@ -445,6 +447,23 @@ function setButtonDisabledState(button, options) {
 }
 
 // === App State ===
+
+function loadLowercaseOnUploadPref() {
+    try {
+        const val = localStorage.getItem("mochi.lowercaseOnUpload");
+        return val !== "false"; // absent, "true", or anything but literal "false" -> on
+    } catch {
+        return true;
+    }
+}
+
+function saveLowercaseOnUploadPref(enabled) {
+    try {
+        localStorage.setItem("mochi.lowercaseOnUpload", String(enabled));
+    } catch {
+        // best-effort; setting just won't persist this session
+    }
+}
 
 const state = {
     client: null,
@@ -484,6 +503,7 @@ const state = {
     searchBinFiles: [],            // every .bin file phase 1 saw, matched or not: { name, parentPath, size, meta }
     searchIdentityScanning: false, // true only while phase 2 is actively running
     searchIdentityChecked: 0,      // progress counter for phase 2's "N of M"
+    lowercaseOnUpload: loadLowercaseOnUploadPref(),
 };
 
 function showInputError(inputEl, errorEl, message) {
@@ -612,6 +632,9 @@ let _sheetUploadPending = false;
 el.btnSheetUpload.addEventListener("click", () => {
     _sheetUploadPending = true;
     el.filesInput.click();
+});
+el.filesInput.addEventListener("cancel", () => {
+    _sheetUploadPending = false;
 });
 
 // Swipe-down on panel handle dismisses the sheet
@@ -1393,6 +1416,23 @@ document.addEventListener("click", (e) => {
     ) {
         closeMoreActionsMenu();
     }
+});
+
+function renderLowercaseOnUploadToggle() {
+    const on = state.lowercaseOnUpload;
+    el.btnLowercaseOnUpload.setAttribute("aria-checked", String(on));
+    el.btnLowercaseOnUpload.querySelector(".ms-sm").textContent = on
+        ? "toggle_on"
+        : "toggle_off";
+}
+
+el.btnLowercaseOnUpload.addEventListener("click", () => {
+    state.lowercaseOnUpload = !state.lowercaseOnUpload;
+    saveLowercaseOnUploadPref(state.lowercaseOnUpload);
+    renderLowercaseOnUploadToggle();
+    trackAnalyticsEvent("lowercase_on_upload_toggle", {
+        enabled: state.lowercaseOnUpload,
+    });
 });
 
 // === Format drive ===
