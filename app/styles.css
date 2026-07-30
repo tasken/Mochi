@@ -369,6 +369,13 @@ button.dev:hover:not(:disabled) {
     border: 1px solid var(--border);
     box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
 }
+.more-actions-menu .sidebar-section-label {
+    padding: 10px 10px 4px;
+    margin-bottom: 0;
+}
+.more-actions-menu .sidebar-section-label:first-child {
+    padding-top: 6px;
+}
 .more-actions-menu .more-actions-item {
     display: flex;
     align-items: center;
