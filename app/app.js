@@ -421,7 +421,6 @@ function validateElementBindings(bindings) {
 }
 
 validateElementBindings(el);
-renderLowercaseOnUploadToggle();
 
 function setButtonDisabledState(button, options) {
     const { disabled = false, pseudoDisabled = false, reason = "" } = options;
@@ -505,6 +504,8 @@ const state = {
     searchIdentityChecked: 0,      // progress counter for phase 2's "N of M"
     lowercaseOnUpload: loadLowercaseOnUploadPref(),
 };
+
+renderLowercaseOnUploadToggle();
 
 function showInputError(inputEl, errorEl, message) {
     inputEl.setAttribute("aria-invalid", "true");
