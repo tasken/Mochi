@@ -162,15 +162,7 @@
                  clipped by the topbar's mobile horizontal-scroll overflow;
                  positioned under #btnMoreActions via JS on open. -->
             <div class="more-actions-menu" id="moreActionsMenu" role="menu" hidden>
-                <button
-                    class="more-actions-item"
-                    id="btnNormalize"
-                    role="menuitem"
-                    title="Convert names to lowercase"
-                >
-                    <span class="ms-sm">match_case</span>
-                    <span>Lowercase filenames</span>
-                </button>
+                <div class="sidebar-section-label">Settings</div>
                 <button
                     class="more-actions-item"
                     id="btnLowercaseOnUpload"
@@ -180,6 +172,16 @@
                 >
                     <span class="ms-sm">toggle_on</span>
                     <span>Lowercase names on upload</span>
+                </button>
+                <div class="sidebar-section-label">Actions</div>
+                <button
+                    class="more-actions-item"
+                    id="btnNormalize"
+                    role="menuitem"
+                    title="Convert names to lowercase"
+                >
+                    <span class="ms-sm">match_case</span>
+                    <span>Lowercase filenames</span>
                 </button>
                 <button class="more-actions-item" id="btnUpdateFirmware" role="menuitem">
                     <span class="ms-sm">memory</span>
