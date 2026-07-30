@@ -4190,7 +4190,7 @@ function checkUploadPlanWarnings(plan) {
     // Same-batch case-collision check: two items whose remotePath differs
     // only by case would overwrite each other on the device's
     // case-insensitive-but-case-preserving filesystem.
-    const byLowerKey = new Map(); // "<parentDir>|<lowercasePath>" -> Set<remotePath>
+    const byLowerKey = new Map(); // "<parentDir>|<lowercasePath>" -> Set<localPath>
     for (const item of plan) {
         if (item.status === "skipped") continue;
         const key =
@@ -4198,7 +4198,7 @@ function checkUploadPlanWarnings(plan) {
             "|" +
             item.remotePath.toLowerCase();
         if (!byLowerKey.has(key)) byLowerKey.set(key, new Set());
-        byLowerKey.get(key).add(item.remotePath);
+        byLowerKey.get(key).add(item.localPath);
     }
     const collisionGroups = [];
     for (const paths of byLowerKey.values()) {
