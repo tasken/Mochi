@@ -4029,7 +4029,10 @@ function buildUploadPlan(folders, files) {
     const plan = [];
 
     for (const rel of sortedFolders) {
-        const remote = joinChildPath(base, rel.toLowerCase());
+        const remote = joinChildPath(
+            base,
+            state.lowercaseOnUpload ? rel.toLowerCase() : rel,
+        );
         let pathError = null;
         try {
             validateRemotePath(remote, "folder");
@@ -4064,7 +4067,12 @@ function buildUploadPlan(folders, files) {
     }
 
     for (const entry of files) {
-        const remote = joinChildPath(base, entry.relativePath.toLowerCase());
+        const remote = joinChildPath(
+            base,
+            state.lowercaseOnUpload
+                ? entry.relativePath.toLowerCase()
+                : entry.relativePath,
+        );
         let pathError = null;
         try {
             validateRemotePath(remote, "file");
