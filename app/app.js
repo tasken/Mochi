@@ -4187,21 +4187,21 @@ function checkUploadPlanWarnings(plan) {
         const mins = Math.ceil((uploadable.length * 0.75) / 60);
         warnings.push({ type: "large-batch", count: uploadable.length, mins });
     }
-    // Same-batch case-collision check: two items whose remotePath differs
-    // only by case would overwrite each other on the device's
-    // case-insensitive-but-case-preserving filesystem.
-    const byLowerKey = new Map(); // "<parentDir>|<lowercasePath>" -> Set<localPath>
+    // Same-batch collision check: two items that resolve to the identical
+    // remotePath would overwrite each other. This can only happen when the
+    // lowercase-on-upload toggle collapses two differently-cased local names
+    // to the same string -- the device filesystem is confirmed case-sensitive,
+    // so names that stay distinct after the toggle's transform are genuinely
+    // different files, not collisions.
+    const byExactPath = new Map(); // remotePath -> Set<localPath>
     for (const item of plan) {
         if (item.status === "skipped") continue;
-        const key =
-            getParentPath(item.remotePath) +
-            "|" +
-            item.remotePath.toLowerCase();
-        if (!byLowerKey.has(key)) byLowerKey.set(key, new Set());
-        byLowerKey.get(key).add(item.localPath);
+        if (!byExactPath.has(item.remotePath))
+            byExactPath.set(item.remotePath, new Set());
+        byExactPath.get(item.remotePath).add(item.localPath);
     }
     const collisionGroups = [];
-    for (const paths of byLowerKey.values()) {
+    for (const paths of byExactPath.values()) {
         if (paths.size > 1) collisionGroups.push({ paths: [...paths] });
     }
     if (collisionGroups.length > 0)
@@ -4316,7 +4316,7 @@ async function runSync() {
     updateControls();
     renderUploadQueue();
 
-    const deviceTree = new Map(); // lowercase remotePath → { size, kind, actualPath }
+    const deviceTree = new Map(); // remotePath → { size, kind }
     let scanCount = 0;
 
     function setScanText(msg) {
@@ -4337,19 +4337,15 @@ async function runSync() {
         scanCount++;
         setScanText(`Scanning device… · ${pluralize(scanCount, "folder")}`);
         for (const entry of res.data) {
-            // Normalize to lowercase so device paths match the plan paths produced
-            // by buildUploadPlan (which also lowercases via rel.toLowerCase()). FAT32
-            // can return names in any case ("00.BIN", "Sub"), and Map lookup is
-            // case-sensitive, so without this files are re-uploaded and folders show
-            // as orphans even when they're already in sync.
-            const entryPath = joinChildPath(path, entry.name.toLowerCase());
+            // The device filesystem is case-sensitive (confirmed on hardware:
+            // uploading a differently-cased name next to an existing file produces
+            // two separate entries, not an overwrite), and the firmware never folds
+            // case, so device paths are used exactly as reported -- matching against
+            // plan paths is plain string equality, no normalization needed.
+            const entryPath = joinChildPath(path, entry.name);
             if (isSyncExcluded(entryPath)) continue;
             const kind = entry.type === "DIR" ? "folder" : "file";
-            deviceTree.set(entryPath.toLowerCase(), {
-                size: entry.size,
-                kind,
-                actualPath: entryPath,
-            });
+            deviceTree.set(entryPath, { size: entry.size, kind });
             if (kind === "folder") await walk(entryPath);
         }
     }
@@ -4381,14 +4377,10 @@ async function runSync() {
         const baseRes = await state.client.readFolder(base);
         if (baseRes.ok) {
             for (const entry of baseRes.data) {
-                const entryPath = joinChildPath(base, entry.name.toLowerCase());
+                const entryPath = joinChildPath(base, entry.name);
                 if (isSyncExcluded(entryPath)) continue;
                 const kind = entry.type === "DIR" ? "folder" : "file";
-                deviceTree.set(entryPath.toLowerCase(), {
-                    size: entry.size,
-                    kind,
-                    actualPath: entryPath,
-                });
+                deviceTree.set(entryPath, { size: entry.size, kind });
             }
         }
         for (const root of scanRoots) {
@@ -4411,9 +4403,7 @@ async function runSync() {
     el.browserLockOverlay.classList.remove("active");
 
     // Snapshot original plan paths (pre-filter) to detect orphans
-    const localPaths = new Set(
-        state.uploadPlan.map((i) => i.remotePath.toLowerCase()),
-    );
+    const localPaths = new Set(state.uploadPlan.map((i) => i.remotePath));
 
     // Filter plan: remove items already on device at same size
     const skippedFiles = [];
@@ -4424,7 +4414,7 @@ async function runSync() {
             continue;
         }
         if (item.kind === "file") {
-            const remote = deviceTree.get(item.remotePath.toLowerCase());
+            const remote = deviceTree.get(item.remotePath);
             if (remote && remote.kind === "file" && remote.size === item.size) {
                 skippedFiles.push({
                     remotePath: item.remotePath,
@@ -4432,10 +4422,7 @@ async function runSync() {
                 });
                 continue;
             }
-        } else if (
-            item.kind === "folder" &&
-            deviceTree.has(item.remotePath.toLowerCase())
-        ) {
+        } else if (item.kind === "folder" && deviceTree.has(item.remotePath)) {
             continue;
         }
         filteredPlan.push(item);
@@ -4443,13 +4430,13 @@ async function runSync() {
 
     // Find orphans: device entries absent from the original local plan
     const orphans = [];
-    for (const [devicePathLower, { size, kind, actualPath }] of deviceTree) {
-        if (localPaths.has(devicePathLower)) continue;
+    for (const [remotePath, { size, kind }] of deviceTree) {
+        if (localPaths.has(remotePath)) continue;
         let deletable = kind === "file";
         if (kind === "folder") {
-            const prefix = devicePathLower.endsWith("/")
-                ? devicePathLower
-                : devicePathLower + "/";
+            const prefix = remotePath.endsWith("/")
+                ? remotePath
+                : remotePath + "/";
             deletable = true;
             for (const p of deviceTree.keys()) {
                 if (p.startsWith(prefix)) {
@@ -4459,7 +4446,7 @@ async function runSync() {
             }
         }
         orphans.push({
-            remotePath: actualPath,
+            remotePath,
             size,
             kind,
             deletable,
