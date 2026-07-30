@@ -3978,6 +3978,8 @@ function renderUploadQueue() {
                 summaryParts.push(pluralize(w.dirs.length, "large folder"));
             else if (w.type === "large-batch")
                 summaryParts.push(`~${w.mins} min upload`);
+            else if (w.type === "case-collision")
+                summaryParts.push(pluralize(w.groups.length, "name collision"));
         }
         // Detail body (expanded state) — one block per problem, paths listed once
         let bodyHtml = "";
@@ -3992,6 +3994,14 @@ function renderUploadQueue() {
                 bodyHtml += `<p>${pluralize(w.dirs.length, "folder")} with many files. These may transfer slowly or stall:</p><ul>${pathList}</ul>`;
             } else if (w.type === "large-batch") {
                 bodyHtml += `<p>${w.count} files total. Estimated time: ${w.mins}+ minutes. Keep the device nearby and the screen awake to avoid interruptions.</p>`;
+            } else if (w.type === "case-collision") {
+                const groupList = w.groups
+                    .map(
+                        ({ paths }) =>
+                            `<li>${escapeHtml(paths.map((p) => getBaseName(p)).join(" and "))}</li>`,
+                    )
+                    .join("");
+                bodyHtml += `<p>These names only differ by case and would overwrite each other on the device:</p><ul>${groupList}</ul>`;
             }
         }
         el.uploadWarningBanner.className = "queue-warning";
@@ -4177,6 +4187,25 @@ function checkUploadPlanWarnings(plan) {
         const mins = Math.ceil((uploadable.length * 0.75) / 60);
         warnings.push({ type: "large-batch", count: uploadable.length, mins });
     }
+    // Same-batch case-collision check: two items whose remotePath differs
+    // only by case would overwrite each other on the device's
+    // case-insensitive-but-case-preserving filesystem.
+    const byLowerKey = new Map(); // "<parentDir>|<lowercasePath>" -> Set<remotePath>
+    for (const item of plan) {
+        if (item.status === "skipped") continue;
+        const key =
+            getParentPath(item.remotePath) +
+            "|" +
+            item.remotePath.toLowerCase();
+        if (!byLowerKey.has(key)) byLowerKey.set(key, new Set());
+        byLowerKey.get(key).add(item.remotePath);
+    }
+    const collisionGroups = [];
+    for (const paths of byLowerKey.values()) {
+        if (paths.size > 1) collisionGroups.push({ paths: [...paths] });
+    }
+    if (collisionGroups.length > 0)
+        warnings.push({ type: "case-collision", groups: collisionGroups });
     return warnings;
 }
 
@@ -4193,6 +4222,12 @@ function warningsToStrings(warnings) {
             lines.push(
                 `${w.count} files total. Estimated time: ${w.mins}+ minutes. Keep the device nearby and the screen awake`,
             );
+        } else if (w.type === "case-collision") {
+            for (const { paths } of w.groups) {
+                lines.push(
+                    `${paths.map((p) => getBaseName(p)).join(" and ")} resolve to the same name on the device, only one will be kept`,
+                );
+            }
         }
     }
     return lines;
