@@ -1058,6 +1058,9 @@ button.dev:hover:not(:disabled) {
     font-size: var(--fs-xs);
     color: #c4c9d2;
 }
+.queue-close-btn {
+    margin-top: 8px;
+}
 
 .queue-warning {
     background: rgba(245, 158, 11, 0.06);

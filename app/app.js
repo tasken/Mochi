@@ -3909,7 +3909,11 @@ function renderUploadQueue() {
     if (state.uploadPlan.length === 0) {
         const [icon, title, sub] =
             state.uploadTotalCount > 0
-                ? ["task_alt", "Upload complete", ""]
+                ? [
+                      "task_alt",
+                      "Upload complete",
+                      `<button class="btn-labeled ghost queue-close-btn">Close queue</button>`,
+                  ]
                 : [
                       "inbox",
                       "Queue is empty",
@@ -4729,6 +4733,12 @@ el.uploadQueue.addEventListener("click", (e) => {
     renderSyncQueue();
     renderUploadSummary();
     updateControls();
+});
+
+// "Close" button shown in the post-upload success state (event delegation)
+el.uploadQueue.addEventListener("click", (e) => {
+    if (!e.target.closest(".queue-close-btn")) return;
+    closeUploadPanelToFolder();
 });
 
 el.btnUploadAbort.addEventListener("click", () => {
