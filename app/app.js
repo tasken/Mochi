@@ -4281,7 +4281,7 @@ async function runSync() {
     updateControls();
     renderUploadQueue();
 
-    const deviceTree = new Map(); // remotePath → { size, kind }
+    const deviceTree = new Map(); // lowercase remotePath → { size, kind, actualPath }
     let scanCount = 0;
 
     function setScanText(msg) {
@@ -4310,7 +4310,11 @@ async function runSync() {
             const entryPath = joinChildPath(path, entry.name.toLowerCase());
             if (isSyncExcluded(entryPath)) continue;
             const kind = entry.type === "DIR" ? "folder" : "file";
-            deviceTree.set(entryPath, { size: entry.size, kind });
+            deviceTree.set(entryPath.toLowerCase(), {
+                size: entry.size,
+                kind,
+                actualPath: entryPath,
+            });
             if (kind === "folder") await walk(entryPath);
         }
     }
@@ -4345,7 +4349,11 @@ async function runSync() {
                 const entryPath = joinChildPath(base, entry.name.toLowerCase());
                 if (isSyncExcluded(entryPath)) continue;
                 const kind = entry.type === "DIR" ? "folder" : "file";
-                deviceTree.set(entryPath, { size: entry.size, kind });
+                deviceTree.set(entryPath.toLowerCase(), {
+                    size: entry.size,
+                    kind,
+                    actualPath: entryPath,
+                });
             }
         }
         for (const root of scanRoots) {
@@ -4368,7 +4376,9 @@ async function runSync() {
     el.browserLockOverlay.classList.remove("active");
 
     // Snapshot original plan paths (pre-filter) to detect orphans
-    const localPaths = new Set(state.uploadPlan.map((i) => i.remotePath));
+    const localPaths = new Set(
+        state.uploadPlan.map((i) => i.remotePath.toLowerCase()),
+    );
 
     // Filter plan: remove items already on device at same size
     const skippedFiles = [];
@@ -4379,7 +4389,7 @@ async function runSync() {
             continue;
         }
         if (item.kind === "file") {
-            const remote = deviceTree.get(item.remotePath);
+            const remote = deviceTree.get(item.remotePath.toLowerCase());
             if (remote && remote.kind === "file" && remote.size === item.size) {
                 skippedFiles.push({
                     remotePath: item.remotePath,
@@ -4387,7 +4397,10 @@ async function runSync() {
                 });
                 continue;
             }
-        } else if (item.kind === "folder" && deviceTree.has(item.remotePath)) {
+        } else if (
+            item.kind === "folder" &&
+            deviceTree.has(item.remotePath.toLowerCase())
+        ) {
             continue;
         }
         filteredPlan.push(item);
@@ -4395,13 +4408,13 @@ async function runSync() {
 
     // Find orphans: device entries absent from the original local plan
     const orphans = [];
-    for (const [remotePath, { size, kind }] of deviceTree) {
-        if (localPaths.has(remotePath)) continue;
+    for (const [devicePathLower, { size, kind, actualPath }] of deviceTree) {
+        if (localPaths.has(devicePathLower)) continue;
         let deletable = kind === "file";
         if (kind === "folder") {
-            const prefix = remotePath.endsWith("/")
-                ? remotePath
-                : remotePath + "/";
+            const prefix = devicePathLower.endsWith("/")
+                ? devicePathLower
+                : devicePathLower + "/";
             deletable = true;
             for (const p of deviceTree.keys()) {
                 if (p.startsWith(prefix)) {
@@ -4410,7 +4423,13 @@ async function runSync() {
                 }
             }
         }
-        orphans.push({ remotePath, size, kind, deletable, status: "pending" });
+        orphans.push({
+            remotePath: actualPath,
+            size,
+            kind,
+            deletable,
+            status: "pending",
+        });
     }
 
     state.syncSkippedFiles = skippedFiles;
