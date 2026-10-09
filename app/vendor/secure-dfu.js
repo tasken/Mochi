@@ -1,7 +1,7 @@
 /*
  * Nordic Secure DFU — Web Bluetooth
  * Based on thegecko/web-bluetooth-dfu, rewritten for modern browsers.
- * MIT License — Copyright (c) 2018 Rob Moran, 2026 Augusto Daniele
+ * MIT License — Copyright (c) 2018 Rob Moran, 2026 Tasken
  */
 (function () {
 "use strict";

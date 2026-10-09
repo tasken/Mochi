@@ -6065,7 +6065,7 @@ function stampFooters(commitText) {
     <div class="footer-meta">
       <span class="nav-commit">${escapeHtml(commitText)}</span>
       <span class="panel-footer-sep">&middot;</span>
-      <a href="https://github.com/tasken/Mochi" target="_blank" rel="noopener">Mochi &copy; 2026 Nimbo</a>
+      <a href="https://github.com/tasken/Mochi" target="_blank" rel="noopener">Mochi &copy; 2026 Tasken (Nimbo on Discord)</a>
       <span class="panel-footer-sep">&middot;</span>
       <a href="https://github.com/tasken/Mochi/blob/main/LICENSE" target="_blank" rel="noopener">MIT</a>
     </div>`;
