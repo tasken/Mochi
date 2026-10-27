@@ -2,7 +2,7 @@
 
 A browser-based tool to manage files and update firmware on [Pixl.js](https://github.com/solosky/pixl.js)-based NFC devices over Bluetooth. No app, no drivers, nothing extra.
 
-**[Try it](https://tasken.github.io/Mochi/)** (requires Chrome, Edge, or Brave).
+**[Try it](https://mochi-nfc.cc/)** (requires Chrome, Edge, or Brave).
 
 ![Mochi file browser showing a connected device with folders and files](screenshot.png)
 
