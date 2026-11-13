@@ -8,7 +8,7 @@
         />
         <meta name="theme-color" content="#9ca3af" />
         <meta name="build-commit" content="dev" />
-        <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://www.googletagmanager.com https://esm.sh; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https://amiiboapi.org https://www.google-analytics.com https://analytics.google.com https://api.github.com;" />
+        <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://www.googletagmanager.com https://esm.sh; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https://amiiboapi.org https://*.google-analytics.com https://analytics.google.com https://*.analytics.google.com https://api.github.com;" />
         <title>Mochi</title>
         <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -1475,7 +1475,12 @@
                     window.dataLayer.push(arguments);
                 };
                 window.gtag("js", new Date());
-                window.gtag("config", "G-20FR8YDBP3");
+                // Analytics only: Google signals would also send hits to
+                // stats.g.doubleclick.net, which the CSP doesn't allow.
+                window.gtag("config", "G-20FR8YDBP3", {
+                    allow_google_signals: false,
+                    allow_ad_personalization_signals: false,
+                });
 
                 function loadStyle(href) {
                     return new Promise(function (resolve, reject) {
