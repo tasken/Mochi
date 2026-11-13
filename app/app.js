@@ -6062,10 +6062,9 @@ el.btnDfuCloseSuccess.addEventListener("click", () => {
 function stampFooters(commitText) {
     const html = `
     <div class="footer-made">Made with <span class="ms-sm footer-heart">favorite</span> from Argentina</div>
+    <a class="footer-credit" href="https://github.com/tasken/Mochi" target="_blank" rel="noopener">Mochi &copy; 2026 Tasken (Nimbo on Discord)</a>
     <div class="footer-meta">
       <span class="nav-commit">${escapeHtml(commitText)}</span>
-      <span class="panel-footer-sep">&middot;</span>
-      <a href="https://github.com/tasken/Mochi" target="_blank" rel="noopener">Mochi &copy; 2026 Tasken (Nimbo on Discord)</a>
       <span class="panel-footer-sep">&middot;</span>
       <a href="https://github.com/tasken/Mochi/blob/main/LICENSE" target="_blank" rel="noopener">MIT</a>
     </div>`;

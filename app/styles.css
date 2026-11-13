@@ -709,6 +709,17 @@ button.dev:hover:not(:disabled) {
     42% { transform: scale(1.15); }
     56% { transform: scale(1); }
 }
+.footer-credit {
+    max-width: 100%;
+    text-align: center;
+}
+/* Sidebar footer reads left-aligned; full-screen footers stay centered */
+.context-panel .panel-footer {
+    align-items: flex-start;
+}
+.context-panel .footer-credit {
+    text-align: left;
+}
 .footer-meta {
     display: flex;
     align-items: center;
