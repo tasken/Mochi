@@ -973,8 +973,13 @@ export class DevMockClient {
                     size: 312,
                     meta: { nfcTagHead: null, nfcTagTail: null },
                 },
+                // firmware-managed root entries; flags 0x01 = HIDDEN
+                { name: "amiibolink", type: "DIR" },
+                { name: "chameleon", type: "DIR", meta: { flags: 0x01 } },
+                { name: "key_retail.bin", type: "FILE", size: 160 },
+                { name: "settings.bin", type: "FILE", size: 24, meta: { flags: 0x01 } },
             ],
-            // loose files in amiibo root + the 3 system folders
+            // loose files in amiibo root, the 2 system folders and a bulk test folder
             "E:/amiibo": [
                 { name: "data", type: "DIR" },
                 { name: "fav", type: "DIR" },
@@ -1003,6 +1008,18 @@ export class DevMockClient {
                     size: 540,
                     meta: { nfcTagHead: 0x19070000, nfcTagTail: 0x03840002 },
                 }, // Squirtle
+                // user-hidden tag (web app "Hide" sets HIDDEN), still syncs and
+                // deletes like any other file
+                {
+                    name: "tag_005.bin",
+                    type: "FILE",
+                    size: 540,
+                    meta: {
+                        flags: 0x01,
+                        nfcTagHead: 0x19190000,
+                        nfcTagTail: 0x00090002,
+                    },
+                }, // Pikachu (SSB)
             ],
             // data: slot-named files required by AmiiDB (00.bin, 01.bin, …)
             "E:/amiibo/data": [
@@ -1025,26 +1042,38 @@ export class DevMockClient {
                     meta: { nfcTagHead: 0x01010300, nfcTagTail: 0x04140902 },
                 }, // Zelda & Loftwing
             ],
-            // fav: favorites managed by AmiiDB
+            // fav: 0-byte favorite files named <game>_<HEAD>_<TAIL>.fav, plus
+            // user-named favorite groups as subfolders
             "E:/amiibo/fav": [
-                {
-                    name: "tag_001.bin",
-                    type: "FILE",
-                    size: 540,
-                    meta: { nfcTagHead: 0x00c00000, nfcTagTail: 0x037b0002 },
-                }, // King K. Rool
-                {
-                    name: "tag_002.bin",
-                    type: "FILE",
-                    size: 540,
-                    meta: { nfcTagHead: 0x22420000, nfcTagTail: 0x041f0002 },
-                }, // Mythra (Xenoblade)
-                {
-                    name: "tag_003.bin",
-                    type: "FILE",
-                    size: 540,
-                    meta: { nfcTagHead: 0x08070000, nfcTagTail: 0x04330402 },
-                }, // Shiver (Splatoon)
+                { name: "Smash", type: "DIR" },
+                { name: "1_00C00000_037B0002.fav", type: "FILE", size: 0 }, // King K. Rool
+                { name: "1_22420000_041F0002.fav", type: "FILE", size: 0 }, // Mythra (Xenoblade)
+                { name: "2_08070000_04330402.fav", type: "FILE", size: 0 }, // Shiver (Splatoon)
+            ],
+            "E:/amiibo/fav/Smash": [
+                { name: "1_00000000_00000002.fav", type: "FILE", size: 0 }, // Mario (SSB)
+            ],
+            // amiibolink: link mode slots, opened as %02d.bin
+            "E:/amiibolink": [
+                { name: "00.bin", type: "FILE", size: 540 },
+                { name: "01.bin", type: "FILE", size: 540 },
+            ],
+            // chameleon: card slots opened by exact name, dumps found by listing
+            "E:/chameleon": [
+                { name: "dump", type: "DIR" },
+                { name: "slots", type: "DIR" },
+            ],
+            "E:/chameleon/slots": [
+                { name: "config.bin", type: "FILE", size: 64 },
+                { name: "00.bin", type: "FILE", size: 1024 },
+                { name: "01.bin", type: "FILE", size: 1024 },
+            ],
+            "E:/chameleon/dump": [
+                { name: "hotel", type: "DIR" },
+                { name: "office_badge.bin", type: "FILE", size: 1024 },
+            ],
+            "E:/chameleon/dump/hotel": [
+                { name: "room_204.bin", type: "FILE", size: 1024 },
             ],
             // large-set: 95 files for scroll/bulk-operation testing
             "E:/amiibo/large-set": [
@@ -1125,6 +1154,11 @@ export class DevMockClient {
                 nfcTagHead: 0x19070000,
                 nfcTagTail: 0x03840002,
             }, // Squirtle
+            "E:/amiibo/tag_005.bin": {
+                size: 540,
+                nfcTagHead: 0x19190000,
+                nfcTagTail: 0x00090002,
+            }, // Pikachu (SSB), hidden by the user
             // data: slot-named, distinct characters
             "E:/amiibo/data/00.bin": {
                 size: 540,
@@ -1141,22 +1175,6 @@ export class DevMockClient {
                 nfcTagHead: 0x01010300,
                 nfcTagTail: 0x04140902,
             }, // Zelda & Loftwing
-            // fav: favorites managed by AmiiDB
-            "E:/amiibo/fav/tag_001.bin": {
-                size: 540,
-                nfcTagHead: 0x00c00000,
-                nfcTagTail: 0x037b0002,
-            }, // King K. Rool
-            "E:/amiibo/fav/tag_002.bin": {
-                size: 540,
-                nfcTagHead: 0x22420000,
-                nfcTagTail: 0x041f0002,
-            }, // Mythra (Xenoblade)
-            "E:/amiibo/fav/tag_003.bin": {
-                size: 540,
-                nfcTagHead: 0x08070000,
-                nfcTagTail: 0x04330402,
-            }, // Shiver (Splatoon)
             "E:/save/backup.bin": {
                 size: 1229,
                 nfcTagHead: null,

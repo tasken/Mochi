@@ -15,7 +15,81 @@ import { walkForSearchMatches, enrichWithTagIdentity, matchesSearchQuery } from 
 
 const LARGE_DIR_THRESHOLD = 80;
 const LARGE_BATCH_THRESHOLD = 200;
+// Firmware-managed device paths, mapped to what breaks when they're deleted
+// or renamed. Manual deletes and renames show a timed warning first
+// (confirmDelete, confirmRename).
+const SYSTEM_PATHS = {
+    "e:/amiibo/data": "Saved tag database slots are lost.",
+    "e:/amiibo/fav": "Tag database favorites are lost.",
+    "e:/amiibolink": "Link mode slots are lost.",
+    "e:/chameleon": "Chameleon mode card slots and dumps are lost.",
+    "e:/chameleon/dump": "Saved Chameleon mode card dumps are lost.",
+    "e:/chameleon/slots": "Chameleon mode card slots are lost.",
+    // Keys load at boot, so the loss shows after the next restart.
+    "e:/key_retail.bin":
+        "After the next restart, the device can't read, edit or generate NFC tag data until you upload this key file again.",
+    "e:/settings.bin": "Device settings reset to their defaults.",
+};
+// What deleting or renaming an item inside a system folder breaks, keyed by
+// the deepest matching folder. Items whose name doesn't match `name`, or that
+// sit deeper than `depth` levels below the folder (default 1, direct children
+// only), are ignored by the firmware. A null message means the firmware finds
+// the item by listing the folder, so that action is harmless.
+const SYSTEM_CHILD_RULES = [
+    {
+        // Slot files are opened as sprintf("%02d.bin")
+        folder: "e:/amiibo/data",
+        name: /^\d{2}\.bin$/,
+        delete: { FILE: "This tag database slot is emptied." },
+        rename: { FILE: "The tag database only reads slots named 00.bin, 01.bin and so on, so renaming moves or empties this slot." },
+    },
+    {
+        // Favorite files encode the tag ID: sprintf("%d_%08X_%08X.fav").
+        // Subfolders are user-named favorite groups, one level deep, each
+        // holding favorite files.
+        folder: "e:/amiibo/fav",
+        name: { FILE: /^\d+_[0-9A-F]{8}_[0-9A-F]{8}\.fav$/ },
+        depth: { FILE: 2, DIR: 1 },
+        delete: {
+            FILE: "This favorite is removed from the tag database.",
+            DIR: "This favorites group and everything in it are removed.",
+        },
+        rename: {
+            FILE: "The tag database reads the tag ID from this file name, so renaming removes the favorite.",
+            DIR: null,
+        },
+    },
+    {
+        // Slot files are opened as sprintf("%02d.bin")
+        folder: "e:/amiibolink",
+        name: /^\d{2}\.bin$/,
+        delete: { FILE: "This link mode slot is emptied." },
+        rename: { FILE: "Link mode only reads slots named 00.bin, 01.bin and so on, so renaming moves or empties this slot." },
+    },
+    {
+        folder: "e:/chameleon/slots",
+        delete: { FILE: "This Chameleon mode card slot is lost." },
+        rename: { FILE: "Chameleon mode reads its slot files by exact name, so renaming loses this slot." },
+    },
+    {
+        // The device's dump browser walks subfolders too
+        folder: "e:/chameleon/dump",
+        depth: Infinity,
+        delete: {
+            FILE: "This saved card dump is lost.",
+            DIR: "The saved card dumps in this folder are lost.",
+        },
+        rename: { FILE: null, DIR: null },
+    },
+];
 const SYNC_EXCLUDE_PATHS = ["e:/amiibo/fav", "e:/amiibo/data"]; // device paths excluded from sync on both sides
+// Directory-listing meta flag bit for firmware system files (SYSTEM = 1 << 1).
+// Delete and rename warnings treat flagged entries as system items, which
+// covers system files SYSTEM_PATHS doesn't name. HIDDEN (1 << 0) is left out
+// on purpose: users can set it on their own files (the official web app's
+// "Hide" option), and the only items the firmware hides itself are already in
+// SYSTEM_PATHS.
+const SYSTEM_ENTRY_FLAGS = 0x02;
 const PIXL_RELEASES_URL = "https://github.com/solosky/pixl.js/releases";
 
 const FAVICON_PATH = `<path d="M225.5-82.5Q120-125 120-200q0-32 20-57.5t56-45.5l65 58q-24 8-42.5 20.5T200-200q0 26 81 53t199 27q118 0 199-27t81-53q0-12-18.5-24.5T699-245l65-58q36 20 56 45.5t20 57.5q0 75-105.5 117.5T480-40q-149 0-254.5-42.5Zm212-125Q417-215 400-230L148-453q-13-11-20.5-27t-7.5-33v-80q0-17 6.5-33t19.5-27l252-235q17-16 38-24t44-8q23 0 44 8t38 24l252 235q13 11 19.5 27t6.5 33v80q0 17-7.5 33T812-453L560-230q-17 15-37.5 22.5T480-200q-22 0-42.5-7.5Zm-42-357Q410-579 410-600t-14.5-35.5Q381-650 360-650t-35.5 14.5Q310-621 310-600t14.5 35.5Q339-550 360-550t35.5-14.5ZM410-496q43 21 90.5 13.5T584-522q34-29 44.5-73T618-678L410-496Zm105.5-188.5Q530-699 530-720t-14.5-35.5Q501-770 480-770t-35.5 14.5Q430-741 430-720t14.5 35.5Q459-670 480-670t35.5-14.5Z"/>`;
@@ -121,6 +195,10 @@ function isSyncExcluded(remotePath) {
     return SYNC_EXCLUDE_PATHS.some(
         (p) => lower === p || lower.startsWith(p + "/"),
     );
+}
+
+function isSystemEntry(entry) {
+    return ((entry.meta?.flags ?? 0) & SYSTEM_ENTRY_FLAGS) !== 0;
 }
 
 function joinChildPath(parent, child) {
@@ -2316,16 +2394,19 @@ el.fileTableBody.addEventListener("click", async (e) => {
                     renderFileTable();
                 });
             } else if (actionBtn.dataset.action === "delete") {
-                const confirmed = await showConfirmModal({
-                    title: "Delete",
-                    badge: "danger",
-                    icon: "delete",
-                    heading: `Delete "${entry.name}"?`,
-                    message:
-                        "This removes it from device storage permanently. This action can't be undone.",
-                    okLabel: "Delete",
-                    okClass: "danger",
-                });
+                const confirmed = await confirmDelete(
+                    [{ path: joinChildPath(entry.parentPath, entry.name), entry }],
+                    {
+                        title: "Delete",
+                        badge: "danger",
+                        icon: "delete",
+                        heading: `Delete "${entry.name}"?`,
+                        message:
+                            "This removes it from device storage permanently. This action can't be undone.",
+                        okLabel: "Delete",
+                        okClass: "danger",
+                    },
+                );
                 if (confirmed) await doDeleteSearchResults([entry]);
             } else if (actionBtn.dataset.action === "download") {
                 await downloadEntries([
@@ -2375,16 +2456,19 @@ el.fileTableBody.addEventListener("click", async (e) => {
         } else if (actionBtn.dataset.action === "delete") {
             state.selectedNames.clear();
             state.selectedNames.add(entry.name);
-            const confirmed = await showConfirmModal({
-                title: "Delete",
-                badge: "danger",
-                icon: "delete",
-                heading: `Delete "${entry.name}"?`,
-                message:
-                    "This removes it from device storage permanently. This action can't be undone.",
-                okLabel: "Delete",
-                okClass: "danger",
-            });
+            const confirmed = await confirmDelete(
+                [{ path: joinChildPath(state.currentPath, entry.name), entry }],
+                {
+                    title: "Delete",
+                    badge: "danger",
+                    icon: "delete",
+                    heading: `Delete "${entry.name}"?`,
+                    message:
+                        "This removes it from device storage permanently. This action can't be undone.",
+                    okLabel: "Delete",
+                    okClass: "danger",
+                },
+            );
             if (confirmed) await doDeleteSelected();
         } else if (actionBtn.dataset.action === "download") {
             if (!state.client) return;
@@ -2453,7 +2537,18 @@ el.btnDeleteSelected.addEventListener("click", async () => {
         ? state.searchSelected.size
         : state.selectedNames.size;
     if (count === 0) return;
-    const confirmed = await showConfirmModal({
+    const targets = state.searchActive
+        ? [...state.searchSelected].map((entry) => ({
+              path: joinChildPath(entry.parentPath, entry.name),
+              entry,
+          }))
+        : state.entries
+              .filter((entry) => state.selectedNames.has(entry.name))
+              .map((entry) => ({
+                  path: joinChildPath(state.currentPath, entry.name),
+                  entry,
+              }));
+    const confirmed = await confirmDelete(targets, {
         title: "Delete",
         badge: "danger",
         icon: "delete",
@@ -3120,6 +3215,7 @@ async function openRenameModal(entry, basePath = state.currentPath, onRenamed = 
     if (!newName) return;
     const oldPath = joinChildPath(capturedPath, name);
     const newPath = joinChildPath(capturedPath, newName);
+    if (!(await confirmRename(oldPath, entry, newName))) return;
     try {
         const res = await state.client.renamePath(oldPath, newPath);
         if (res.ok) {
@@ -3360,7 +3456,164 @@ el.btnUploadClose.addEventListener("click", () => {
 el.btnConnect.addEventListener("click", connectOrDisconnect);
 el.btnConnectCta.addEventListener("click", connectOrDisconnect);
 
-// --- Delete confirm ---
+// --- Delete and rename confirm ---
+
+// Returns { warning, inside } for a system item, or null. `inside` is true when
+// the item is only system because of the folder it sits in.
+function describeSystemTarget(path, entry, action) {
+    const lower = path.toLowerCase();
+    if (SYSTEM_PATHS[lower])
+        return { warning: SYSTEM_PATHS[lower], inside: false };
+    const type = entry?.type === "DIR" ? "DIR" : "FILE";
+    // Rule fields are either one value or a { FILE, DIR } pair
+    const pick = (value) =>
+        value !== null &&
+        typeof value === "object" &&
+        !(value instanceof RegExp)
+            ? value[type]
+            : value;
+    let rule = null;
+    for (const r of SYSTEM_CHILD_RULES) {
+        if (
+            lower.startsWith(r.folder + "/") &&
+            (!rule || r.folder.length > rule.folder.length)
+        )
+            rule = r;
+    }
+    let warning = null;
+    if (rule) {
+        const pattern = pick(rule.name);
+        const name = entry?.name ?? getBaseName(path);
+        const depth = lower.slice(rule.folder.length + 1).split("/").length;
+        const used =
+            depth <= (pick(rule.depth) ?? 1) &&
+            (pattern === undefined || (pattern !== null && pattern.test(name)));
+        if (used) warning = pick(rule[action]) ?? null;
+    } else if (SYNC_EXCLUDE_PATHS.some((p) => lower.startsWith(p + "/"))) {
+        warning = "The firmware manages the folder this item is in.";
+    }
+    if (warning) return { warning, inside: true };
+    if (entry && isSystemEntry(entry))
+        return {
+            warning: "The firmware marks this as a system item.",
+            inside: false,
+        };
+    return null;
+}
+
+function findSystemTargets(targets, action) {
+    const found = [];
+    for (const { path, entry } of targets) {
+        const info = describeSystemTarget(path, entry, action);
+        if (info) found.push({ path, entry, ...info });
+    }
+    return found;
+}
+
+function systemTargetHeading(systemTargets) {
+    if (systemTargets.length !== 1)
+        return `${pluralize(systemTargets.length, "system item")} selected`;
+    const [{ path, entry, inside }] = systemTargets;
+    const name = entry?.name ?? getBaseName(path);
+    if (inside) return `"${name}" is in a system folder`;
+    return `"${name}" is a system ${entry?.type === "DIR" ? "folder" : "file"}`;
+}
+
+// Warning that lists each system item and what breaks. The OK button stays
+// locked for 3s so it can't be clicked through by reflex.
+function confirmSystemChange(options) {
+    return showConfirmModal({
+        badge: "warning",
+        icon: "warning",
+        okClass: "danger",
+        okDelay: 3,
+        ...options,
+    });
+}
+
+// targets: [{ path, entry }]. Plain deletes get the caller's usual confirm
+// modal; anything touching a system path gets the system warning instead.
+async function confirmDelete(targets, plainConfirm) {
+    const systemTargets = findSystemTargets(targets, "delete");
+    if (systemTargets.length === 0) return showConfirmModal(plainConfirm);
+
+    const count = systemTargets.length;
+    const one = count === 1;
+    const scope =
+        targets.length === count
+            ? ""
+            : `This deletes ${pluralize(targets.length, "item")}, including ${pluralize(count, "system item")}. `;
+    const confirmed = await confirmSystemChange({
+        title: one ? "Delete system item" : "Delete system items",
+        heading: systemTargetHeading(systemTargets),
+        message:
+            `The device firmware relies on ${one ? "this item" : "these items"}. ` +
+            `Deleting ${one ? "it" : "them"} can break features on the device until you restore ${one ? "it" : "them"} from a backup. ` +
+            `${scope}This action can't be undone.`,
+        items: systemTargets.map(({ path, entry, warning }) => ({
+            label: `${formatPathForUi(path)}${entry?.type === "DIR" ? "/" : ""}`,
+            detail: warning,
+        })),
+        okLabel: "Delete",
+    });
+    if (confirmed) trackAnalyticsEvent("file_delete_system_confirm", { count });
+    return confirmed;
+}
+
+// Resolves true for plain renames without asking. The firmware opens system
+// items by exact name, so renaming one breaks the same things deleting it does.
+async function confirmRename(path, entry, newName) {
+    const systemTargets = findSystemTargets([{ path, entry }], "rename");
+    const name = entry?.name ?? getBaseName(path);
+    if (systemTargets.length === 0)
+        return confirmRenameSystemParent(path, entry, name, newName);
+
+    const [{ warning, inside }] = systemTargets;
+    const confirmed = await confirmSystemChange({
+        title: "Rename system item",
+        heading: systemTargetHeading(systemTargets),
+        message: inside
+            ? "The device firmware reads this item by its name."
+            : "The device firmware looks for this item by its exact name. " +
+              "Renaming it has the same effect as deleting it until you rename it back.",
+        items: [{ label: `${name} → ${newName}`, detail: warning }],
+        okLabel: "Rename",
+    });
+    if (confirmed) trackAnalyticsEvent("file_rename_system_confirm");
+    return confirmed;
+}
+
+// Renaming a folder moves everything in it, so a folder that holds system paths
+// (e.g. E:/amiibo, parent of amiibo/data and amiibo/fav) breaks them as well.
+// Deleting one needs no such check: the device refuses to remove a folder that
+// isn't empty.
+async function confirmRenameSystemParent(path, entry, name, newName) {
+    if (entry?.type !== "DIR") return true;
+    const prefix = path.toLowerCase() + "/";
+    const nested = Object.keys(SYSTEM_PATHS).filter((p) => p.startsWith(prefix));
+    // Keep only the outermost: e:/chameleon already covers its slots and dump
+    const outer = nested.filter((p) => !nested.some((q) => p.startsWith(q + "/")));
+    if (outer.length === 0) return true;
+
+    const confirmed = await confirmSystemChange({
+        title: "Rename system item",
+        heading: `"${name}" contains ${outer.length === 1 ? "a system item" : "system items"}`,
+        message:
+            "The device firmware opens the items below by their full path. " +
+            "Renaming this folder moves them, which has the same effect as deleting them until you rename it back.",
+        items: [
+            { label: `${name} → ${newName}` },
+            // Only folders can sit under another folder: the system files are at the root
+            ...outer.map((p) => ({
+                label: `${formatPathForUi(path + p.slice(path.length))}/`,
+                detail: SYSTEM_PATHS[p],
+            })),
+        ],
+        okLabel: "Rename",
+    });
+    if (confirmed) trackAnalyticsEvent("file_rename_system_confirm");
+    return confirmed;
+}
 
 async function deletePaths(paths) {
     // Sort: files before folders so file handles are closed before rmdir
