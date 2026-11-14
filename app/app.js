@@ -4182,11 +4182,14 @@ function renderSyncQueue() {
                 const checked = state.syncOrphanChecked.has(orphan.remotePath)
                     ? " checked"
                     : "";
+                // Folders show a dash, like the file table
+                const size =
+                    orphan.kind === "folder" ? "\u2014" : formatBytes(orphan.size);
                 html +=
                     `<div class="queue-item queue-orphan-item">` +
                     `<input type="checkbox" class="orphan-checkbox" data-path="${escapeHtml(orphan.remotePath)}"${checked}>` +
                     `<span class="queue-name" title="${title}">${baseName}${suffix}</span>` +
-                    `<span class="queue-status">${escapeHtml(formatBytes(orphan.size))}</span>` +
+                    `<span class="queue-status">${escapeHtml(size)}</span>` +
                     `</div>`;
             }
         }
