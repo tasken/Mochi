@@ -323,6 +323,8 @@ const el = {
     confirmIcon: document.getElementById("confirmIcon"),
     confirmBodyTitle: document.getElementById("confirmBodyTitle"),
     confirmMessage: document.getElementById("confirmMessage"),
+    confirmList: document.getElementById("confirmList"),
+    confirmChoices: document.getElementById("confirmChoices"),
     btnConfirmOk: document.getElementById("btnConfirmOk"),
 
     inputModal: document.getElementById("inputModal"),
@@ -332,14 +334,6 @@ const el = {
     inputError: document.getElementById("inputError"),
     inputHelper: document.getElementById("inputHelper"),
     btnInputOk: document.getElementById("btnInputOk"),
-
-    uploadWarnModal: document.getElementById("uploadWarnModal"),
-    uploadWarnMsg: document.getElementById("uploadWarnMsg"),
-    btnUploadWarnConfirm: document.getElementById("btnUploadWarnConfirm"),
-
-    sanitizeModalNone: document.getElementById("sanitizeModalNone"),
-    sanitizeNonePath: document.getElementById("sanitizeNonePath"),
-    btnSanitizeNoneConfirm: document.getElementById("btnSanitizeNoneConfirm"),
 
     // DFU
     btnUpdateFirmware: document.getElementById("btnUpdateFirmware"),
@@ -534,12 +528,6 @@ function ensureSiblingNameAvailable(name, currentName = "") {
     ) {
         throw new Error(`"${name}" already exists in this folder`);
     }
-}
-
-function readCheckedRadioValue(name, label) {
-    const selected = document.querySelector(`input[name="${name}"]:checked`);
-    if (!selected) throw new Error(`${label} is required`);
-    return selected.value;
 }
 
 // === Protocol Log ===
@@ -1255,6 +1243,8 @@ function showConfirmModal({
     icon,
     heading = "",
     message = "",
+    items = [],
+    choices = [],
     okLabel = "Confirm",
     okClass = "danger",
     okDelay = 0,
@@ -1269,6 +1259,42 @@ function showConfirmModal({
     el.confirmBodyTitle.hidden = !heading;
     el.confirmMessage.textContent = message;
     el.confirmMessage.hidden = !message;
+    // items: [{ label, detail }], label in mono, detail below it; either is optional
+    el.confirmList.replaceChildren(
+        ...items.map(({ label, detail }) => {
+            const li = document.createElement("li");
+            if (label) {
+                const labelEl = document.createElement("span");
+                labelEl.className = "modal-item-label";
+                labelEl.textContent = label;
+                li.append(labelEl);
+            }
+            if (detail) {
+                const detailEl = document.createElement("span");
+                detailEl.className = "modal-item-detail";
+                detailEl.textContent = detail;
+                li.append(detailEl);
+            }
+            return li;
+        }),
+    );
+    el.confirmList.hidden = items.length === 0;
+    // choices: [{ value, label }], radio buttons, first one preselected.
+    // Read the pick through showChoiceModal().
+    el.confirmChoices.replaceChildren(
+        ...choices.map(({ value, label }, i) => {
+            const option = document.createElement("label");
+            option.className = "modal-choice-option";
+            const input = document.createElement("input");
+            input.type = "radio";
+            input.name = "confirmChoice";
+            input.value = value;
+            input.checked = i === 0;
+            option.append(input, label);
+            return option;
+        }),
+    );
+    el.confirmChoices.hidden = choices.length === 0;
     el.btnConfirmOk.className = `btn-labeled ${okClass}`;
     clearInterval(_confirmCountdown);
     if (okDelay > 0) {
@@ -1308,6 +1334,16 @@ el.btnConfirmOk.addEventListener("click", () => {
     closeModal(el.confirmModal);
     r?.(true);
 });
+
+// showConfirmModal() with radio choices. Resolves to the picked value, or null
+// on cancel (or when the confirm modal is already open).
+async function showChoiceModal(options) {
+    if (!(await showConfirmModal(options))) return null;
+    return (
+        el.confirmChoices.querySelector("input[name=confirmChoice]:checked")
+            ?.value ?? null
+    );
+}
 
 // === Shared input modal ===
 
@@ -1551,8 +1587,6 @@ document.addEventListener("keydown", (e) => {
 for (const modal of [
     el.confirmModal,
     el.inputModal,
-    el.sanitizeModalNone,
-    el.uploadWarnModal,
 ]) {
     modal.addEventListener("click", (e) => {
         if (e.target === modal) closeModal(modal);
@@ -2646,11 +2680,22 @@ el.btnNewFolder.addEventListener("click", async () => {
 });
 
 // Normalize modal
-el.btnNormalize.addEventListener("click", () => {
-    el.sanitizeNonePath.textContent = formatPathForUi(
-        state.currentPath || "E:/",
-    );
-    openModal(el.sanitizeModalNone);
+el.btnNormalize.addEventListener("click", async () => {
+    const scope = await showChoiceModal({
+        title: "Convert names to lowercase",
+        badge: "primary",
+        icon: "match_case",
+        heading: "Choose what to lowercase in this location",
+        message: `Location: ${formatPathForUi(state.currentPath || "E:/")}`,
+        choices: [
+            { value: "files", label: "Files in this folder" },
+            { value: "filesAndFolders", label: "Files and folders in this folder" },
+            { value: "recursive", label: "This folder and all subfolders" },
+        ],
+        okLabel: "Convert names",
+        okClass: "primary",
+    });
+    if (scope) await runNormalize(scope);
 });
 
 // === Search ===
@@ -3557,19 +3602,10 @@ async function withBrowserLock(title, fn) {
     }
 }
 
-// --- Sanitize: none confirm ---
+// --- Sanitize: run ---
 
-el.btnSanitizeNoneConfirm.addEventListener("click", async () => {
-    closeModal(el.sanitizeModalNone);
+async function runNormalize(scope) {
     if (!state.client) return;
-
-    let scope;
-    try {
-        scope = readCheckedRadioValue("sanitizeNoneScope", "Lowercase scope");
-    } catch (err) {
-        showErrorToast("Couldn't convert names to lowercase", err.message);
-        return;
-    }
 
     await withBrowserLock("Converting names…", async () => {
         const allOps = [];
@@ -3605,7 +3641,7 @@ el.btnSanitizeNoneConfirm.addEventListener("click", async () => {
 
         await executeSanitize(allOps, allSkipped);
     });
-});
+}
 
 // --- File/folder collection helpers ---
 
@@ -4213,28 +4249,31 @@ function checkUploadPlanWarnings(plan) {
     return warnings;
 }
 
-function warningsToStrings(warnings) {
-    const lines = [];
+function warningsToItems(warnings) {
+    const items = [];
     for (const w of warnings) {
         if (w.type === "large-dirs") {
             for (const { dir } of w.dirs) {
-                lines.push(
-                    `${formatPathForUi(dir)} has many files, transfers over Bluetooth may be slower`,
-                );
+                items.push({
+                    label: formatPathForUi(dir),
+                    detail: "Has many files, transfers over Bluetooth may be slower.",
+                });
             }
         } else if (w.type === "large-batch") {
-            lines.push(
-                `${w.count} files total. Estimated time: ${w.mins}+ minutes. Keep the device nearby and the screen awake`,
-            );
+            items.push({
+                label: `${w.count} files total`,
+                detail: `Estimated time: ${w.mins}+ minutes. Keep the device nearby and the screen awake.`,
+            });
         } else if (w.type === "case-collision") {
             for (const { paths } of w.groups) {
-                lines.push(
-                    `${paths.map((p) => getBaseName(p)).join(" and ")} resolve to the same name on the device, only one will be kept`,
-                );
+                items.push({
+                    label: paths.map((p) => getBaseName(p)).join(", "),
+                    detail: "These resolve to the same name on the device, only one will be kept.",
+                });
             }
         }
     }
-    return lines;
+    return items;
 }
 
 function detectSystemFolderWarnings(folders, files) {
@@ -4252,49 +4291,17 @@ function detectSystemFolderWarnings(folders, files) {
     return affected;
 }
 
-// Shared confirm modal: sets innerHTML, opens uploadWarnModal, returns Promise<boolean>.
-// AbortController + modal:close event ensure listeners always clean up (Cancel, X, Escape).
-function showUploadWarnModal(htmlContent) {
-    return new Promise((resolve) => {
-        el.uploadWarnMsg.innerHTML = htmlContent;
-        openModal(el.uploadWarnModal);
-        const ac = new AbortController();
-        const { signal } = ac;
-        const done = (result) => {
-            ac.abort();
-            closeModal(el.uploadWarnModal);
-            resolve(result);
-        };
-        el.btnUploadWarnConfirm.addEventListener("click", () => done(true), {
-            signal,
-        });
-        el.uploadWarnModal.addEventListener(
-            "modal:close",
-            () => {
-                ac.abort();
-                resolve(false);
-            },
-            { signal, once: true },
-        );
+function showUploadWarning({ message, items }) {
+    return showConfirmModal({
+        title: "Upload warning",
+        badge: "warning",
+        icon: "warning",
+        heading: "Heads up before upload",
+        message,
+        items,
+        okLabel: "Continue",
+        okClass: "primary",
     });
-}
-
-function buildSystemFolderWarnHtml(affected) {
-    const parts = [];
-    if (affected.has("data"))
-        parts.push(
-            `<p><strong>Tag database folder (/amiibo/data)</strong>: files should use sequential names like ` +
-                `<strong>00.bin, 01.bin</strong> to appear as numbered slots. This also helps advanced tools index them correctly.</p>`,
-        );
-    if (affected.has("fav"))
-        parts.push(
-            `<p><strong>Favorites folder (/amiibo/fav)</strong>: this folder is managed by your device app. ` +
-                `Files uploaded here may not appear.</p>`,
-        );
-    return (
-        parts.join("") +
-        `<p class="modal-note">You can still upload, but some files may not appear as expected.</p>`
-    );
 }
 
 async function checkSystemFolderWarning(collected) {
@@ -4303,7 +4310,21 @@ async function checkSystemFolderWarning(collected) {
         collected.files,
     );
     if (affected.size === 0) return true;
-    return showUploadWarnModal(buildSystemFolderWarnHtml(affected));
+    const items = [];
+    if (affected.has("data"))
+        items.push({
+            label: "/amiibo/data/",
+            detail: "Tag database folder. Files should use sequential names like 00.bin, 01.bin to appear as numbered slots. This also helps advanced tools index them correctly.",
+        });
+    if (affected.has("fav"))
+        items.push({
+            label: "/amiibo/fav/",
+            detail: "Favorites folder. Your device app manages this folder, so files uploaded here may not appear.",
+        });
+    return showUploadWarning({
+        message: "You can still upload, but some files may not appear as expected.",
+        items,
+    });
 }
 
 // --- Sync ---
@@ -4518,13 +4539,12 @@ async function runUpload() {
     if (!hasUploads && !hasOrphanDeletions) return;
 
     if (state.uploadWarnings.length > 0) {
-        const lines = warningsToStrings(state.uploadWarnings)
-            .map((w) => `<li>${escapeHtml(w)}</li>`)
-            .join("");
-        const html =
-            `<ul class="modal-list">${lines}</ul>` +
-            `<p class="modal-note">You can continue now, but large transfers may take longer or fail if Bluetooth drops.</p>`;
-        if (!(await showUploadWarnModal(html))) return;
+        const confirmed = await showUploadWarning({
+            message:
+                "You can continue now, but large transfers may take longer or fail if Bluetooth drops.",
+            items: warningsToItems(state.uploadWarnings),
+        });
+        if (!confirmed) return;
         if (!state.client || state.connState !== "connected") return;
     }
 

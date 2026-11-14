@@ -832,7 +832,7 @@
             </div>
         </div>
 
-        <!-- Shared confirm modal (format, delete, …) -->
+        <!-- Shared confirm modal (format, delete, normalize, upload warnings, …) -->
         <div
             id="confirmModal"
             class="modal-overlay"
@@ -857,6 +857,13 @@
                     </div>
                     <div class="modal-body-title" id="confirmBodyTitle"></div>
                     <p id="confirmMessage"></p>
+                    <ul class="modal-item-list" id="confirmList" hidden></ul>
+                    <div
+                        class="modal-choice-list"
+                        id="confirmChoices"
+                        role="radiogroup"
+                        hidden
+                    ></div>
                     <div class="modal-actions">
                         <button class="btn-labeled ghost" data-modal-close>
                             Cancel
@@ -920,125 +927,6 @@
                             class="btn-labeled primary"
                             id="btnInputOk"
                         ></button>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Upload warning modal -->
-        <div
-            id="uploadWarnModal"
-            class="modal-overlay"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="uploadWarnTitle"
-        >
-            <div class="modal-box">
-                <div class="modal-header">
-                    <span class="modal-header-title" id="uploadWarnTitle"
-                        >Upload warning</span
-                    >
-                    <button
-                        class="modal-close"
-                        data-modal-close
-                        aria-label="Close"
-                    >
-                        <span class="ms">close</span>
-                    </button>
-                </div>
-                <div class="modal-body">
-                    <div class="modal-icon-badge warning">
-                        <span class="ms">warning</span>
-                    </div>
-                    <div class="modal-body-title">Heads up before upload</div>
-                    <div id="uploadWarnMsg"></div>
-                    <div class="modal-actions">
-                        <button class="btn-labeled ghost" data-modal-close>
-                            Cancel
-                        </button>
-                        <button
-                            class="btn-labeled primary"
-                            id="btnUploadWarnConfirm"
-                        >
-                            Continue
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Sanitize names modal — nothing selected -->
-        <div
-            id="sanitizeModalNone"
-            class="modal-overlay sanitize-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="sanitizeNoneTitle"
-        >
-            <div class="modal-box">
-                <div class="modal-header">
-                    <span class="modal-header-title" id="sanitizeNoneTitle"
-                        >Convert names to lowercase</span
-                    >
-                    <button
-                        class="modal-close"
-                        data-modal-close
-                        aria-label="Close"
-                    >
-                        <span class="ms">close</span>
-                    </button>
-                </div>
-                <div class="modal-body">
-                    <div class="modal-icon-badge primary">
-                        <span class="ms">match_case</span>
-                    </div>
-                    <div class="modal-body-title">
-                        Choose what to lowercase in this location
-                    </div>
-                    <p class="modal-note">
-                        Location:
-                        <strong
-                            class="modal-inline-mono"
-                            id="sanitizeNonePath"
-                        ></strong>
-                    </p>
-                    <div class="modal-choice-list">
-                        <label class="modal-choice-option">
-                            <input
-                                type="radio"
-                                name="sanitizeNoneScope"
-                                value="files"
-                                checked
-                            />
-                            Files in this folder
-                        </label>
-                        <label class="modal-choice-option">
-                            <input
-                                type="radio"
-                                name="sanitizeNoneScope"
-                                value="filesAndFolders"
-                            />
-                            Files and folders in this folder
-                        </label>
-                        <label class="modal-choice-option">
-                            <input
-                                type="radio"
-                                name="sanitizeNoneScope"
-                                value="recursive"
-                            />
-                            This folder and all subfolders
-                        </label>
-                    </div>
-                    <div class="modal-actions">
-                        <button class="btn-labeled ghost" data-modal-close>
-                            Cancel
-                        </button>
-                        <button
-                            class="btn-labeled primary"
-                            id="btnSanitizeNoneConfirm"
-                        >
-                            Convert names
-                        </button>
                     </div>
                 </div>
             </div>

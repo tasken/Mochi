@@ -2063,6 +2063,39 @@ tr:focus-within .cell-actions button {
     line-height: 1.3;
 }
 
+.modal-item-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    max-height: 50dvh;
+    overflow-y: auto;
+}
+.modal-body > .modal-item-list {
+    margin-bottom: 8px;
+}
+.modal-item-list li {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 8px 16px;
+}
+.modal-item-list li + li {
+    border-top: 1px solid var(--border);
+}
+.modal-item-label {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: var(--fs-s);
+    color: var(--foreground);
+    overflow-wrap: anywhere;
+}
+.modal-item-detail {
+    font-size: var(--fs-s);
+    color: #555;
+    line-height: 1.4;
+}
+
 .modal-field-label {
     display: block;
     font-size: var(--fs-s);
@@ -2074,10 +2107,6 @@ tr:focus-within .cell-actions button {
     font-size: var(--fs-md);
     color: #555;
     line-height: 1.5;
-}
-
-.modal-inline-mono {
-    font-family: "IBM Plex Mono", monospace;
 }
 
 .modal-input {
@@ -2094,6 +2123,9 @@ tr:focus-within .cell-actions button {
     flex-direction: column;
     gap: 8px;
 }
+.modal-choice-list[hidden] {
+    display: none;
+}
 
 .modal-choice-option {
     display: flex;
@@ -2105,17 +2137,6 @@ tr:focus-within .cell-actions button {
 
 .modal-choice-option input {
     flex-shrink: 0;
-}
-
-.modal-list {
-    margin: 0;
-    padding-left: 18px;
-    line-height: 1.5;
-}
-
-.modal-note {
-    font-size: var(--fs-s);
-    color: #666;
 }
 
 .modal-actions {
