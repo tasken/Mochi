@@ -2253,7 +2253,6 @@ function renderSearchResults() {
             (!isDir
                 ? `<button class="btn-icon ghost" data-action="download" title="Download"><span class="ms-sm">download</span></button>`
                 : "") +
-            `<button class="btn-icon ghost" data-action="rename" title="Rename"><span class="ms-sm">edit</span></button>` +
             `<button class="btn-icon ghost" data-action="delete" title="Delete"><span class="ms-sm">delete</span></button>` +
             `</td>` +
             `</tr>`
@@ -2389,12 +2388,7 @@ el.fileTableBody.addEventListener("click", async (e) => {
 
         const actionBtn = e.target.closest(".cell-actions button[data-action]");
         if (actionBtn) {
-            if (actionBtn.dataset.action === "rename") {
-                openRenameModal(entry, entry.parentPath, (newName) => {
-                    entry.name = newName;
-                    renderFileTable();
-                });
-            } else if (actionBtn.dataset.action === "delete") {
+            if (actionBtn.dataset.action === "delete") {
                 const confirmed = await confirmDelete(
                     [{ path: joinChildPath(entry.parentPath, entry.name), entry }],
                     {
@@ -3187,14 +3181,14 @@ el.detailsSheetBackdrop.addEventListener("click", () => {
     closeDetailsSheet();
 });
 
-async function openRenameModal(entry, basePath = state.currentPath, onRenamed = null) {
+async function openRenameModal(entry) {
     if (!state.client || !entry) return;
     const name = entry.name;
     const kind = entry.type === "DIR" ? "folder" : "file";
     // Capture before the first await: an undo toast for a prior rename can fire
     // while the input modal is suspended, running browseFolder() and changing
     // state.currentPath before showInputModal() resolves.
-    const capturedPath = basePath;
+    const capturedPath = state.currentPath;
     _inputValidate = (raw) => {
         try {
             const v = validateSingleName(raw, "Name");
@@ -3218,14 +3212,13 @@ async function openRenameModal(entry, basePath = state.currentPath, onRenamed = 
     const newPath = joinChildPath(capturedPath, newName);
     if (!(await confirmRename(oldPath, entry, newName))) return;
     try {
-        const res = await state.client.renamePath(oldPath, newPath);
+        const res = await renameOnDevice(oldPath, newPath, kind);
         if (res.ok) {
             log(`Renamed: ${name} → ${newName}`);
             showUndoToast(`Renamed to ${newName}`, () =>
                 undoRename(newPath, oldPath, newName, name, kind),
             );
             trackAnalyticsEvent("file_rename");
-            if (onRenamed) onRenamed(newName);
         } else {
             log(`Rename failed: ${res.error}`, "err");
             showErrorToast("Rename failed", res.error);
@@ -3235,10 +3228,25 @@ async function openRenameModal(entry, basePath = state.currentPath, onRenamed = 
         showErrorToast("Rename failed", err.message);
     } finally {
         invalidateCache();
-        if (!onRenamed) {
-            await browseFolder(getParentPath(oldPath));
-        }
+        await browseFolder(getParentPath(oldPath));
     }
+}
+
+// Current firmware reports success for folder renames without doing them,
+// so check the parent listing afterwards
+const FOLDER_RENAME_UNSUPPORTED =
+    "The device kept the old folder name. This firmware can't rename folders.";
+
+async function renameOnDevice(oldPath, newPath, kind) {
+    const res = await state.client.renamePath(oldPath, newPath);
+    if (!res.ok || kind !== "folder") return res;
+    const listing = await state.client.readFolder(getParentPath(newPath));
+    if (!listing.ok) return res;
+    const names = new Set(listing.data.map((e) => e.name));
+    const oldName = getBaseName(oldPath);
+    const newName = getBaseName(newPath);
+    const moved = names.has(newName) && (oldName === newName || !names.has(oldName));
+    return moved ? res : { ok: false, error: FOLDER_RENAME_UNSUPPORTED, data: null };
 }
 
 async function undoRename(
@@ -3254,7 +3262,7 @@ async function undoRename(
         validateRemotePath(currentPath, kind);
         validateRemotePath(originalPath, kind);
 
-        const res = await state.client.renamePath(currentPath, originalPath);
+        const res = await renameOnDevice(currentPath, originalPath, kind);
         if (res.ok) {
             log(`Reverted rename: ${currentName} → ${originalName}`);
             showSuccessToast(`Reverted to ${originalName}`);
@@ -3804,13 +3812,21 @@ async function executeSanitize(allOps, allSkipped) {
     });
 
     let renamed = 0;
+    let foldersUnsupported = false;
     for (const op of allOps) {
+        const kind = op.type === "DIR" ? "folder" : "file";
+        // After one failure, skip the remaining folders
+        if (kind === "folder" && foldersUnsupported) {
+            log(`Rename failed: ${op.from}: ${FOLDER_RENAME_UNSUPPORTED}`, "err");
+            continue;
+        }
         try {
-            const res = await state.client.renamePath(op.from, op.to);
+            const res = await renameOnDevice(op.from, op.to, kind);
             if (res.ok) {
                 renamed++;
                 log(`Renamed: ${op.from} → ${op.to}`, "ok");
             } else {
+                if (res.error === FOLDER_RENAME_UNSUPPORTED) foldersUnsupported = true;
                 log(`Rename failed: ${op.from}: ${res.error}`, "err");
             }
         } catch (err) {
@@ -3825,10 +3841,12 @@ async function executeSanitize(allOps, allSkipped) {
     }
     const renamedText = pluralize(renamed, "item");
     const totalText = pluralize(allOps.length, "item");
-    const skippedText =
-        allSkipped.length > 0
-            ? `Skipped ${pluralize(allSkipped.length, "item")}`
-            : "";
+    const skippedText = [
+        allSkipped.length > 0 ? `Skipped ${pluralize(allSkipped.length, "item")}` : "",
+        foldersUnsupported ? "This firmware can't rename folders" : "",
+    ]
+        .filter(Boolean)
+        .join(". ");
     if (renamed === allOps.length && renamed > 0) {
         showSuccessToast(`Converted ${renamedText} to lowercase`, skippedText);
     } else if (renamed > 0) {
@@ -3837,7 +3855,7 @@ async function executeSanitize(allOps, allSkipped) {
             skippedText,
         );
     } else if (allOps.length > 0) {
-        showErrorToast("Couldn't convert names to lowercase");
+        showErrorToast("Couldn't convert names to lowercase", skippedText);
     } else {
         showSuccessToast("All names are already lowercase", skippedText);
     }
