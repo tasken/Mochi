@@ -19,7 +19,7 @@ Connect your device and manage its storage directly from the browser:
 - **Format**: wipe and reformat the device drive
 - **NFC tag lookup**: `.bin` files show character name and series from [AmiiboAPI](https://amiiboapi.org/)
 
-Current Pixl.js firmware can't rename folders (it reports success but keeps the old name). Mochi checks and tells you instead of showing a rename that didn't happen.
+Renaming a folder can take a few minutes on stock firmware (deleting one takes seconds): the device handles every file inside it one at a time and doesn't respond until it's done. Mochi asks first and waits it out, so keep the device on until it finishes. Deleting a folder deletes everything in it.
 
 ## Firmware update
 

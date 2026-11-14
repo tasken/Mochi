@@ -348,6 +348,7 @@ const el = {
     // Browser lock
     browserLockOverlay: document.getElementById("browserLockOverlay"),
     browserLockTitle: document.getElementById("browserLockTitle"),
+    browserLockSub: document.getElementById("browserLockSub"),
 
     // Navigation bar
     navBreadcrumb: document.getElementById("navBreadcrumb"),
@@ -2766,7 +2767,7 @@ el.btnNormalize.addEventListener("click", async () => {
         badge: "primary",
         icon: "match_case",
         heading: "Choose what to lowercase in this location",
-        message: `Location: ${formatPathForUi(state.currentPath || "E:/")}`,
+        message: `Location: ${formatPathForUi(state.currentPath || "E:/")}. Folder renames can take a few minutes, so keep the device on until it's done.`,
         choices: [
             { value: "files", label: "Files in this folder" },
             { value: "filesAndFolders", label: "Files and folders in this folder" },
@@ -3201,6 +3202,7 @@ async function openRenameModal(entry) {
     const oldPath = joinChildPath(capturedPath, name);
     const newPath = joinChildPath(capturedPath, newName);
     if (!(await confirmRename(oldPath, entry, newName))) return;
+    let stillBusy = false;
     try {
         const res = await renameOnDevice(oldPath, newPath, kind);
         if (res.ok) {
@@ -3215,28 +3217,62 @@ async function openRenameModal(entry) {
         }
     } catch (err) {
         log(`Failed to rename: ${err.message}`, "err");
-        showErrorToast("Rename failed", err.message);
+        stillBusy = isTimeout(err);
+        showErrorToast("Rename failed", stillBusy ? DEVICE_STILL_BUSY : err.message);
     } finally {
         invalidateCache();
-        await browseFolder(getParentPath(oldPath));
+        // A busy device would only time out again
+        if (!stillBusy) await browseFolder(getParentPath(oldPath));
     }
 }
 
-// Current firmware reports success for folder renames without doing them,
-// so check the parent listing afterwards
-const FOLDER_RENAME_UNSUPPORTED =
-    "The device kept the old folder name. This firmware can't rename folders.";
+// The device's SPIFFS has no real folders: renaming or deleting one touches
+// every file inside, one at a time, which can take minutes. It answers nothing
+// else until it's done, so the browser stays locked and the timeout is long.
+const FOLDER_OP_TIMEOUT_MS = 10 * 60 * 1000;
+const FOLDER_RENAME_NOTE =
+    "The device renames every file inside one at a time, so this can take a few minutes. Keep it on and nearby until it's done.";
+const DEVICE_STILL_BUSY =
+    "The device may still be working on it. Wait a few minutes and keep it on before trying again";
 
-async function renameOnDevice(oldPath, newPath, kind) {
-    const res = await state.client.renamePath(oldPath, newPath);
-    if (!res.ok || kind !== "folder") return res;
-    const listing = await state.client.readFolder(getParentPath(newPath));
-    if (!listing.ok) return res;
-    const names = new Set(listing.data.map((e) => e.name));
-    const oldName = getBaseName(oldPath);
-    const newName = getBaseName(newPath);
-    const moved = names.has(newName) && (oldName === newName || !names.has(oldName));
-    return moved ? res : { ok: false, error: FOLDER_RENAME_UNSUPPORTED, data: null };
+function isTimeout(err) {
+    return /timed out/i.test(err?.message ?? "");
+}
+
+// Locks the browser with a "keep it on" note while a slow folder command runs.
+// Delete and Normalize may already hold the lock; only take it if it's free.
+async function withFolderBusy(title, sub, fn) {
+    const ownsLock = !el.browserLockOverlay.classList.contains("active");
+    const prevTitle = el.browserLockTitle.textContent;
+    const prevSub = el.browserLockSub.textContent;
+    el.browserLockOverlay.classList.add("active");
+    el.browserLockTitle.textContent = title;
+    el.browserLockSub.textContent = sub;
+    if (ownsLock) updateControls();
+    try {
+        return await fn();
+    } finally {
+        el.browserLockTitle.textContent = prevTitle;
+        el.browserLockSub.textContent = prevSub;
+        if (ownsLock) {
+            el.browserLockOverlay.classList.remove("active");
+            updateControls();
+        }
+    }
+}
+
+function renameOnDevice(oldPath, newPath, kind) {
+    if (kind !== "folder") return state.client.renamePath(oldPath, newPath);
+    return withFolderBusy("Renaming folder…", "This can take a few minutes. Keep the device on and nearby.", () =>
+        state.client.renamePath(oldPath, newPath, FOLDER_OP_TIMEOUT_MS),
+    );
+}
+
+function removeOnDevice(path, type) {
+    if (type !== "DIR") return state.client.removePath(path);
+    return withFolderBusy("Deleting folder…", "Big folders can take a while. Keep the device on and nearby.", () =>
+        state.client.removePath(path, FOLDER_OP_TIMEOUT_MS),
+    );
 }
 
 async function undoRename(
@@ -3547,50 +3583,88 @@ function confirmSystemChange(options) {
     });
 }
 
-// targets: [{ path, entry }]. System items get the system warning instead of
-// plainConfirm.
+// System paths inside a folder (outermost only: e:/chameleon covers its slots
+// and dump). They're all folders; the system files sit at the root.
+function systemPathsInside(path) {
+    const prefix = path.toLowerCase() + "/";
+    const nested = Object.keys(SYSTEM_PATHS).filter((p) => p.startsWith(prefix));
+    return nested
+        .filter((p) => !nested.some((q) => p.startsWith(q + "/")))
+        .map((p) => ({ path: path + p.slice(path.length), warning: SYSTEM_PATHS[p] }));
+}
+
+const FOLDER_DELETE_NOTE =
+    "Everything inside is deleted too, and big folders can take a while.";
+
+// targets: [{ path, entry }]. System items, and folders holding them, get the
+// system warning instead of plainConfirm. The device deletes a folder with
+// everything inside it.
 async function confirmDelete(targets, plainConfirm) {
     const systemTargets = findSystemTargets(targets, "delete");
-    if (systemTargets.length === 0) return showConfirmModal(plainConfirm);
+    const inside = targets
+        .filter(({ path, entry }) => entry?.type === "DIR" && !systemTargets.some((s) => s.path === path))
+        .flatMap(({ path }) => systemPathsInside(path));
+    const hasFolder = targets.some(({ entry }) => entry?.type === "DIR");
+    if (systemTargets.length === 0 && inside.length === 0) {
+        return showConfirmModal(
+            hasFolder
+                ? { ...plainConfirm, message: `${plainConfirm.message} ${FOLDER_DELETE_NOTE}` }
+                : plainConfirm,
+        );
+    }
 
-    const count = systemTargets.length;
+    const count = systemTargets.length + inside.length;
     const one = count === 1;
-    const scope =
-        targets.length === count
-            ? ""
-            : `This deletes ${pluralize(targets.length, "item")}, including ${pluralize(count, "system item")}. `;
+    const single = targets.length === 1 ? targets[0] : null;
+    const heading =
+        systemTargets.length === 0 && single
+            ? `"${single.entry?.name ?? getBaseName(single.path)}" contains ${one ? "a system item" : "system items"}`
+            : systemTargets.length === count
+              ? systemTargetHeading(systemTargets)
+              : `${pluralize(count, "system item")} selected`;
+    const scope = hasFolder
+        ? `${FOLDER_DELETE_NOTE} `
+        : targets.length === count
+          ? ""
+          : `This deletes ${pluralize(targets.length, "item")}, including ${pluralize(count, "system item")}. `;
     const confirmed = await confirmSystemChange({
         title: one ? "Delete system item" : "Delete system items",
-        heading: systemTargetHeading(systemTargets),
+        heading,
         message:
             `The device firmware relies on ${one ? "this item" : "these items"}. ` +
             `Deleting ${one ? "it" : "them"} can break features on the device until you restore ${one ? "it" : "them"} from a backup. ` +
             `${scope}This action can't be undone.`,
-        items: systemTargets.map(({ path, entry, warning }) => ({
-            label: `${formatPathForUi(path)}${entry?.type === "DIR" ? "/" : ""}`,
-            detail: warning,
-        })),
+        items: [
+            ...systemTargets.map(({ path, entry, warning }) => ({
+                label: `${formatPathForUi(path)}${entry?.type === "DIR" ? "/" : ""}`,
+                detail: warning,
+            })),
+            ...inside.map(({ path, warning }) => ({ label: `${formatPathForUi(path)}/`, detail: warning })),
+        ],
         okLabel: "Delete",
     });
     if (confirmed) trackAnalyticsEvent("file_delete_system_confirm", { count });
     return confirmed;
 }
 
-// Resolves true without asking unless a system item is involved
+// Files rename without asking; folders and system items get a confirm first
 async function confirmRename(path, entry, newName) {
     const systemTargets = findSystemTargets([{ path, entry }], "rename");
     const name = entry?.name ?? getBaseName(path);
     if (systemTargets.length === 0)
-        return confirmRenameSystemParent(path, entry, name, newName);
+        return confirmRenameFolder(path, entry, name, newName);
 
     const [{ warning, inside }] = systemTargets;
+    const slowNote = entry?.type === "DIR" ? ` ${FOLDER_RENAME_NOTE}` : "";
     const confirmed = await confirmSystemChange({
         title: "Rename system item",
         heading: systemTargetHeading(systemTargets),
-        message: inside
-            ? "The device firmware reads this item by its name."
-            : "The device firmware looks for this item by its exact name. " +
-              "Renaming it has the same effect as deleting it until you rename it back.",
+        message:
+            (inside
+                ? "The device firmware reads this item by its name."
+                : "The device firmware looks for this item by its exact name. " +
+                  "Renaming it has the same effect as deleting it until you rename it back.") +
+            slowNote,
         items: [{ label: `${name} → ${newName}`, detail: warning }],
         okLabel: "Rename",
     });
@@ -3598,29 +3672,32 @@ async function confirmRename(path, entry, newName) {
     return confirmed;
 }
 
-// Renaming a folder moves the system paths inside it (e.g. E:/amiibo). Deletes
-// need no check: the device won't remove a folder that isn't empty.
-async function confirmRenameSystemParent(path, entry, name, newName) {
+// Folder renames are slow on the device, and renaming one moves any system
+// paths inside it (e.g. E:/amiibo)
+async function confirmRenameFolder(path, entry, name, newName) {
     if (entry?.type !== "DIR") return true;
-    const prefix = path.toLowerCase() + "/";
-    const nested = Object.keys(SYSTEM_PATHS).filter((p) => p.startsWith(prefix));
-    // Outermost only: e:/chameleon covers its slots and dump
-    const outer = nested.filter((p) => !nested.some((q) => p.startsWith(q + "/")));
-    if (outer.length === 0) return true;
+    const inside = systemPathsInside(path);
+    if (inside.length === 0) {
+        return showConfirmModal({
+            title: "Rename folder",
+            badge: "warning",
+            icon: "warning",
+            heading: `Rename "${name}" to "${newName}"?`,
+            message: FOLDER_RENAME_NOTE,
+            okLabel: "Rename",
+            okClass: "primary",
+        });
+    }
 
     const confirmed = await confirmSystemChange({
         title: "Rename system item",
-        heading: `"${name}" contains ${outer.length === 1 ? "a system item" : "system items"}`,
+        heading: `"${name}" contains ${inside.length === 1 ? "a system item" : "system items"}`,
         message:
             "The device opens the items below by their full path. " +
-            "Renaming this folder moves them, which breaks them until you rename it back.",
+            `Renaming this folder moves them, which breaks them until you rename it back. ${FOLDER_RENAME_NOTE}`,
         items: [
             { label: `${name} → ${newName}` },
-            // Nested system paths are all folders
-            ...outer.map((p) => ({
-                label: `${formatPathForUi(path + p.slice(path.length))}/`,
-                detail: SYSTEM_PATHS[p],
-            })),
+            ...inside.map(({ path: p, warning }) => ({ label: `${formatPathForUi(p)}/`, detail: warning })),
         ],
         okLabel: "Rename",
     });
@@ -3636,11 +3713,12 @@ async function deletePaths(paths) {
     });
 
     let deleted = 0;
+    let stillBusy = false;
     const failedPaths = [];
     const total = sorted.length;
     for (const item of sorted) {
         try {
-            const res = await state.client.removePath(item.path);
+            const res = await removeOnDevice(item.path, item.type);
             if (res.ok) {
                 deleted++;
                 log(`Deleted ${item.path}`, "ok");
@@ -3651,9 +3729,18 @@ async function deletePaths(paths) {
         } catch (err) {
             failedPaths.push(item.path);
             log(`Delete failed: ${item.path}: ${err.message}`, "err");
+            if (isTimeout(err)) {
+                stillBusy = true;
+                // Not attempted, so not deleted either
+                const next = sorted.indexOf(item) + 1;
+                failedPaths.push(...sorted.slice(next).map((i) => i.path));
+                break;
+            }
         }
     }
-    if (deleted === total) {
+    if (stillBusy) {
+        showErrorToast(`Deleted ${deleted} of ${total}`, DEVICE_STILL_BUSY);
+    } else if (deleted === total) {
         showSuccessToast(`Deleted ${pluralize(deleted, "item")}`);
     } else if (deleted > 0) {
         showErrorToast(
@@ -3667,7 +3754,7 @@ async function deletePaths(paths) {
         );
     }
     if (deleted > 0) trackAnalyticsEvent("file_delete", { count: deleted });
-    return { deleted, failedPaths, total };
+    return { deleted, failedPaths, total, stillBusy };
 }
 
 async function doDeleteSelected() {
@@ -3685,16 +3772,20 @@ async function doDeleteSelected() {
     el.browserLockOverlay.classList.add("active");
     el.browserLockTitle.textContent = "Deleting…";
     updateControls();
+    let result;
     try {
-        await deletePaths(paths);
+        result = await deletePaths(paths);
     } finally {
         el.browserLockOverlay.classList.remove("active");
         updateControls();
         invalidateCache();
-        try {
-            await browseFolder(state.currentPath);
-        } catch (_) {
-            /* stale connection */
+        // A busy device would only time out again
+        if (!result?.stillBusy) {
+            try {
+                await browseFolder(state.currentPath);
+            } catch (_) {
+                /* stale connection */
+            }
         }
     }
 }
@@ -3815,25 +3906,24 @@ async function executeSanitize(allOps, allSkipped) {
     });
 
     let renamed = 0;
-    let foldersUnsupported = false;
+    let stillBusy = false;
     for (const op of allOps) {
         const kind = op.type === "DIR" ? "folder" : "file";
-        // After one failure, skip the remaining folders
-        if (kind === "folder" && foldersUnsupported) {
-            log(`Rename failed: ${op.from}: ${FOLDER_RENAME_UNSUPPORTED}`, "err");
-            continue;
-        }
         try {
             const res = await renameOnDevice(op.from, op.to, kind);
             if (res.ok) {
                 renamed++;
                 log(`Renamed: ${op.from} → ${op.to}`, "ok");
             } else {
-                if (res.error === FOLDER_RENAME_UNSUPPORTED) foldersUnsupported = true;
                 log(`Rename failed: ${op.from}: ${res.error}`, "err");
             }
         } catch (err) {
             log(`Rename failed: ${op.from}: ${err.message}`, "err");
+            // The device is likely still working on it; anything else would queue up
+            if (isTimeout(err)) {
+                stillBusy = true;
+                break;
+            }
         }
     }
 
@@ -3846,7 +3936,7 @@ async function executeSanitize(allOps, allSkipped) {
     const totalText = pluralize(allOps.length, "item");
     const skippedText = [
         allSkipped.length > 0 ? `Skipped ${pluralize(allSkipped.length, "item")}` : "",
-        foldersUnsupported ? "This firmware can't rename folders" : "",
+        stillBusy ? DEVICE_STILL_BUSY : "",
     ]
         .filter(Boolean)
         .join(". ");
@@ -4907,7 +4997,10 @@ async function runOrphanDeletion() {
         orphan.status = "deleting";
         renderUploadQueue();
         try {
-            const res = await state.client.removePath(orphan.remotePath);
+            const res = await state.client.removePath(
+                orphan.remotePath,
+                orphan.kind === "folder" ? FOLDER_OP_TIMEOUT_MS : undefined,
+            );
             if (!res.ok) throw new Error(res.error);
             orphan.status = "deleted";
             deletedCount++;

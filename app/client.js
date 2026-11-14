@@ -534,17 +534,18 @@ export class PixlToolsClient {
         return { ok: true, error: null, data: null };
     }
 
-    async removePath(path) {
-        const r = await this._sendCommand(0x18, encodeString(path));
+    async removePath(path, timeoutMs) {
+        const r = await this._sendCommand(0x18, encodeString(path), timeoutMs);
         if (r.status !== 0)
             return { ok: false, error: this._vfsError(r.status), data: null };
         return { ok: true, error: null, data: null };
     }
 
-    async renamePath(oldPath, newPath) {
+    async renamePath(oldPath, newPath, timeoutMs) {
         const r = await this._sendCommand(
             0x19,
             concatBytes(encodeString(oldPath), encodeString(newPath)),
+            timeoutMs,
         );
         if (r.status !== 0)
             return { ok: false, error: this._vfsError(r.status), data: null };
@@ -1111,7 +1112,10 @@ export class DevMockClient {
         }
         return { ok: true, data: null };
     }
-    async renamePath() {
+    async renamePath(oldPath) {
+        // Real folder renames block the device for seconds to minutes
+        const { data } = await this.readFolder(oldPath);
+        if (data.length > 0) await new Promise((r) => setTimeout(r, 2000));
         return { ok: true, data: null };
     }
     async formatDrive() {
