@@ -4099,6 +4099,8 @@ function renderSyncQueue() {
     const unchangedCount = state.syncSkippedFiles.length;
     const protectedCount = state.syncProtectedFiles.length;
     const orphanCount = state.syncOrphans.length;
+    // Folders that still hold files are listed but can't be deleted
+    const deletableCount = state.syncOrphans.filter((o) => o.deletable).length;
     let html = "";
 
     // Summary chips
@@ -4113,11 +4115,11 @@ function renderSyncQueue() {
         );
     if (protectedCount > 0)
         chipParts.push(
-            `<span class="sync-chip sync-chip-unchanged" title="System files the device already has. Sync only uploads them when they're missing, so these were kept as they are. The protocol log lists them.">${protectedCount} kept</span>`,
+            `<span class="sync-chip sync-chip-unchanged" title="System files already on the device. Sync only adds missing ones and leaves these as they are.">${protectedCount} kept</span>`,
         );
-    if (orphanCount > 0)
+    if (deletableCount > 0)
         chipParts.push(
-            `<span class="sync-chip sync-chip-orphan" title="Files on the device that aren't in the source folder. They'll be deleted if you check them.">\u{1F5D1} ${orphanCount} orphaned</span>`,
+            `<span class="sync-chip sync-chip-orphan" title="Files on the device that aren't in the source folder. They'll be deleted if you check them.">\u{1F5D1} ${deletableCount} orphaned</span>`,
         );
     html += `<div class="sync-chips">${chipParts.join("")}</div>`;
 
@@ -4618,10 +4620,10 @@ async function runSync() {
 
     const deviceTree = new Map(); // remotePath → { size, kind }
     const systemPaths = []; // device paths flagged by firmware, skipped with their subtree
-    // folder path → Set of entry names, or null if the folder doesn't exist.
-    // Covers system entries too, which deviceTree leaves out.
+    // folder → entry names (null if missing), system entries included
     const deviceNames = new Map();
     const systemPresent = new Set(); // system plan paths the device already has
+    const walkedRoots = new Set(); // top-level folders from the plan that were walked
     let scanCount = 0;
 
     function skipDeviceEntry(entryPath, entry) {
@@ -4640,16 +4642,14 @@ async function runSync() {
         );
     }
 
-    // Entry names in a device folder, listed on demand for system plan items
-    // (system folders are never walked). null means the folder doesn't exist.
+    // Lists a folder on demand for system plan items, which are never walked
     async function listDeviceNames(path) {
         if (deviceNames.has(path)) return deviceNames.get(path);
         if (!state.client) throw new Error("Device disconnected.");
         const res = await state.client.readFolder(path);
         let names = null;
         if (res.ok) {
-            // A partial listing can't prove a file is missing, and uploading
-            // would overwrite it.
+            // A partial listing can't prove a file is missing
             if (res.truncated)
                 throw new Error(`Directory listing truncated at ${path}`);
             names = new Set(res.data.map((e) => e.name));
@@ -4731,13 +4731,12 @@ async function runSync() {
             if (isSyncExcluded(root) || systemPaths.includes(root)) continue;
             try {
                 await walk(root);
+                walkedRoots.add(root);
             } catch (err) {
                 if (!err.message.includes("Not found")) throw err;
             }
         }
-        // System items are never walked or offered for deletion, but sync still
-        // uploads them when the device doesn't have them yet (e.g. key_retail.bin
-        // during setup). Anything already there is left untouched.
+        // System items are uploaded only when the device doesn't have them yet
         for (const item of state.uploadPlan) {
             if (item.status === "skipped" || !isSystemPlanPath(item.remotePath))
                 continue;
@@ -4760,8 +4759,7 @@ async function runSync() {
     // Snapshot original plan paths (pre-filter) to detect orphans
     const localPaths = new Set(state.uploadPlan.map((i) => i.remotePath));
 
-    // Filter plan: keep system items only when the device lacks them, and drop
-    // items already on device at same size
+    // Drop system items the device has and files already there at the same size
     const skippedFiles = [];
     const protectedFiles = [];
     const filteredPlan = [];
@@ -4794,10 +4792,12 @@ async function runSync() {
         filteredPlan.push(item);
     }
 
-    // Find orphans: device entries absent from the original local plan
+    // Orphans: device entries missing from the local plan, only inside folders
+    // that were walked (never the rest of the base folder)
     const orphans = [];
     for (const [remotePath, { size, kind }] of deviceTree) {
         if (localPaths.has(remotePath)) continue;
+        if (![...walkedRoots].some((r) => remotePath.startsWith(r + "/"))) continue;
         let deletable = kind === "file";
         if (kind === "folder") {
             const prefix = remotePath.endsWith("/")
@@ -4836,6 +4836,40 @@ async function runSync() {
     resetUploadProgress(filteredPlan);
     renderUploadQueue();
     updateControls();
+}
+
+// Lists every checked item in the usual delete confirm
+function confirmOrphanDeletion() {
+    const orphans = state.syncOrphans.filter(
+        (o) =>
+            o.deletable &&
+            o.status === "pending" &&
+            state.syncOrphanChecked.has(o.remotePath),
+    );
+    if (orphans.length === 0) return Promise.resolve(true);
+    const folderSuffix = (o) => (o.kind === "folder" ? "/" : "");
+    return confirmDelete(
+        orphans.map((o) => ({
+            path: o.remotePath,
+            entry: {
+                name: getBaseName(o.remotePath),
+                type: o.kind === "folder" ? "DIR" : "FILE",
+            },
+        })),
+        {
+            title: "Delete",
+            badge: "danger",
+            icon: "delete",
+            heading: `Delete ${pluralize(orphans.length, "item")} only on the device?`,
+            message:
+                "They aren't in the folder you're syncing. This removes them from device storage permanently. This action can't be undone.",
+            items: orphans.map((o) => ({
+                label: `${formatPathForUi(o.remotePath)}${folderSuffix(o)}`,
+            })),
+            okLabel: "Delete",
+            okClass: "danger",
+        },
+    );
 }
 
 async function runOrphanDeletion() {
@@ -4896,6 +4930,9 @@ async function runUpload() {
         if (!confirmed) return;
         if (!state.client || state.connState !== "connected") return;
     }
+
+    if (hasOrphanDeletions && !(await confirmOrphanDeletion())) return;
+    if (!state.client || state.connState !== "connected") return;
 
     state.uploadActive = true;
     state.abortController = new AbortController();
