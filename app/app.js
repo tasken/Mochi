@@ -15,10 +15,8 @@ import { walkForSearchMatches, enrichWithTagIdentity, matchesSearchQuery } from 
 
 const LARGE_DIR_THRESHOLD = 80;
 const LARGE_BATCH_THRESHOLD = 200;
-// Firmware-managed device paths, mapped to what breaks when they're deleted
-// or renamed. Sync never offers to delete or overwrite anything at or under
-// them, and uploads into them only what the device is missing. Manual deletes
-// and renames show a timed warning first (confirmDelete, confirmRename).
+// Firmware-managed paths and what breaks if they're deleted or renamed.
+// Deletes and renames ask first; sync never deletes or overwrites them.
 const SYSTEM_PATHS = {
     "e:/amiibo/data": "Saved tag database slots are lost.",
     "e:/amiibo/fav": "Tag database favorites are lost.",
@@ -31,11 +29,9 @@ const SYSTEM_PATHS = {
         "After the next restart, the device can't read, edit or generate NFC tag data until you upload this key file again.",
     "e:/settings.bin": "Device settings reset to their defaults.",
 };
-// What deleting or renaming an item inside a system folder breaks, keyed by
-// the deepest matching folder. Items whose name doesn't match `name`, or that
-// sit deeper than `depth` levels below the folder (default 1, direct children
-// only), are ignored by the firmware. A null message means the firmware finds
-// the item by listing the folder, so that action is harmless.
+// Items inside system folders, deepest folder wins. The firmware ignores items
+// that don't match `name` or sit deeper than `depth` (default 1). A null
+// message means the action is harmless.
 const SYSTEM_CHILD_RULES = [
     {
         // Slot files are opened as sprintf("%02d.bin")
@@ -45,9 +41,8 @@ const SYSTEM_CHILD_RULES = [
         rename: { FILE: "The tag database only reads slots named 00.bin, 01.bin and so on, so renaming moves or empties this slot." },
     },
     {
-        // Favorite files encode the tag ID: sprintf("%d_%08X_%08X.fav").
-        // Subfolders are user-named favorite groups, one level deep, each
-        // holding favorite files.
+        // Favorites are sprintf("%d_%08X_%08X.fav"); subfolders are
+        // user-named groups
         folder: "e:/amiibo/fav",
         name: { FILE: /^\d+_[0-9A-F]{8}_[0-9A-F]{8}\.fav$/ },
         depth: { FILE: 2, DIR: 1 },
@@ -73,7 +68,7 @@ const SYSTEM_CHILD_RULES = [
         rename: { FILE: "Chameleon mode reads its slot files by exact name, so renaming loses this slot." },
     },
     {
-        // The device's dump browser walks subfolders too
+        // The device's dump browser opens subfolders too
         folder: "e:/chameleon/dump",
         depth: Infinity,
         delete: {
@@ -84,11 +79,8 @@ const SYSTEM_CHILD_RULES = [
     },
 ];
 const SYNC_EXCLUDE_PATHS = Object.keys(SYSTEM_PATHS);
-// Directory-listing meta flag bit for firmware system files (SYSTEM = 1 << 1).
-// Sync treats flagged entries like SYNC_EXCLUDE_PATHS, which covers system
-// files this list doesn't name. HIDDEN (1 << 0) is left out on purpose: users
-// can set it on their own files (the official web app's "Hide" option), and
-// the only items the firmware hides itself are already in SYSTEM_PATHS.
+// Listing flag the firmware sets on its own files (SYSTEM = 1 << 1). HIDDEN
+// (1 << 0) is left out: users can hide their own files too.
 const SYSTEM_ENTRY_FLAGS = 0x02;
 const PIXL_RELEASES_URL = "https://github.com/solosky/pixl.js/releases";
 
@@ -1338,7 +1330,7 @@ function showConfirmModal({
     el.confirmBodyTitle.hidden = !heading;
     el.confirmMessage.textContent = message;
     el.confirmMessage.hidden = !message;
-    // items: [{ label, detail }], label in mono, detail below it; either is optional
+    // items: [{ label, detail }], either one optional
     el.confirmList.replaceChildren(
         ...items.map(({ label, detail }) => {
             const li = document.createElement("li");
@@ -1358,8 +1350,7 @@ function showConfirmModal({
         }),
     );
     el.confirmList.hidden = items.length === 0;
-    // choices: [{ value, label }], radio buttons, first one preselected.
-    // Read the pick through showChoiceModal().
+    // choices: [{ value, label }], first one checked; read via showChoiceModal()
     el.confirmChoices.replaceChildren(
         ...choices.map(({ value, label }, i) => {
             const option = document.createElement("label");
@@ -1414,8 +1405,7 @@ el.btnConfirmOk.addEventListener("click", () => {
     r?.(true);
 });
 
-// showConfirmModal() with radio choices. Resolves to the picked value, or null
-// on cancel (or when the confirm modal is already open).
+// Resolves to the picked choice, or null on cancel
 async function showChoiceModal(options) {
     if (!(await showConfirmModal(options))) return null;
     return (
@@ -3485,8 +3475,8 @@ el.btnConnectCta.addEventListener("click", connectOrDisconnect);
 
 // --- Delete and rename confirm ---
 
-// Returns { warning, inside } for a system item, or null. `inside` is true when
-// the item is only system because of the folder it sits in.
+// { warning, inside } for a system item, or null. `inside` means it only
+// counts because of the folder it's in.
 function describeSystemTarget(path, entry, action) {
     const lower = path.toLowerCase();
     if (SYSTEM_PATHS[lower])
@@ -3546,8 +3536,7 @@ function systemTargetHeading(systemTargets) {
     return `"${name}" is a system ${entry?.type === "DIR" ? "folder" : "file"}`;
 }
 
-// Warning that lists each system item and what breaks. The OK button stays
-// locked for 3s so it can't be clicked through by reflex.
+// OK stays locked for 3s so it can't be clicked by reflex
 function confirmSystemChange(options) {
     return showConfirmModal({
         badge: "warning",
@@ -3558,8 +3547,8 @@ function confirmSystemChange(options) {
     });
 }
 
-// targets: [{ path, entry }]. Plain deletes get the caller's usual confirm
-// modal; anything touching a system path gets the system warning instead.
+// targets: [{ path, entry }]. System items get the system warning instead of
+// plainConfirm.
 async function confirmDelete(targets, plainConfirm) {
     const systemTargets = findSystemTargets(targets, "delete");
     if (systemTargets.length === 0) return showConfirmModal(plainConfirm);
@@ -3587,8 +3576,7 @@ async function confirmDelete(targets, plainConfirm) {
     return confirmed;
 }
 
-// Resolves true for plain renames without asking. The firmware opens system
-// items by exact name, so renaming one breaks the same things deleting it does.
+// Resolves true without asking unless a system item is involved
 async function confirmRename(path, entry, newName) {
     const systemTargets = findSystemTargets([{ path, entry }], "rename");
     const name = entry?.name ?? getBaseName(path);
@@ -3610,15 +3598,13 @@ async function confirmRename(path, entry, newName) {
     return confirmed;
 }
 
-// Renaming a folder moves everything in it, so a folder that holds system paths
-// (e.g. E:/amiibo, parent of amiibo/data and amiibo/fav) breaks them as well.
-// Deleting one needs no such check: the device refuses to remove a folder that
-// isn't empty.
+// Renaming a folder moves the system paths inside it (e.g. E:/amiibo). Deletes
+// need no check: the device won't remove a folder that isn't empty.
 async function confirmRenameSystemParent(path, entry, name, newName) {
     if (entry?.type !== "DIR") return true;
     const prefix = path.toLowerCase() + "/";
     const nested = Object.keys(SYSTEM_PATHS).filter((p) => p.startsWith(prefix));
-    // Keep only the outermost: e:/chameleon already covers its slots and dump
+    // Outermost only: e:/chameleon covers its slots and dump
     const outer = nested.filter((p) => !nested.some((q) => p.startsWith(q + "/")));
     if (outer.length === 0) return true;
 
@@ -3626,11 +3612,11 @@ async function confirmRenameSystemParent(path, entry, name, newName) {
         title: "Rename system item",
         heading: `"${name}" contains ${outer.length === 1 ? "a system item" : "system items"}`,
         message:
-            "The device firmware opens the items below by their full path. " +
-            "Renaming this folder moves them, which has the same effect as deleting them until you rename it back.",
+            "The device opens the items below by their full path. " +
+            "Renaming this folder moves them, which breaks them until you rename it back.",
         items: [
             { label: `${name} → ${newName}` },
-            // Only folders can sit under another folder: the system files are at the root
+            // Nested system paths are all folders
             ...outer.map((p) => ({
                 label: `${formatPathForUi(path + p.slice(path.length))}/`,
                 detail: SYSTEM_PATHS[p],
@@ -3759,8 +3745,7 @@ function buildSanitizeOps(entries, parentPath, allSiblings = entries) {
     for (const e of entries) {
         const lower = e.name.toLowerCase();
         if (lower === e.name) continue;
-        // Same check as the rename warning: the firmware opens these by exact
-        // name, e.g. favorite files spell the tag ID in uppercase hex.
+        // The firmware opens these by exact name (favorites use uppercase hex)
         if (describeSystemTarget(joinChildPath(parentPath, e.name), e, "rename")) {
             skipped.push({
                 name: e.name,

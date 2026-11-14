@@ -979,7 +979,7 @@ export class DevMockClient {
                 { name: "key_retail.bin", type: "FILE", size: 160 },
                 { name: "settings.bin", type: "FILE", size: 24, meta: { flags: 0x01 } },
             ],
-            // loose files in amiibo root, the 2 system folders and a bulk test folder
+            // loose files, the 2 system folders and a bulk test folder
             "E:/amiibo": [
                 { name: "data", type: "DIR" },
                 { name: "fav", type: "DIR" },
@@ -1008,8 +1008,7 @@ export class DevMockClient {
                     size: 540,
                     meta: { nfcTagHead: 0x19070000, nfcTagTail: 0x03840002 },
                 }, // Squirtle
-                // user-hidden tag (web app "Hide" sets HIDDEN), still syncs and
-                // deletes like any other file
+                // hidden by the user, treated like any other file
                 {
                     name: "tag_005.bin",
                     type: "FILE",
@@ -1042,8 +1041,7 @@ export class DevMockClient {
                     meta: { nfcTagHead: 0x01010300, nfcTagTail: 0x04140902 },
                 }, // Zelda & Loftwing
             ],
-            // fav: 0-byte favorite files named <game>_<HEAD>_<TAIL>.fav, plus
-            // user-named favorite groups as subfolders
+            // fav: empty <game>_<HEAD>_<TAIL>.fav files and user-named groups
             "E:/amiibo/fav": [
                 { name: "Smash", type: "DIR" },
                 { name: "1_00C00000_037B0002.fav", type: "FILE", size: 0 }, // King K. Rool

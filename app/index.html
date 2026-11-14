@@ -1363,8 +1363,8 @@
                     window.dataLayer.push(arguments);
                 };
                 window.gtag("js", new Date());
-                // Analytics only: Google signals would also send hits to
-                // stats.g.doubleclick.net, which the CSP doesn't allow.
+                // Google signals would send hits to stats.g.doubleclick.net,
+                // which the CSP blocks
                 window.gtag("config", "G-20FR8YDBP3", {
                     allow_google_signals: false,
                     allow_ad_personalization_signals: false,

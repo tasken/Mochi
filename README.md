@@ -10,12 +10,16 @@ A browser-based tool to manage files and update firmware on [Pixl.js](https://gi
 
 Connect your device and manage its storage directly from the browser:
 
-- **File browser**: navigate folders, rename, delete, and multi-select files
-- **Tree uploader**: drop a local folder or files to upload with real-time progress
-- **Sync**: diff local and device trees, push changes, and remove orphaned files
-- **Normalize**: lowercase-rename files and folders for firmware compatibility
+- **File browser**: navigate folders, download, rename, delete and multi-select files
+- **Search**: find files anywhere on the drive by name, or by the character on the tag
+- **Uploader**: drop a local folder or files to upload, with live progress
+- **Sync**: compare a local folder with the device, upload what's new or changed, and clean up files that only exist on the device
+- **System file protection**: warns before you delete or rename files the firmware depends on (tag database, link mode slots, keys, settings). Sync and Normalize leave them alone
+- **Normalize**: lowercase file and folder names for firmware compatibility
 - **Format**: wipe and reformat the device drive
 - **NFC tag lookup**: `.bin` files show character name and series from [AmiiboAPI](https://amiiboapi.org/)
+
+Current Pixl.js firmware can't rename folders (it reports success but keeps the old name). Mochi checks and tells you instead of showing a rename that didn't happen.
 
 ## Firmware update
 
@@ -23,7 +27,7 @@ Flash firmware directly over Bluetooth using Nordic Secure DFU. No extra tools r
 
 - **Auto-detect device mode**: connects to devices in normal or update mode from a single flow
 - **Connected shortcut**: devices already paired from the file browser reboot into update mode automatically, no extra pairing needed
-- **Release picker**: choose from the built-in release list or use a local `.zip` file
+- **Model picker**: pick LCD or OLED and Mochi downloads the latest official release, or use your own `.zip`
 - **Live progress**: real-time transfer speed, progress bar, and stage-by-stage status
 - **Resilient transfers**: packet receipt notifications, CRC verification, and automatic retry on failure
 - **Update notifications**: badge when a newer firmware version is available
@@ -44,7 +48,7 @@ openssl req -x509 -newkey rsa:2048 -keyout .cert/key.pem -out .cert/cert.pem \
 python3 server.py --cert .cert/cert.pem --key .cert/key.pem
 ```
 
-> Click **Mock device** in the top bar to simulate a connected device without hardware. The button is only visible in local dev mode.
+> Click **Mock device** in the top bar to try the app without hardware. It only shows up in local dev mode, on desktop widths.
 
 ## License
 
