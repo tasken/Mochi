@@ -557,6 +557,7 @@ const state = {
     syncOrphans: [], // [{ remotePath, size, kind, deletable, status }]
     syncOrphanChecked: new Set(), // Set<remotePath>
     deviceVersion: null,
+    deviceBuild: null, // git commit the firmware reports; stock firmware sends none
     searchActive: false,
     searchScanning: false,
     searchResults: [], // [{ name, type, size, parentPath }]
@@ -1043,6 +1044,7 @@ async function connectOrDisconnect() {
         if (state.client) state.client.disconnect();
         invalidateCache();
         state.deviceVersion = null;
+        state.deviceBuild = null;
         setConnState("disconnected");
         return;
     }
@@ -1110,11 +1112,13 @@ async function connectOrDisconnect() {
             el.topbarBadge.textContent = `${name}${parts.length ? " · " + parts.join(" · ") : ""}`;
             logDeviceInfo(ver.data);
             state.deviceVersion = ver.data.version || null;
+            state.deviceBuild = ver.data.build || null;
             checkFirmwareVersion(ver.data.version);
         } else {
             el.topbarBadge.textContent = "Pixl.js";
             log(`Couldn't read firmware version: ${ver.error}`, "err");
             state.deviceVersion = null;
+            state.deviceBuild = null;
         }
 
         const dr = await state.client.listDrives();
@@ -1178,6 +1182,7 @@ async function devConnect() {
         const ver = await state.client.getVersion();
         log(`\u2190 version=${ver.data.version} ble=${ver.data.bleAddress}`, "ok");
         logDeviceInfo(ver.data);
+        state.deviceBuild = ver.data.build || null;
         el.topbarBadge.textContent = "Mock device";
         el.topbarBadge.classList.add("dev");
         checkFirmwareVersion(ver.data.version);
@@ -2799,7 +2804,9 @@ el.btnNormalize.addEventListener("click", async () => {
         badge: "primary",
         icon: "match_case",
         heading: "Choose what to lowercase in this location",
-        message: `Location: ${formatPathForUi(state.currentPath || "E:/")}. Folder renames can take a few minutes, so keep the device on until it's done.`,
+        message:
+            `Location: ${formatPathForUi(state.currentPath || "E:/")}.` +
+            (folderRenamesAreFast() ? "" : " Folder renames can take a few minutes, so keep the device on until it's done."),
         choices: [
             { value: "files", label: "Files in this folder" },
             { value: "filesAndFolders", label: "Files and folders in this folder" },
@@ -3264,6 +3271,16 @@ async function openRenameModal(entry) {
 const FOLDER_OP_TIMEOUT_MS = 10 * 60 * 1000;
 const FOLDER_RENAME_NOTE =
     "The device renames every file inside one at a time, so this can take a few minutes. Keep it on and nearby until it's done.";
+
+// Firmware that reports its build is the custom one, which renames a folder in
+// seconds; stock firmware takes minutes for big folders
+function folderRenamesAreFast() {
+    return Boolean(state.deviceBuild);
+}
+
+function folderRenameNote() {
+    return folderRenamesAreFast() ? "" : FOLDER_RENAME_NOTE;
+}
 const DEVICE_STILL_BUSY =
     "The device may still be working on it. Wait a few minutes and keep it on before trying again";
 
@@ -3295,7 +3312,10 @@ async function withFolderBusy(title, sub, fn) {
 
 async function renameOnDevice(oldPath, newPath, kind) {
     if (kind !== "folder") return state.client.renamePath(oldPath, newPath);
-    const res = await withFolderBusy("Renaming folder…", "This can take a few minutes. Keep the device on and nearby.", () =>
+    const sub = folderRenamesAreFast()
+        ? "This takes a few seconds. Keep the device on and nearby."
+        : "This can take a few minutes. Keep the device on and nearby.";
+    const res = await withFolderBusy("Renaming folder…", sub, () =>
         state.client.renamePath(oldPath, newPath, FOLDER_OP_TIMEOUT_MS),
     );
     if (res?.data?.report) log(`Device timing: ${res.data.report}`);
@@ -3689,7 +3709,7 @@ async function confirmRename(path, entry, newName) {
         return confirmRenameFolder(path, entry, name, newName);
 
     const [{ warning, inside }] = systemTargets;
-    const slowNote = entry?.type === "DIR" ? ` ${FOLDER_RENAME_NOTE}` : "";
+    const slowNote = entry?.type === "DIR" && folderRenameNote() ? ` ${folderRenameNote()}` : "";
     const confirmed = await confirmSystemChange({
         title: "Rename system item",
         heading: systemTargetHeading(systemTargets),
@@ -3712,6 +3732,8 @@ async function confirmRenameFolder(path, entry, name, newName) {
     if (entry?.type !== "DIR") return true;
     const inside = systemPathsInside(path);
     if (inside.length === 0) {
+        // Asking is only worth it when the rename locks the device for minutes
+        if (folderRenamesAreFast()) return true;
         return showConfirmModal({
             title: "Rename folder",
             badge: "warning",
@@ -3728,7 +3750,7 @@ async function confirmRenameFolder(path, entry, name, newName) {
         heading: `"${name}" contains ${inside.length === 1 ? "a system item" : "system items"}`,
         message:
             "The device opens the items below by their full path. " +
-            `Renaming this folder moves them, which breaks them until you rename it back. ${FOLDER_RENAME_NOTE}`,
+            `Renaming this folder moves them, which breaks them until you rename it back. ${folderRenameNote()}`.trim(),
         items: [
             { label: `${name} → ${newName}` },
             ...inside.map(({ path: p, warning }) => ({ label: `${formatPathForUi(p)}/`, detail: warning })),

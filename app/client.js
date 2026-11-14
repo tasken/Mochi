@@ -51,6 +51,11 @@ const VFS_ERRORS = {
     [-99]: "Unsupported",
 };
 
+// VFS_ERR_NOSPC (-91) as the unsigned status byte
+const RENAME_NO_SPACE = 256 - 91;
+const RENAME_NO_SPACE_ERROR =
+    "Not enough free space on the device, so nothing was renamed. Delete some files and try again.";
+
 const CMD_NAMES = {
     0x01: "VERSION_INFO",
     0x02: "ENTER_DFU",
@@ -554,6 +559,9 @@ export class PixlToolsClient {
         );
         // Newer firmware says where a folder rename spent its time
         const data = { report: r.payload?.length > 0 ? new Cursor(r.payload).string() : "" };
+        // Newer firmware says why a rename failed; running out of space is
+        // checked before anything is renamed
+        if (r.status === RENAME_NO_SPACE) return { ok: false, error: RENAME_NO_SPACE_ERROR, data };
         if (r.status !== 0)
             return { ok: false, error: this._vfsError(r.status), data };
         return { ok: true, error: null, data };
