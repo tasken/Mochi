@@ -552,9 +552,11 @@ export class PixlToolsClient {
             concatBytes(encodeString(oldPath), encodeString(newPath)),
             timeoutMs,
         );
+        // Newer firmware says where a folder rename spent its time
+        const data = { report: r.payload?.length > 0 ? new Cursor(r.payload).string() : "" };
         if (r.status !== 0)
-            return { ok: false, error: this._vfsError(r.status), data: null };
-        return { ok: true, error: null, data: null };
+            return { ok: false, error: this._vfsError(r.status), data };
+        return { ok: true, error: null, data };
     }
 
     async openFile(path, mode) {
@@ -1121,7 +1123,8 @@ export class DevMockClient {
         // Real folder renames block the device for seconds to minutes
         const { data } = await this.readFolder(oldPath);
         if (data.length > 0) await new Promise((r) => setTimeout(r, 2000));
-        return { ok: true, data: null };
+        const report = "check 512 ms, scan 498 ms (616 files), cleanup 0 ms (0 runs), rename 2104 ms, rescan 0 ms (0); flash: 4567 reads in 1302 ms, 3135 writes and 0 erases in 1650 ms";
+        return { ok: true, data: { report: data.length > 0 ? report : "" } };
     }
     async formatDrive() {
         this.isDriveFormatted = true;

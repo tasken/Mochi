@@ -3293,11 +3293,13 @@ async function withFolderBusy(title, sub, fn) {
     }
 }
 
-function renameOnDevice(oldPath, newPath, kind) {
+async function renameOnDevice(oldPath, newPath, kind) {
     if (kind !== "folder") return state.client.renamePath(oldPath, newPath);
-    return withFolderBusy("Renaming folder…", "This can take a few minutes. Keep the device on and nearby.", () =>
+    const res = await withFolderBusy("Renaming folder…", "This can take a few minutes. Keep the device on and nearby.", () =>
         state.client.renamePath(oldPath, newPath, FOLDER_OP_TIMEOUT_MS),
     );
+    if (res?.data?.report) log(`Device timing: ${res.data.report}`);
+    return res;
 }
 
 function removeOnDevice(path, type) {
