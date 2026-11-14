@@ -3733,6 +3733,15 @@ function buildSanitizeOps(entries, parentPath, allSiblings = entries) {
     for (const e of entries) {
         const lower = e.name.toLowerCase();
         if (lower === e.name) continue;
+        // Same check as the rename warning: the firmware opens these by exact
+        // name, e.g. favorite files spell the tag ID in uppercase hex.
+        if (describeSystemTarget(joinChildPath(parentPath, e.name), e, "rename")) {
+            skipped.push({
+                name: e.name,
+                reason: "System item, the device opens it by this exact name",
+            });
+            continue;
+        }
         if (!groups.has(lower)) groups.set(lower, []);
         groups.get(lower).push(e);
     }
