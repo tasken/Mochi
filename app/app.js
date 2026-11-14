@@ -1106,11 +1106,14 @@ async function connectOrDisconnect() {
             const parts = [];
             if (ver.data.version) parts.push(ver.data.version);
             if (ver.data.bleAddress) parts.push(ver.data.bleAddress);
-            el.topbarBadge.textContent = `Pixl.js${parts.length ? " · " + parts.join(" · ") : ""}`;
+            const name = ver.data.board ? `Pixl.js ${ver.data.board}` : "Pixl.js";
+            el.topbarBadge.textContent = `${name}${parts.length ? " · " + parts.join(" · ") : ""}`;
+            logDeviceInfo(ver.data);
             state.deviceVersion = ver.data.version || null;
             checkFirmwareVersion(ver.data.version);
         } else {
             el.topbarBadge.textContent = "Pixl.js";
+            log(`Couldn't read firmware version: ${ver.error}`, "err");
             state.deviceVersion = null;
         }
 
@@ -1131,6 +1134,29 @@ async function connectOrDisconnect() {
     }
 }
 
+// JEDEC manufacturer IDs of SPI flash makers found on Pixl.js-style boards
+const FLASH_MAKERS = {
+    "0B": "XTX",
+    "1C": "EON",
+    "20": "Micron or XMC",
+    "5E": "Zbit",
+    "68": "BoyaMicro",
+    "85": "Puya",
+    "9D": "ISSI",
+    C2: "Macronix",
+    C8: "GigaDevice",
+    EF: "Winbond",
+};
+
+// Firmware that predates these fields sends no board or flash ID
+function logDeviceInfo({ version, bleAddress, board, flashId }) {
+    const where = board ? ` on the ${board} board` : "";
+    log(`Firmware ${version || "unknown"}${where}, Bluetooth address ${bleAddress || "unknown"}`);
+    if (!flashId) return;
+    const maker = FLASH_MAKERS[flashId.slice(0, 2).toUpperCase()] ?? "unknown maker";
+    log(`Flash chip ${flashId} (${maker})`);
+}
+
 async function devConnect() {
     if (state.connState === "connected") return;
     setConnState("connecting");
@@ -1146,6 +1172,7 @@ async function devConnect() {
         log("\u2192 getVersion()", "cmd");
         const ver = await state.client.getVersion();
         log(`\u2190 version=${ver.data.version} ble=${ver.data.bleAddress}`, "ok");
+        logDeviceInfo(ver.data);
         el.topbarBadge.textContent = "Mock device";
         el.topbarBadge.classList.add("dev");
         checkFirmwareVersion(ver.data.version);

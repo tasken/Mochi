@@ -434,7 +434,11 @@ export class PixlToolsClient {
         const c = new Cursor(r.payload);
         const version = c.string();
         const bleAddress = c.remaining() > 0 ? c.string() : "";
-        return { ok: true, error: null, data: { version, bleAddress } };
+        // Newer firmware adds the board it was built for and the flash chip's
+        // JEDEC ID as hex
+        const board = c.remaining() > 0 ? c.string() : "";
+        const flashId = c.remaining() > 0 ? c.string() : "";
+        return { ok: true, error: null, data: { version, bleAddress, board, flashId } };
     }
 
     async listDrives() {
@@ -941,7 +945,7 @@ export class DevMockClient {
     async getVersion() {
         return {
             ok: true,
-            data: { version: "2.14.0", bleAddress: "DE:V0:00:00:00:00" },
+            data: { version: "2.14.0", bleAddress: "DE:V0:00:00:00:00", board: "OLED", flashId: "C84017" },
         };
     }
 
