@@ -1145,6 +1145,7 @@ const FLASH_MAKERS = {
     "9D": "ISSI",
     C2: "Macronix",
     C8: "GigaDevice",
+    EB: "TSINGTENG",
     EF: "Winbond",
 };
 
