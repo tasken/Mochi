@@ -1149,10 +1149,14 @@ const FLASH_MAKERS = {
     EF: "Winbond",
 };
 
-// Firmware that predates these fields sends no board or flash ID
-function logDeviceInfo({ version, bleAddress, board, flashId }) {
+// Firmware that predates these fields sends no board, flash ID or build
+function logDeviceInfo({ version, bleAddress, board, flashId, build }) {
     const where = board ? ` on the ${board} board` : "";
     log(`Firmware ${version || "unknown"}${where}, Bluetooth address ${bleAddress || "unknown"}`);
+    if (build && build !== "unknown") {
+        const commit = build.replace(/-dirty$/, "");
+        log(`Built from commit ${commit}${commit !== build ? " with uncommitted changes" : ""}`);
+    }
     if (!flashId) return;
     const maker = FLASH_MAKERS[flashId.slice(0, 2).toUpperCase()] ?? "unknown maker";
     log(`Flash chip ${flashId} (${maker})`);
