@@ -16,8 +16,9 @@ import { walkForSearchMatches, enrichWithTagIdentity, matchesSearchQuery } from 
 const LARGE_DIR_THRESHOLD = 80;
 const LARGE_BATCH_THRESHOLD = 200;
 // Firmware-managed device paths, mapped to what breaks when they're deleted
-// or renamed. Manual deletes and renames show a timed warning first
-// (confirmDelete, confirmRename).
+// or renamed. Sync never offers to delete or overwrite anything at or under
+// them, and uploads into them only what the device is missing. Manual deletes
+// and renames show a timed warning first (confirmDelete, confirmRename).
 const SYSTEM_PATHS = {
     "e:/amiibo/data": "Saved tag database slots are lost.",
     "e:/amiibo/fav": "Tag database favorites are lost.",
@@ -82,13 +83,12 @@ const SYSTEM_CHILD_RULES = [
         rename: { FILE: null, DIR: null },
     },
 ];
-const SYNC_EXCLUDE_PATHS = ["e:/amiibo/fav", "e:/amiibo/data"]; // device paths excluded from sync on both sides
+const SYNC_EXCLUDE_PATHS = Object.keys(SYSTEM_PATHS);
 // Directory-listing meta flag bit for firmware system files (SYSTEM = 1 << 1).
-// Delete and rename warnings treat flagged entries as system items, which
-// covers system files SYSTEM_PATHS doesn't name. HIDDEN (1 << 0) is left out
-// on purpose: users can set it on their own files (the official web app's
-// "Hide" option), and the only items the firmware hides itself are already in
-// SYSTEM_PATHS.
+// Sync treats flagged entries like SYNC_EXCLUDE_PATHS, which covers system
+// files this list doesn't name. HIDDEN (1 << 0) is left out on purpose: users
+// can set it on their own files (the official web app's "Hide" option), and
+// the only items the firmware hides itself are already in SYSTEM_PATHS.
 const SYSTEM_ENTRY_FLAGS = 0x02;
 const PIXL_RELEASES_URL = "https://github.com/solosky/pixl.js/releases";
 
@@ -560,6 +560,7 @@ const state = {
     uploadBase: "E:/", // path where the upload plan was built — anchors runSync
     syncState: "idle", // "idle" | "scanning" | "done" | "error"
     syncSkippedFiles: [], // [{ remotePath, size }]
+    syncProtectedFiles: [], // [{ remotePath, size }] system files sync won't overwrite
     syncOrphans: [], // [{ remotePath, size, kind, deletable, status }]
     syncOrphanChecked: new Set(), // Set<remotePath>
     deviceVersion: null,
@@ -3992,6 +3993,7 @@ function hasQueuedUploadState() {
         state.uploadPlan.length > 0 ||
         state.syncState === "scanning" ||
         state.syncSkippedFiles.length > 0 ||
+        state.syncProtectedFiles.length > 0 ||
         state.syncOrphans.length > 0
     );
 }
@@ -4002,6 +4004,7 @@ function resetUploadSessionState() {
     state.uploadBase = "E:/";
     state.syncState = "idle";
     state.syncSkippedFiles = [];
+    state.syncProtectedFiles = [];
     state.syncOrphans = [];
     state.syncOrphanChecked = new Set();
     state.transferSpeed = "";
@@ -4085,6 +4088,7 @@ function renderUploadSummary() {
 function renderSyncQueue() {
     const uploadFiles = state.uploadPlan.filter((i) => i.kind === "file");
     const unchangedCount = state.syncSkippedFiles.length;
+    const protectedCount = state.syncProtectedFiles.length;
     const orphanCount = state.syncOrphans.length;
     let html = "";
 
@@ -4097,6 +4101,10 @@ function renderSyncQueue() {
     if (unchangedCount > 0)
         chipParts.push(
             `<span class="sync-chip sync-chip-unchanged" title="Files already on the device that match the source — no action needed.">${unchangedCount} up to date</span>`,
+        );
+    if (protectedCount > 0)
+        chipParts.push(
+            `<span class="sync-chip sync-chip-unchanged" title="System files the device already has. Sync only uploads them when they're missing, so these were kept as they are. The protocol log lists them.">${protectedCount} kept</span>`,
         );
     if (orphanCount > 0)
         chipParts.push(
@@ -4320,6 +4328,7 @@ let planSeed = 0;
 function buildUploadPlan(folders, files) {
     state.syncState = "idle";
     state.syncSkippedFiles = [];
+    state.syncProtectedFiles = [];
     state.syncOrphans = [];
     state.syncOrphanChecked = new Set();
 
@@ -4588,6 +4597,7 @@ async function runSync() {
 
     state.syncState = "scanning";
     state.syncSkippedFiles = [];
+    state.syncProtectedFiles = [];
     state.syncOrphans = [];
     state.syncOrphanChecked = new Set();
     trackAnalyticsEvent("file_sync");
@@ -4595,7 +4605,48 @@ async function runSync() {
     renderUploadQueue();
 
     const deviceTree = new Map(); // remotePath → { size, kind }
+    const systemPaths = []; // device paths flagged by firmware, skipped with their subtree
+    // folder path → Set of entry names, or null if the folder doesn't exist.
+    // Covers system entries too, which deviceTree leaves out.
+    const deviceNames = new Map();
+    const systemPresent = new Set(); // system plan paths the device already has
     let scanCount = 0;
+
+    function skipDeviceEntry(entryPath, entry) {
+        if (isSyncExcluded(entryPath)) return true;
+        if (!isSystemEntry(entry)) return false;
+        systemPaths.push(entryPath);
+        return true;
+    }
+
+    function isSystemPlanPath(remotePath) {
+        return (
+            isSyncExcluded(remotePath) ||
+            systemPaths.some(
+                (p) => remotePath === p || remotePath.startsWith(p + "/"),
+            )
+        );
+    }
+
+    // Entry names in a device folder, listed on demand for system plan items
+    // (system folders are never walked). null means the folder doesn't exist.
+    async function listDeviceNames(path) {
+        if (deviceNames.has(path)) return deviceNames.get(path);
+        if (!state.client) throw new Error("Device disconnected.");
+        const res = await state.client.readFolder(path);
+        let names = null;
+        if (res.ok) {
+            // A partial listing can't prove a file is missing, and uploading
+            // would overwrite it.
+            if (res.truncated)
+                throw new Error(`Directory listing truncated at ${path}`);
+            names = new Set(res.data.map((e) => e.name));
+        } else if (res.error !== "Not found") {
+            throw new Error(`readFolder(${path}): ${res.error}`);
+        }
+        deviceNames.set(path, names);
+        return names;
+    }
 
     function setScanText(msg) {
         const span = el.uploadQueue.querySelector(".sync-scanning-text");
@@ -4612,6 +4663,7 @@ async function runSync() {
             entries: sortEntries(res.data),
             truncated: false,
         });
+        deviceNames.set(path, new Set(res.data.map((e) => e.name)));
         scanCount++;
         setScanText(`Scanning device… · ${pluralize(scanCount, "folder")}`);
         for (const entry of res.data) {
@@ -4621,7 +4673,7 @@ async function runSync() {
             // case, so device paths are used exactly as reported -- matching against
             // plan paths is plain string equality, no normalization needed.
             const entryPath = joinChildPath(path, entry.name);
-            if (isSyncExcluded(entryPath)) continue;
+            if (skipDeviceEntry(entryPath, entry)) continue;
             const kind = entry.type === "DIR" ? "folder" : "file";
             deviceTree.set(entryPath, { size: entry.size, kind });
             if (kind === "folder") await walk(entryPath);
@@ -4654,19 +4706,32 @@ async function runSync() {
         // detected as already present and not re-uploaded every sync.
         const baseRes = await state.client.readFolder(base);
         if (baseRes.ok) {
+            if (!baseRes.truncated)
+                deviceNames.set(base, new Set(baseRes.data.map((e) => e.name)));
             for (const entry of baseRes.data) {
                 const entryPath = joinChildPath(base, entry.name);
-                if (isSyncExcluded(entryPath)) continue;
+                if (skipDeviceEntry(entryPath, entry)) continue;
                 const kind = entry.type === "DIR" ? "folder" : "file";
                 deviceTree.set(entryPath, { size: entry.size, kind });
             }
         }
         for (const root of scanRoots) {
+            if (isSyncExcluded(root) || systemPaths.includes(root)) continue;
             try {
                 await walk(root);
             } catch (err) {
                 if (!err.message.includes("Not found")) throw err;
             }
+        }
+        // System items are never walked or offered for deletion, but sync still
+        // uploads them when the device doesn't have them yet (e.g. key_retail.bin
+        // during setup). Anything already there is left untouched.
+        for (const item of state.uploadPlan) {
+            if (item.status === "skipped" || !isSystemPlanPath(item.remotePath))
+                continue;
+            const names = await listDeviceNames(getParentPath(item.remotePath));
+            if (names?.has(getBaseName(item.remotePath)))
+                systemPresent.add(item.remotePath);
         }
     } catch (err) {
         el.browserLockOverlay.classList.remove("active");
@@ -4683,12 +4748,23 @@ async function runSync() {
     // Snapshot original plan paths (pre-filter) to detect orphans
     const localPaths = new Set(state.uploadPlan.map((i) => i.remotePath));
 
-    // Filter plan: remove items already on device at same size
+    // Filter plan: keep system items only when the device lacks them, and drop
+    // items already on device at same size
     const skippedFiles = [];
+    const protectedFiles = [];
     const filteredPlan = [];
     for (const item of state.uploadPlan) {
         if (item.status === "skipped") {
             filteredPlan.push(item);
+            continue;
+        }
+        if (isSystemPlanPath(item.remotePath)) {
+            if (!systemPresent.has(item.remotePath)) filteredPlan.push(item);
+            else if (item.kind === "file")
+                protectedFiles.push({
+                    remotePath: item.remotePath,
+                    size: item.size,
+                });
             continue;
         }
         if (item.kind === "file") {
@@ -4732,7 +4808,15 @@ async function runSync() {
         });
     }
 
+    if (protectedFiles.length > 0) {
+        const paths = protectedFiles.map((f) => f.remotePath);
+        log(
+            `Sync kept ${pluralize(paths.length, "system file")} already on the device: ${paths.join(", ")}`,
+        );
+    }
+
     state.syncSkippedFiles = skippedFiles;
+    state.syncProtectedFiles = protectedFiles;
     state.syncOrphans = orphans;
     state.uploadPlan = filteredPlan;
     state.uploadWarnings = checkUploadPlanWarnings(filteredPlan);
@@ -4930,6 +5014,7 @@ async function runUpload() {
     } finally {
         state.syncState = "idle";
         state.syncSkippedFiles = [];
+        state.syncProtectedFiles = [];
         state.syncOrphans = [];
         state.syncOrphanChecked = new Set();
         state.uploadActive = false;
