@@ -1108,7 +1108,7 @@ async function connectOrDisconnect() {
             const parts = [];
             if (ver.data.version) parts.push(ver.data.version);
             if (ver.data.bleAddress) parts.push(ver.data.bleAddress);
-            const name = ver.data.board ? `Pixl.js ${ver.data.board}` : "Pixl.js";
+            const name = ver.data.board ? `Pixl.js ${boardName(ver.data.board)}` : "Pixl.js";
             el.topbarBadge.textContent = `${name}${parts.length ? " · " + parts.join(" · ") : ""}`;
             logDeviceInfo(ver.data);
             state.deviceVersion = ver.data.version || null;
@@ -1139,6 +1139,15 @@ async function connectOrDisconnect() {
 }
 
 // JEDEC manufacturer IDs of SPI flash makers found on Pixl.js-style boards
+// The firmware's board names; KEYPAD is the OLED board with a 4th (Back) button
+const BOARD_NAMES = {
+    KEYPAD: "4-button OLED",
+};
+
+function boardName(board) {
+    return BOARD_NAMES[board] ?? board;
+}
+
 const FLASH_MAKERS = {
     "0B": "XTX",
     "1C": "EON",
@@ -1147,6 +1156,7 @@ const FLASH_MAKERS = {
     "68": "BoyaMicro",
     "85": "Puya",
     "9D": "ISSI",
+    BA: "Zetta",
     C2: "Macronix",
     C8: "GigaDevice",
     EB: "TSINGTENG",
@@ -1155,7 +1165,7 @@ const FLASH_MAKERS = {
 
 // Firmware that predates these fields sends no board, flash ID or build
 function logDeviceInfo({ version, bleAddress, board, flashId, build }) {
-    const where = board ? ` on the ${board} board` : "";
+    const where = board ? ` on the ${boardName(board)} board` : "";
     log(`Firmware ${version || "unknown"}${where}, Bluetooth address ${bleAddress || "unknown"}`);
     if (build && build !== "unknown") {
         const commit = build.replace(/-dirty$/, "");
