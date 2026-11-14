@@ -3434,6 +3434,24 @@ el.sidebarDropZone.addEventListener("drop", async (e) => {
     }
 });
 
+// A stray file drop would make the browser open it and leave the page
+for (const type of ["dragover", "drop"]) {
+    document.addEventListener(type, (e) => {
+        if (e.defaultPrevented) return;
+        if (!e.dataTransfer?.types.includes("Files")) return;
+        e.preventDefault();
+        if (type === "dragover") e.dataTransfer.dropEffect = "none";
+    });
+}
+
+const DFU_IDLE_PHASES = new Set(["idle", "confirming", "success", "failed"]);
+
+window.addEventListener("beforeunload", (e) => {
+    if (!state.uploadActive && DFU_IDLE_PHASES.has(dfuState.phase)) return;
+    e.preventDefault();
+    e.returnValue = "";
+});
+
 function closeUploadPanelToFolder() {
     resetUploadSessionState();
     renderUploadQueue();
