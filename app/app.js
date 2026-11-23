@@ -619,10 +619,7 @@ function log(msg, role) {
     const line = document.createElement("span");
     line.innerHTML =
         `<span class="ts">[${ts}]</span> ` +
-        (role
-            ? `<span class="${role}">${escapeHtml(msg)}</span>`
-            : escapeHtml(msg)) +
-        "\n";
+        `<span${role ? ` class="${role}"` : ""}>${escapeHtml(msg)}</span>`;
     el.protocolLog.appendChild(line);
     el.protocolLog.scrollTop = el.protocolLog.scrollHeight;
 }

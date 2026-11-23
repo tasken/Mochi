@@ -1241,8 +1241,15 @@ details[open] .queue-warning-toggle {
     min-height: 0;
     overflow-y: auto;
     white-space: pre-wrap;
-    word-break: break-all;
+    overflow-wrap: anywhere;
     flex: 1;
+}
+/* One block per entry. Wrapped text lines up after the "[hh:mm:ss] " stamp
+ * instead of under it: 11 characters of IBM Plex Mono, 0.6em each. */
+.log > span {
+    display: block;
+    padding-left: 6.6em;
+    text-indent: -6.6em;
 }
 /* First-run hint: until a single log line is appended, the <pre> is :empty.
  * The pseudo-element disappears the moment log() runs appendChild. */
