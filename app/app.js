@@ -3683,11 +3683,15 @@ async function confirmDelete(targets, plainConfirm) {
             : systemTargets.length === count
               ? systemTargetHeading(systemTargets)
               : `${pluralize(count, "system item")} selected`;
-    const scope = hasFolder
-        ? `${FOLDER_DELETE_NOTE} `
-        : targets.length === count
-          ? ""
-          : `This deletes ${pluralize(targets.length, "item")}, including ${pluralize(count, "system item")}. `;
+    // Selected items the list below doesn't show: plain files and folders
+    const others = targets.filter(
+        ({ path }) =>
+            !systemTargets.some((t) => t.path === path) &&
+            systemPathsInside(path).length === 0,
+    ).length;
+    const scope =
+        (others ? `This also deletes ${pluralize(others, "other selected item")}. ` : "") +
+        (hasFolder ? `${FOLDER_DELETE_NOTE} ` : "");
     const confirmed = await confirmSystemChange({
         title: one ? "Delete system item" : "Delete system items",
         heading,
@@ -3808,12 +3812,12 @@ async function deletePaths(paths) {
     } else if (deleted > 0) {
         showErrorToast(
             `Deleted ${deleted} of ${total}`,
-            `Some items failed: ${firstPlusMore(failedPaths)}`,
+            `Some items failed: ${firstPlusMore(failedPaths.map(formatPathForUi))}`,
         );
     } else {
         showErrorToast(
             "Couldn't delete items",
-            firstPlusMore(failedPaths) || "No items were deleted.",
+            firstPlusMore(failedPaths.map(formatPathForUi)) || "No items were deleted.",
         );
     }
     if (deleted > 0) trackAnalyticsEvent("file_delete", { count: deleted });
